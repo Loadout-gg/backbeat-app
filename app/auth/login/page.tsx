@@ -31,8 +31,11 @@ export default function LoginPage() {
         password,
       })
       if (error) throw error
-      router.push("/dashboard")
       router.refresh()
+      // Small delay to ensure session cookies are set before navigation
+      setTimeout(() => {
+        router.push("/dashboard")
+      }, 100)
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred")
     } finally {

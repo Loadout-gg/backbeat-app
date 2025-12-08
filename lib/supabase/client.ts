@@ -10,7 +10,11 @@ export function createClient() {
   // Only create client in browser environment
   if (typeof window === "undefined") {
     // Return a new instance for server-side (will be garbage collected)
-    return createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+    return createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+      auth: {
+        storageKey: "bb-auth-token",
+      },
+    })
   }
 
   const globalWithSupabase = window as unknown as GlobalWithSupabase
@@ -19,6 +23,11 @@ export function createClient() {
     globalWithSupabase[SUPABASE_CLIENT_KEY] = createBrowserClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        auth: {
+          storageKey: "bb-auth-token",
+        },
+      },
     )
   }
 
