@@ -1,6 +1,8 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { BackbeatLogoFull } from "@/components/backbeat-logo"
 import { Mail } from "lucide-react"
+import Link from "next/link"
 
 export default function SignupSuccessPage() {
   return (
@@ -18,11 +20,22 @@ export default function SignupSuccessPage() {
               <CardTitle className="text-2xl">Check your email</CardTitle>
               <CardDescription>We&apos;ve sent you a confirmation link</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex flex-col gap-4">
               <p className="text-center text-sm text-muted-foreground">
                 Please check your email inbox and click the confirmation link to activate your account. Once confirmed,
                 you&apos;ll be able to complete your profile setup.
               </p>
+              <p className="text-center text-sm text-muted-foreground">
+                If you entered the wrong email or didn&apos;t receive the link, you can return to login or try again.
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+                <Button variant="secondary" className="flex-1" asChild>
+                  <Link href="/auth/login">Back to login</Link>
+                </Button>
+                <Button variant="outline" className="flex-1 bg-transparent" asChild>
+                  <Link href="/auth/signup">Use a different email</Link>
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
