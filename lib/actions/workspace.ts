@@ -32,28 +32,22 @@ export async function createWorkspace(name: string) {
     throw new Error("Not authenticated")
   }
 
-  const { error: workspaceError } = await supabase.from("workspaces").insert({
-    name,
-    created_by: user.id,
-  })
-
-  if (workspaceError) {
-    throw new Error(workspaceError.message)
-  }
-
-  const { data: workspace, error: fetchError } = await supabase
+  const { data: insertResult, error: workspaceError } = await supabase
     .from("workspaces")
+    .insert({
+      name,
+      created_by: user.id,
+    })
     .select("id")
-    .eq("created_by", user.id)
-    .eq("name", name)
-    .single()
 
-  if (fetchError || !workspace) {
-    throw new Error(fetchError?.message || "Failed to retrieve created workspace")
+  if (workspaceError || !insertResult || insertResult.length === 0) {
+    throw new Error(workspaceError?.message || "Failed to create workspace")
   }
+
+  const workspaceId = insertResult[0].id
 
   const { error: memberError } = await supabase.from("workspace_members").insert({
-    workspace_id: workspace.id,
+    workspace_id: workspaceId,
     user_id: user.id,
     role: "admin",
     status: "active",
@@ -68,7 +62,7 @@ export async function createWorkspace(name: string) {
     .from("onboarding_status")
     .update({
       completed: true,
-      workspace_id: workspace.id,
+      workspace_id: workspaceId,
     })
     .eq("user_id", user.id)
 
