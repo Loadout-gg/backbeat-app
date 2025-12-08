@@ -22,6 +22,9 @@ export async function updateSession(request: NextRequest) {
           cookiesToSet.forEach(({ name, value, options }) => supabaseResponse.cookies.set(name, value, options))
         },
       },
+      auth: {
+        storageKey: "bb-auth-token",
+      },
     },
   )
 
