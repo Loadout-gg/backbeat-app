@@ -24,6 +24,9 @@ export async function updateSession(request: NextRequest) {
       },
       auth: {
         storageKey: "bb-auth-token",
+        autoRefreshToken: false,
+        persistSession: false,
+        detectSessionInUrl: false,
       },
     },
   )

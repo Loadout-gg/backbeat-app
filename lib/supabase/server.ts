@@ -24,8 +24,9 @@ export async function createClient() {
     },
     auth: {
       storageKey: "bb-auth-token",
-      autoRefreshToken: true,
-      persistSession: true,
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false,
     },
   })
 }
