@@ -7,12 +7,13 @@ type GlobalWithSupabase = typeof globalThis & {
 }
 
 export function createClient() {
-  // Only create client in browser environment
   if (typeof window === "undefined") {
-    // Return a new instance for server-side (will be garbage collected)
     return createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
       auth: {
         storageKey: "bb-auth-token",
+        autoRefreshToken: false,
+        persistSession: false,
+        detectSessionInUrl: false,
       },
     })
   }
@@ -26,6 +27,9 @@ export function createClient() {
       {
         auth: {
           storageKey: "bb-auth-token",
+          autoRefreshToken: true,
+          persistSession: true,
+          detectSessionInUrl: true,
         },
       },
     )
