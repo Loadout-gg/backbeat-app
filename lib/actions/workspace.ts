@@ -36,7 +36,6 @@ export async function createWorkspace(name: string) {
     .from("workspaces")
     .insert({
       name,
-      created_by: user.id,
     })
     .select("id")
 
