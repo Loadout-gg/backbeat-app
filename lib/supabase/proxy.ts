@@ -2,9 +2,16 @@ import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
 export async function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({
-    request,
+  const supabaseResponse = NextResponse.next({
+    request: {
+      headers: new Headers(request.headers),
+    },
   })
+
+  const forwardSupabaseCookies = (response: NextResponse) => {
+    supabaseResponse.cookies.getAll().forEach((cookie) => response.cookies.set(cookie))
+    return response
+  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,12 +22,13 @@ export async function updateSession(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-          supabaseResponse = NextResponse.next({
-            request,
-          })
           cookiesToSet.forEach(({ name, value, options }) => supabaseResponse.cookies.set(name, value, options))
         },
+      },
+      auth: {
+        storageKey: "bb-auth-token",
+        autoRefreshToken: true,
+        persistSession: true,
       },
     },
   )
@@ -45,7 +53,7 @@ export async function updateSession(request: NextRequest) {
     // Redirect to login for protected routes
     const url = request.nextUrl.clone()
     url.pathname = "/auth/login"
-    return NextResponse.redirect(url)
+    return forwardSupabaseCookies(NextResponse.redirect(url))
   }
 
   // User is authenticated - check onboarding status
@@ -67,7 +75,7 @@ export async function updateSession(request: NextRequest) {
     if (!isPublicRoute) {
       const url = request.nextUrl.clone()
       url.pathname = "/onboarding"
-      return NextResponse.redirect(url)
+      return forwardSupabaseCookies(NextResponse.redirect(url))
     }
   }
 
@@ -77,13 +85,13 @@ export async function updateSession(request: NextRequest) {
     if (pathname.startsWith("/onboarding")) {
       const url = request.nextUrl.clone()
       url.pathname = "/dashboard"
-      return NextResponse.redirect(url)
+      return forwardSupabaseCookies(NextResponse.redirect(url))
     }
     // Redirect authenticated users from auth pages to dashboard
     if (isPublicRoute || pathname === "/") {
       const url = request.nextUrl.clone()
       url.pathname = "/dashboard"
-      return NextResponse.redirect(url)
+      return forwardSupabaseCookies(NextResponse.redirect(url))
     }
   }
 
