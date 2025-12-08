@@ -1,18 +1,20 @@
 import { createBrowserClient } from "@supabase/ssr"
 
-let supabase: ReturnType<typeof createBrowserClient> | null = null
+const SUPABASE_CLIENT_KEY = Symbol.for("supabase-client")
+
+type GlobalWithSupabase = typeof globalThis & {
+  [SUPABASE_CLIENT_KEY]?: ReturnType<typeof createBrowserClient>
+}
 
 export function createClient() {
-  if (!supabase) {
-    supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-      auth: {
-        storageKey: "bb-auth-token",
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: true,
-      },
-    })
+  const globalWithSupabase = globalThis as GlobalWithSupabase
+
+  if (!globalWithSupabase[SUPABASE_CLIENT_KEY]) {
+    globalWithSupabase[SUPABASE_CLIENT_KEY] = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    )
   }
 
-  return supabase
+  return globalWithSupabase[SUPABASE_CLIENT_KEY]
 }
