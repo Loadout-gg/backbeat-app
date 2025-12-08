@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation" // Add useRouter import for client-side navigation
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -12,6 +13,7 @@ import { updateProfile, createWorkspace } from "@/lib/actions/workspace"
 import { User, Building2, ArrowRight, Check } from "lucide-react"
 
 export default function OnboardingPage() {
+  const router = useRouter() // Add router for client-side redirect
   const [step, setStep] = useState(1)
   const [fullName, setFullName] = useState("")
   const [workspaceName, setWorkspaceName] = useState("")
@@ -39,8 +41,10 @@ export default function OnboardingPage() {
     setIsLoading(true)
 
     try {
-      await createWorkspace(workspaceName)
-      // Redirect happens in server action
+      const result = await createWorkspace(workspaceName)
+      if (result.success) {
+        router.push("/dashboard")
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred")
       setIsLoading(false)

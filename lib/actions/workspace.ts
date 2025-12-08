@@ -70,7 +70,7 @@ export async function createWorkspace(name: string) {
     throw new Error(onboardingError.message)
   }
 
-  redirect("/dashboard")
+  return { success: true, workspaceId }
 }
 
 export async function getCurrentUser() {
