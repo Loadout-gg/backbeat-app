@@ -1,10 +1,6 @@
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 
-/**
- * Creates a Supabase client for server-side operations.
- * Always create a new client within each request.
- */
 export async function createClient() {
   const cookieStore = await cookies()
 
@@ -17,7 +13,7 @@ export async function createClient() {
         try {
           cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options))
         } catch {
-          // Called from a Server Component - ignore, session will be refreshed via the proxy.
+          // Called from a Server Component - the proxy will refresh the session
         }
       },
     },
