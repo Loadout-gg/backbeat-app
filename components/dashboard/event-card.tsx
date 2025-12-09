@@ -4,7 +4,7 @@ interface EventCardProps {
   artistName: string
   venue: string
   location: string
-  time: string
+  time?: string // Made time optional since we may not have it
 }
 
 export function EventCard({ month, day, artistName, venue, location, time }: EventCardProps) {
@@ -17,7 +17,9 @@ export function EventCard({ month, day, artistName, venue, location, time }: Eve
       <div className="flex flex-col">
         <span className="font-medium">{artistName}</span>
         <span className="text-sm text-muted-foreground">
-          {location}, {venue} • {time}
+          {location}
+          {venue && `, ${venue}`}
+          {time && ` • ${time}`}
         </span>
       </div>
     </div>

@@ -1,120 +1,30 @@
 import Link from "next/link"
 import { StatsCard } from "@/components/dashboard/stats-card"
 import { EventCard } from "@/components/dashboard/event-card"
-import { BookingCard } from "@/components/dashboard/booking-card"
 import { QuickActions } from "@/components/dashboard/quick-actions"
 import { ArrowRight } from "lucide-react"
+import { getDashboardStats } from "@/lib/actions/dashboard"
+import { listEventsInProgress } from "@/lib/actions/events"
 
-// Mock data matching the design
-const stats = [
-  { label: "Performance in progress", value: 1 },
-  { label: "Event in progress", value: 12 },
-  { label: "Bookings in progress", value: 4 },
-  { label: "Artists total", value: 43 },
-]
+export default async function DashboardPage() {
+  const [stats, eventsInProgress] = await Promise.all([getDashboardStats(), listEventsInProgress()])
 
-const eventsInProgress = [
-  {
-    month: "NOV",
-    day: "27",
-    artistName: "Swami",
-    location: "Berlin",
-    venue: "Lumen Lounge",
-    time: "11:30 PM – 1:00 AM",
-  },
-  {
-    month: "NOV",
-    day: "27",
-    artistName: "Lena Voss",
-    location: "Hamburg",
-    venue: "Velvet Horizon",
-    time: "12:00 AM – 1:30 AM",
-  },
-  {
-    month: "NOV",
-    day: "27",
-    artistName: "Quliano",
-    location: "Florence",
-    venue: "Cielo Club",
-    time: "1:30 AM – 3:00 AM",
-  },
-  {
-    month: "NOV",
-    day: "27",
-    artistName: "Orion Keller",
-    location: "Rome",
-    venue: "Echo Chamber",
-    time: "2:00 AM – 3:30 AM",
-  },
-  {
-    month: "NOV",
-    day: "27",
-    artistName: "DJ Hollowtone",
-    location: "Brooklyn",
-    venue: "Pulse Underground",
-    time: "3:00 AM – 5:00 AM",
-  },
-  {
-    month: "NOV",
-    day: "27",
-    artistName: "Mira Strobe",
-    location: "Copenhagen",
-    venue: "Obscura Club",
-    time: "4:00 AM – 6:00 AM",
-  },
-]
-
-const bookingsInProgress = [
-  {
-    month: "DEC",
-    day: "7",
-    artistName: "Aero Lindholm",
-    location: "Valencia",
-    venue: "Liquid Canvas",
-    time: "1:00 AM – 3:00 AM",
-  },
-  {
-    month: "JAN",
-    day: "14",
-    artistName: "Kiro Solenne",
-    location: "Los Angeles",
-    venue: "Luminous Hall",
-    time: "9:00 PM – 10:30 PM",
-  },
-  {
-    month: "JAN",
-    day: "21",
-    artistName: "Nara Flux",
-    location: "Vienna",
-    venue: "Neon Drift",
-    time: "10:00 PM – 11:00 PM",
-  },
-  {
-    month: "FEB",
-    day: "9",
-    artistName: "Vesper Kline",
-    location: "Turin",
-    venue: "Frequency Loft",
-    time: "1:00 AM – 2:30 AM",
-  },
-]
-
-export default function DashboardPage() {
   return (
     <div className="flex gap-6">
       {/* Main content area */}
       <div className="flex-1 space-y-6">
         {/* Stats row */}
         <div className="grid grid-cols-4 gap-4">
-          {stats.map((stat) => (
-            <StatsCard key={stat.label} label={stat.label} value={stat.value} />
-          ))}
+          <StatsCard label="Events total" value={stats.totalEvents} />
+          <StatsCard label="Bookings in progress" value={stats.totalBookingsInProgress} />
+          <StatsCard label="Artists total" value={stats.totalArtists} />
+          <StatsCard label="Promoters total" value={stats.totalPromoters} />
         </div>
 
         {/* Events in progress */}
         <section className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Event in progress</h2>
+            <h2 className="text-lg font-semibold">Events in progress</h2>
             <Link
               href="/dashboard/events"
               className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -123,11 +33,28 @@ export default function DashboardPage() {
               <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
-          <div className="space-y-3">
-            {eventsInProgress.map((event, index) => (
-              <EventCard key={index} {...event} />
-            ))}
-          </div>
+          {eventsInProgress.length === 0 ? (
+            <div className="rounded-lg border bg-background p-8 text-center text-muted-foreground">
+              No events in progress. Create your first event to get started.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {eventsInProgress.map((event) => {
+                const date = new Date(event.date)
+                return (
+                  <EventCard
+                    key={event.id}
+                    month={date.toLocaleDateString("en-US", { month: "short" }).toUpperCase()}
+                    day={String(date.getDate())}
+                    artistName={event.artists?.name || event.title}
+                    location={event.location || "TBD"}
+                    venue={event.promoters?.company_name || event.promoters?.name || ""}
+                    time=""
+                  />
+                )
+              })}
+            </div>
+          )}
         </section>
 
         {/* Bookings in progress */}
@@ -143,9 +70,8 @@ export default function DashboardPage() {
             </Link>
           </div>
           <div className="space-y-3">
-            {bookingsInProgress.map((booking, index) => (
-              <BookingCard key={index} {...booking} />
-            ))}
+            {/* Placeholder for real bookings data */}
+            {/* This section will be updated later with real data */}
           </div>
         </section>
       </div>

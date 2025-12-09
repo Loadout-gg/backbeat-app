@@ -4,13 +4,18 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { BackbeatLogoFull } from "@/components/backbeat-logo"
 import { cn } from "@/lib/utils"
-import { Home, Users, Settings } from "lucide-react"
+import { Home, Users, Settings, Calendar } from "lucide-react"
 
 const navItems = [
   {
     label: "Dashboard",
     href: "/dashboard",
     icon: Home,
+  },
+  {
+    label: "Events",
+    href: "/dashboard/events",
+    icon: Calendar,
   },
   {
     label: "Artists",
@@ -34,7 +39,7 @@ export function Sidebar() {
       </div>
       <nav className="flex-1 space-y-1 p-4">
         {navItems.map((item) => {
-          const isActive = pathname === item.href
+          const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href))
           return (
             <Link
               key={item.href}

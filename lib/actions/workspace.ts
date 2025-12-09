@@ -105,3 +105,26 @@ export async function signOut() {
   await supabase.auth.signOut()
   redirect("/auth/login")
 }
+
+export async function getCurrentWorkspaceId(): Promise<string> {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    throw new Error("Not authenticated")
+  }
+
+  const { data: onboardingStatus, error } = await supabase
+    .from("onboarding_status")
+    .select("workspace_id")
+    .eq("user_id", user.id)
+    .single()
+
+  if (error || !onboardingStatus?.workspace_id) {
+    redirect("/onboarding")
+  }
+
+  return onboardingStatus.workspace_id
+}
