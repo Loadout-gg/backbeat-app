@@ -3,7 +3,7 @@ import { cookies } from "next/headers"
 
 /**
  * Creates a Supabase client for server-side operations.
- * Always create a new client within each function - don't put in a global variable.
+ * Always create a new client within each request.
  */
 export async function createClient() {
   const cookieStore = await cookies()
@@ -17,16 +17,9 @@ export async function createClient() {
         try {
           cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options))
         } catch {
-          // The "setAll" method was called from a Server Component.
-          // This can be ignored if you have proxy refreshing user sessions.
+          // Called from a Server Component - ignore, session will be refreshed via the proxy.
         }
       },
-    },
-    auth: {
-      storageKey: "bb-auth-token",
-      autoRefreshToken: false,
-      persistSession: false,
-      detectSessionInUrl: false,
     },
   })
 }
