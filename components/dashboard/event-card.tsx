@@ -4,23 +4,23 @@ interface EventCardProps {
   artistName: string
   venue: string
   location: string
-  time?: string // Made time optional since we may not have it
+  time?: string
 }
 
 export function EventCard({ month, day, artistName, venue, location, time }: EventCardProps) {
   return (
-    <div className="flex items-center gap-4 rounded-lg border bg-background p-4">
-      <div className="flex flex-col items-center justify-center text-center">
+    <div className="flex items-start gap-4 rounded-lg border bg-card p-4 hover:bg-accent/50 transition-colors">
+      <div className="flex flex-col items-center justify-center rounded border bg-background px-3 py-2 min-w-[56px]">
         <span className="text-xs font-medium uppercase text-muted-foreground">{month}</span>
-        <span className="text-lg font-semibold">{day}</span>
+        <span className="text-xl font-semibold leading-none mt-1">{day}</span>
       </div>
-      <div className="flex flex-col">
-        <span className="font-medium">{artistName}</span>
-        <span className="text-sm text-muted-foreground">
+      <div className="flex-1 min-w-0">
+        <h3 className="font-semibold text-base mb-1">{artistName}</h3>
+        <p className="text-sm text-muted-foreground">
           {location}
           {venue && `, ${venue}`}
           {time && ` • ${time}`}
-        </span>
+        </p>
       </div>
     </div>
   )

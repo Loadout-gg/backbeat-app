@@ -5,9 +5,9 @@ interface StatsCardProps {
 
 export function StatsCard({ label, value }: StatsCardProps) {
   return (
-    <div className="flex items-center justify-between rounded-lg border bg-background px-4 py-3">
-      <span className="text-sm text-muted-foreground">{label}</span>
-      <span className="text-xl font-semibold">{value}</span>
+    <div className="flex flex-col gap-2 rounded-lg border bg-card p-6">
+      <span className="text-sm font-medium text-muted-foreground">{label}</span>
+      <span className="text-3xl font-semibold">{value}</span>
     </div>
   )
 }

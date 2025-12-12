@@ -4,18 +4,13 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { BackbeatLogoFull } from "@/components/backbeat-logo"
 import { cn } from "@/lib/utils"
-import { Home, Users, Settings, Calendar } from "lucide-react"
+import { Home, Users, Settings } from "lucide-react"
 
 const navItems = [
   {
     label: "Dashboard",
     href: "/dashboard",
     icon: Home,
-  },
-  {
-    label: "Events",
-    href: "/dashboard/events",
-    icon: Calendar,
   },
   {
     label: "Artists",
