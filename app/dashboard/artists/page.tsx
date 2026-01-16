@@ -9,14 +9,19 @@ import { listArtists } from "@/lib/actions/artists"
 export default async function ArtistsPage() {
   const artists = await listArtists()
 
-  const artistsWithDetails = artists.map((artist, idx) => ({
+  const artistsWithDetails = artists.map((artist) => ({
     ...artist,
-    stageName: artist.name,
-    realName: "Nome Cognome",
-    genres: idx % 3 === 0 ? "Hip Hop / Dance / Electro" : idx % 2 === 0 ? "Dance" : "Electro",
-    location: "New York, NY (USA)",
-    events: 12,
-    fee: "$2-3k",
+    stageName: artist.stage_name || artist.name,
+    realName: artist.surname ? `${artist.name || ""} ${artist.surname}`.trim() : artist.name || "",
+    displayGenres: artist.genres.length > 0 ? artist.genres.slice(0, 3).join(" / ") : "-",
+    displayLocation: artist.location || "-",
+    events: 0, // Will be calculated from events table in future
+    displayFee:
+      artist.fee && artist.currency
+        ? `${artist.currency}${artist.fee.toLocaleString()}`
+        : artist.fee
+          ? `$${artist.fee.toLocaleString()}`
+          : "-",
   }))
 
   return (
@@ -75,19 +80,21 @@ export default async function ArtistsPage() {
                 <TableRow key={artist.id}>
                   <TableCell>
                     <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted text-xs font-medium">
-                      X
+                      {artist.stageName?.charAt(0).toUpperCase() || "A"}
                     </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col">
                       <span className="font-medium">{artist.stageName}</span>
-                      <span className="text-sm text-muted-foreground">{artist.realName}</span>
+                      {artist.realName && artist.realName !== artist.stageName && (
+                        <span className="text-sm text-muted-foreground">{artist.realName}</span>
+                      )}
                     </div>
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{artist.genres}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{artist.location}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{artist.displayGenres}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{artist.displayLocation}</TableCell>
                   <TableCell className="text-center text-sm">{artist.events}</TableCell>
-                  <TableCell className="text-center text-sm">{artist.fee}</TableCell>
+                  <TableCell className="text-center text-sm">{artist.displayFee}</TableCell>
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -111,7 +118,9 @@ export default async function ArtistsPage() {
 
       {artists.length > 0 && (
         <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">Showing 1-20 of {artists.length} artists</p>
+          <p className="text-sm text-muted-foreground">
+            Showing 1-{Math.min(20, artists.length)} of {artists.length} artists
+          </p>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" disabled>
               Previous
@@ -119,20 +128,18 @@ export default async function ArtistsPage() {
             <Button variant="outline" size="sm" className="bg-primary text-primary-foreground">
               1
             </Button>
-            <Button variant="outline" size="sm">
-              2
-            </Button>
-            <Button variant="outline" size="sm">
-              3
-            </Button>
-            <Button variant="outline" size="sm">
-              4
-            </Button>
-            <span className="px-2">...</span>
-            <Button variant="outline" size="sm">
-              10
-            </Button>
-            <Button variant="outline" size="sm">
+            {artists.length > 20 && (
+              <>
+                <Button variant="outline" size="sm">
+                  2
+                </Button>
+                <Button variant="outline" size="sm">
+                  3
+                </Button>
+                <span className="px-2">...</span>
+              </>
+            )}
+            <Button variant="outline" size="sm" disabled={artists.length <= 20}>
               Next
             </Button>
           </div>
