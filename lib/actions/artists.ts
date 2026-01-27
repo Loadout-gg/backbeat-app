@@ -159,3 +159,70 @@ export async function createArtist(
 
   return { success: true, artistId: data.id }
 }
+
+export type UpdateArtistInput = Partial<CreateArtistInput>
+
+export async function updateArtist(
+  id: string,
+  input: UpdateArtistInput,
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+  const workspaceId = await getCurrentWorkspaceId()
+
+  // First verify the artist belongs to this workspace
+  const { data: existing } = await supabase
+    .from("artists")
+    .select("id")
+    .eq("id", id)
+    .eq("workspace_id", workspaceId)
+    .single()
+
+  if (!existing) {
+    return { success: false, error: "Artist not found" }
+  }
+
+  const updateData: Record<string, unknown> = {}
+
+  // Only include fields that are explicitly provided
+  if (input.stage_name !== undefined) {
+    updateData.stage_name = input.stage_name
+    updateData.name = input.stage_name // Keep name in sync with stage_name
+  }
+  if (input.name !== undefined) updateData.name = input.name
+  if (input.surname !== undefined) updateData.surname = input.surname || null
+  if (input.location !== undefined) updateData.location = input.location || null
+  if (input.email !== undefined) updateData.email = input.email || null
+  if (input.phone !== undefined) updateData.phone = input.phone || null
+  if (input.contact_name !== undefined) {
+    updateData.notes = input.contact_name ? `Contact: ${input.contact_name}` : null
+  }
+  if (input.fee !== undefined) updateData.fee = input.fee || null
+  if (input.currency !== undefined) updateData.currency = input.currency || "USD"
+  if (input.travel_fee !== undefined) updateData.travel_fee = input.travel_fee || null
+  if (input.pricing_notes !== undefined) updateData.pricing_notes = input.pricing_notes || null
+  if (input.social_links !== undefined) updateData.social_links = input.social_links || []
+  if (input.overview !== undefined) updateData.overview = input.overview || null
+  if (input.genres !== undefined) updateData.genres = input.genres || []
+  if (input.dj_equipment !== undefined) updateData.dj_equipment = input.dj_equipment || null
+  if (input.sound_system !== undefined) updateData.sound_system = input.sound_system || null
+  if (input.documents !== undefined) updateData.documents = input.documents || []
+  if (input.allergies !== undefined) updateData.allergies = input.allergies || null
+  if (input.special_diet !== undefined) updateData.special_diet = input.special_diet || null
+  if (input.special_needs !== undefined) updateData.special_needs = input.special_needs || null
+
+  const { error } = await supabase
+    .from("artists")
+    .update(updateData)
+    .eq("id", id)
+    .eq("workspace_id", workspaceId)
+
+  if (error) {
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath("/dashboard/artists")
+  revalidatePath(`/dashboard/artists/${id}`)
+  revalidatePath("/dashboard")
+
+  return { success: true }
+}
