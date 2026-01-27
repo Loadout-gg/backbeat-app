@@ -1,6 +1,6 @@
 "use client"
 
-import { Bell, ChevronDown, LogOut } from "lucide-react"
+import { Bell, ChevronDown, LogOut, X } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -31,21 +31,21 @@ export function Header({ title, userName = "User", avatarUrl }: HeaderProps) {
   }
 
   return (
-    <header className="flex h-16 items-center justify-between border-b bg-background px-6">
-      <h1 className="text-xl font-semibold">{title}</h1>
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="h-5 w-5" />
+    <header className="flex h-14 items-center justify-between border-b bg-background px-8">
+      <h1 className="text-lg font-medium">{title}</h1>
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" className="relative h-8 w-8">
+          <Bell className="h-4 w-4" />
           <span className="sr-only">Notifications</span>
+        </Button>
+        <Button variant="ghost" size="icon" className="relative h-8 w-8">
+          <X className="h-4 w-4" />
+          <span className="sr-only">Close</span>
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="flex items-center gap-2 px-2">
-              <Avatar className="h-8 w-8">
-                <AvatarImage src={avatarUrl || undefined} alt={userName} />
-                <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-              </Avatar>
-              <span className="text-sm font-medium">{userName}</span>
+            <Button variant="ghost" className="flex items-center gap-2 px-2 h-8">
+              <span className="text-sm">{userName}</span>
               <ChevronDown className="h-4 w-4 text-muted-foreground" />
             </Button>
           </DropdownMenuTrigger>

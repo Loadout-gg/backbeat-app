@@ -5,8 +5,8 @@ import { getCurrentWorkspaceId } from "./workspace"
 
 export type DashboardStats = {
   totalArtists: number
-  totalEvents: number
-  totalBookingsInProgress: number
+  eventsInProgress: number
+  bookingsInProgress: number
   totalPromoters: number
 }
 
@@ -14,10 +14,10 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   const supabase = await createClient()
   const workspaceId = await getCurrentWorkspaceId()
 
-  // Run all queries in parallel for better performance
-  const [artistsResult, eventsResult, bookingsInProgressResult, promotersResult] = await Promise.all([
+  // Query real data from existing tables
+  // Artists and promoters tables exist; events/bookings will return 0 if tables don't exist or are empty
+  const [artistsResult, eventsResult, promotersResult] = await Promise.all([
     supabase.from("artists").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId),
-    supabase.from("events").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId),
     supabase
       .from("events")
       .select("id", { count: "exact", head: true })
@@ -28,8 +28,8 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 
   return {
     totalArtists: artistsResult.count ?? 0,
-    totalEvents: eventsResult.count ?? 0,
-    totalBookingsInProgress: bookingsInProgressResult.count ?? 0,
+    eventsInProgress: eventsResult.count ?? 0,
+    bookingsInProgress: 0, // Bookings table doesn't exist yet
     totalPromoters: promotersResult.count ?? 0,
   }
 }

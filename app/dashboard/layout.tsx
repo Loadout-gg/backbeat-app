@@ -18,11 +18,11 @@ export default async function DashboardLayout({
   const { profile } = userData
 
   return (
-    <div className="flex h-screen">
+    <div className="flex min-h-screen bg-background">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header title="Dashboard" userName={profile?.full_name || "User"} avatarUrl={profile?.avatar_url} />
-        <main className="flex-1 overflow-auto bg-muted/30 p-6">{children}</main>
+        <main className="flex-1 overflow-auto bg-muted/30 px-8 py-6">{children}</main>
       </div>
     </div>
   )
