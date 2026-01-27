@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select"
 import { Calendar } from "@/components/ui/calendar"
 import { type Artist, type SocialLink } from "@/lib/actions/artists"
+import { NewBookingModal } from "@/components/dashboard/new-booking-modal"
 
 // Social icon mapping
 function getSocialIcon(type: string) {
@@ -135,6 +136,7 @@ export function ArtistProfileClient({ artist }: ArtistProfileClientProps) {
   const pathname = usePathname()
   const [showUpdatedToast, setShowUpdatedToast] = useState(false)
   const [calendarMonth, setCalendarMonth] = useState(new Date())
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false)
 
   // Get current tab from URL or default to overview
   const tabParam = searchParams.get("tab")
@@ -257,7 +259,7 @@ export function ArtistProfileClient({ artist }: ArtistProfileClientProps) {
             <MessageSquare className="mr-2 h-4 w-4" />
             Message
           </Button>
-          <Button disabled title="Coming soon">
+          <Button onClick={() => setIsBookingModalOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             New Booking
           </Button>
@@ -587,9 +589,9 @@ export function ArtistProfileClient({ artist }: ArtistProfileClientProps) {
                       <p className="text-muted-foreground mb-4">
                         No upcoming bookings or events for this artist.
                       </p>
-                      <Button disabled title="Coming soon">
+                      <Button onClick={() => setIsBookingModalOpen(true)}>
                         <Plus className="mr-2 h-4 w-4" />
-                        New Booking
+                        Add on Calendar
                       </Button>
                     </div>
                   )}
@@ -741,6 +743,13 @@ export function ArtistProfileClient({ artist }: ArtistProfileClientProps) {
           </Tabs>
         </CardContent>
       </Card>
+
+      {/* New Booking Modal */}
+      <NewBookingModal
+        open={isBookingModalOpen}
+        onOpenChange={setIsBookingModalOpen}
+        preselectedArtist={artist}
+      />
 
       {/* Footer */}
       <footer className="flex items-center justify-center gap-6 pt-8 text-sm text-muted-foreground border-t">
