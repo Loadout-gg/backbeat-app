@@ -77,19 +77,19 @@ export default async function ArtistsPage() {
             </TableHeader>
             <TableBody>
               {artistsWithDetails.map((artist) => (
-                <TableRow key={artist.id}>
+                <TableRow key={artist.id} className="cursor-pointer hover:bg-muted/50">
                   <TableCell>
-                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted text-xs font-medium">
+                    <Link href={`/dashboard/artists/${artist.id}`} className="flex items-center justify-center w-8 h-8 rounded-full bg-muted text-xs font-medium">
                       {artist.stageName?.charAt(0).toUpperCase() || "A"}
-                    </div>
+                    </Link>
                   </TableCell>
                   <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-medium">{artist.stageName}</span>
+                    <Link href={`/dashboard/artists/${artist.id}`} className="flex flex-col">
+                      <span className="font-medium hover:underline">{artist.stageName}</span>
                       {artist.realName && artist.realName !== artist.stageName && (
                         <span className="text-sm text-muted-foreground">{artist.realName}</span>
                       )}
-                    </div>
+                    </Link>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">{artist.displayGenres}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{artist.displayLocation}</TableCell>
@@ -103,7 +103,9 @@ export default async function ArtistsPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem>View details</DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href={`/dashboard/artists/${artist.id}`}>View details</Link>
+                        </DropdownMenuItem>
                         <DropdownMenuItem>Edit</DropdownMenuItem>
                         <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
                       </DropdownMenuContent>
