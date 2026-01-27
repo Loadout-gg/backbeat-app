@@ -18,11 +18,14 @@ export type Artist = {
   workspace_id: string
   created_at: string
   // New fields
-  stage_name: string | null
+  stage_name: string
+  real_name: string | null
   surname: string | null
   location: string | null
+  genre: string | null
   genres: string[]
   fee: number | null
+  base_rate: number | null
   currency: string | null
   travel_fee: string | null
   pricing_notes: string | null
@@ -35,6 +38,7 @@ export type Artist = {
   special_needs: string | null
   documents: { name: string; url: string }[]
   updated_at: string | null
+  profile_image_url: string | null
 }
 
 export type CreateArtistInput = {
@@ -81,10 +85,20 @@ export async function listArtists(): Promise<Artist[]> {
 
   return (data ?? []).map((artist) => ({
     ...artist,
+    stage_name: artist.stage_name || artist.name || "Unknown",
+    real_name: artist.surname ? `${artist.name || ""} ${artist.surname}`.trim() : artist.name,
+    genre: artist.genres?.[0] || null,
     genres: artist.genres ?? [],
+    base_rate: artist.fee ?? null,
     social_links: artist.social_links ?? [],
     documents: artist.documents ?? [],
+    profile_image_url: artist.profile_image_url ?? null,
   }))
+}
+
+// Alias for backwards compatibility and clearer naming
+export async function getArtists(): Promise<Artist[]> {
+  return listArtists()
 }
 
 export async function getArtist(id: string): Promise<Artist | null> {
@@ -104,9 +118,14 @@ export async function getArtist(id: string): Promise<Artist | null> {
 
   return {
     ...data,
+    stage_name: data.stage_name || data.name || "Unknown",
+    real_name: data.surname ? `${data.name || ""} ${data.surname}`.trim() : data.name,
+    genre: data.genres?.[0] || null,
     genres: data.genres ?? [],
+    base_rate: data.fee ?? null,
     social_links: data.social_links ?? [],
     documents: data.documents ?? [],
+    profile_image_url: data.profile_image_url ?? null,
   }
 }
 
