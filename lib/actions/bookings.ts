@@ -11,15 +11,17 @@ export interface Booking {
   start_time: string;
   duration_minutes: number;
   notes: string | null;
-  status: "pending" | "confirmed" | "cancelled";
+  status: "in_progress" | "confirmed" | "cancelled" | "completed";
   created_at: string;
   updated_at: string;
   artist?: {
     id: string;
     stage_name: string;
-    real_name: string | null;
+    name: string | null;
+    surname: string | null;
     profile_image_url: string | null;
-    base_rate: number | null;
+    fee: number | null;
+    currency: string | null;
   };
 }
 
@@ -45,7 +47,7 @@ export async function getBookings(): Promise<Booking[]> {
     .select(
       `
       *,
-      artist:artists(id, stage_name, real_name, profile_image_url, base_rate)
+      artist:artists(id, stage_name, name, surname, profile_image_url, fee, currency)
     `
     )
     .eq("workspace_id", membership.workspace_id)
@@ -95,12 +97,12 @@ export async function createBooking(formData: {
       start_time: formData.startTime,
       duration_minutes: formData.durationMinutes,
       notes: formData.notes || null,
-      status: "pending",
+      status: "in_progress",
     })
     .select(
       `
       *,
-      artist:artists(id, stage_name, real_name, profile_image_url, base_rate)
+      artist:artists(id, stage_name, name, surname, profile_image_url, fee, currency)
     `
     )
     .single();
@@ -118,7 +120,7 @@ export async function createBooking(formData: {
 
 export async function updateBookingStatus(
   bookingId: string,
-  status: "pending" | "confirmed" | "cancelled"
+  status: "in_progress" | "confirmed" | "cancelled" | "completed"
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
 
@@ -171,4 +173,94 @@ export async function deleteBooking(
   revalidatePath("/dashboard/artists");
 
   return { success: true };
+}
+
+export async function listBookingsByStatus(
+  status: "in_progress" | "confirmed" | "cancelled" | "completed",
+  limit?: number
+): Promise<Booking[]> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data: membership } = await supabase
+    .from("workspace_members")
+    .select("workspace_id")
+    .eq("user_id", user.id)
+    .single();
+
+  if (!membership) return [];
+
+  let query = supabase
+    .from("bookings")
+    .select(
+      `
+      *,
+      artist:artists(id, stage_name, name, surname, profile_image_url, fee, currency)
+    `
+    )
+    .eq("workspace_id", membership.workspace_id)
+    .eq("status", status)
+    .order("date", { ascending: true });
+
+  if (limit) {
+    query = query.limit(limit);
+  }
+
+  const { data: bookings, error } = await query;
+
+  if (error) {
+    console.error("Error fetching bookings by status:", error);
+    return [];
+  }
+
+  return bookings || [];
+}
+
+export async function listBookingsForArtist(
+  artistId: string,
+  range?: { start: string; end: string }
+): Promise<Booking[]> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data: membership } = await supabase
+    .from("workspace_members")
+    .select("workspace_id")
+    .eq("user_id", user.id)
+    .single();
+
+  if (!membership) return [];
+
+  let query = supabase
+    .from("bookings")
+    .select(
+      `
+      *,
+      artist:artists(id, stage_name, name, surname, profile_image_url, fee, currency)
+    `
+    )
+    .eq("workspace_id", membership.workspace_id)
+    .eq("artist_id", artistId)
+    .order("date", { ascending: true });
+
+  if (range) {
+    query = query.gte("date", range.start).lte("date", range.end);
+  }
+
+  const { data: bookings, error } = await query;
+
+  if (error) {
+    console.error("Error fetching bookings for artist:", error);
+    return [];
+  }
+
+  return bookings || [];
 }

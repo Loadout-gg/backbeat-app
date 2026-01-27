@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Search, Clock, Calendar } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Search, Clock, Calendar as CalendarIcon } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -13,7 +14,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getArtists, type Artist } from "@/lib/actions/artists";
-import { createBooking } from "@/lib/actions/bookings";
+import { createBooking, type Booking } from "@/lib/actions/bookings";
+
+type ModalStep = "select-artist" | "select-date" | "success";
 
 interface NewBookingModalProps {
   open: boolean;
@@ -26,8 +29,9 @@ export function NewBookingModal({
   onOpenChange,
   preselectedArtist,
 }: NewBookingModalProps) {
-  const [step, setStep] = useState<"select-artist" | "booking-details">(
-    preselectedArtist ? "booking-details" : "select-artist"
+  const router = useRouter();
+  const [step, setStep] = useState<ModalStep>(
+    preselectedArtist ? "select-date" : "select-artist"
   );
   const [artists, setArtists] = useState<Artist[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -36,6 +40,7 @@ export function NewBookingModal({
   );
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [createdBooking, setCreatedBooking] = useState<Booking | null>(null);
 
   // Form state
   const [date, setDate] = useState("");
@@ -58,7 +63,7 @@ export function NewBookingModal({
     if (open) {
       if (preselectedArtist) {
         setSelectedArtist(preselectedArtist);
-        setStep("booking-details");
+        setStep("select-date");
       } else {
         setStep("select-artist");
         setSelectedArtist(null);
@@ -68,22 +73,23 @@ export function NewBookingModal({
       setStartTime("10:30");
       setDuration("00:00");
       setNotes("");
+      setCreatedBooking(null);
     }
   }, [open, preselectedArtist]);
 
   const filteredArtists = artists.filter((artist) => {
     const query = searchQuery.toLowerCase();
-    return (
-      artist.stage_name.toLowerCase().includes(query) ||
-      artist.real_name?.toLowerCase().includes(query) ||
-      artist.genre?.toLowerCase().includes(query) ||
-      artist.location?.toLowerCase().includes(query)
-    );
+    const nameMatch = artist.name?.toLowerCase().includes(query) || false;
+    const surnameMatch = artist.surname?.toLowerCase().includes(query) || false;
+    const stageNameMatch = artist.stage_name?.toLowerCase().includes(query) || false;
+    const locationMatch = artist.location?.toLowerCase().includes(query) || false;
+    const genresMatch = artist.genres?.some((g) => g.toLowerCase().includes(query)) || false;
+    return nameMatch || surnameMatch || stageNameMatch || locationMatch || genresMatch;
   });
 
   const handleSelectArtist = (artist: Artist) => {
     setSelectedArtist(artist);
-    setStep("booking-details");
+    setStep("select-date");
   };
 
   const handleSaveBooking = async () => {
@@ -105,18 +111,16 @@ export function NewBookingModal({
 
     setIsSaving(false);
 
-    if (result.success) {
-      onOpenChange(false);
+    if (result.success && result.booking) {
+      setCreatedBooking(result.booking);
+      setStep("success");
     }
   };
 
-  const formatCurrency = (amount: number | null) => {
-    if (!amount) return "N/A";
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      minimumFractionDigits: 0,
-    }).format(amount);
+  const formatCurrency = (fee: number | null, currency: string | null) => {
+    if (!fee) return "N/A";
+    const currencySymbol = currency === "EUR" ? "€" : currency === "GBP" ? "£" : "$";
+    return `${currencySymbol}${fee.toLocaleString()}`;
   };
 
   const getInitials = (name: string) => {
@@ -128,17 +132,50 @@ export function NewBookingModal({
       .slice(0, 2);
   };
 
+  const formatBookingDate = (dateStr: string) => {
+    const date = new Date(dateStr + "T00:00:00");
+    const dayName = date.toLocaleDateString("en-US", { weekday: "long" });
+    const formatted = date.toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+    return `${formatted} (${dayName})`;
+  };
+
+  const handleBackToDashboard = () => {
+    onOpenChange(false);
+    router.push("/dashboard");
+    router.refresh();
+  };
+
+  const handleStartEventSetup = () => {
+    // TODO: Route to event setup page when implemented
+    // For now, close modal and go to dashboard
+    onOpenChange(false);
+    router.push("/dashboard");
+    router.refresh();
+  };
+
+  const handleClose = (newOpen: boolean) => {
+    if (!newOpen && createdBooking) {
+      router.refresh();
+    }
+    onOpenChange(newOpen);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden p-0">
-        <DialogHeader className="px-6 pt-6 pb-4">
-          <div className="flex items-center justify-between">
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-5xl w-full max-h-[90vh] overflow-hidden p-0">
+        {step !== "success" && (
+          <DialogHeader className="px-6 pt-6 pb-4">
             <DialogTitle className="text-xl font-semibold">
               New Booking
             </DialogTitle>
-          </div>
-        </DialogHeader>
+          </DialogHeader>
+        )}
 
+        {/* Step 1: Select Artist */}
         {step === "select-artist" && (
           <div className="px-6 pb-6">
             <div className="flex items-center justify-between mb-6">
@@ -158,7 +195,7 @@ export function NewBookingModal({
 
             <div className="overflow-y-auto max-h-[60vh] pr-2">
               {isLoading ? (
-                <div className="grid grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   {Array.from({ length: 12 }).map((_, i) => (
                     <div
                       key={i}
@@ -180,46 +217,54 @@ export function NewBookingModal({
                     : "No artists available"}
                 </div>
               ) : (
-                <div className="grid grid-cols-4 gap-3">
-                  {filteredArtists.map((artist) => (
-                    <div
-                      key={artist.id}
-                      className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card hover:border-foreground/20 transition-colors"
-                    >
-                      <Avatar className="h-10 w-10">
-                        <AvatarImage
-                          src={artist.profile_image_url || undefined}
-                          alt={artist.stage_name}
-                        />
-                        <AvatarFallback className="bg-muted text-muted-foreground text-sm">
-                          {getInitials(artist.stage_name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm text-foreground truncate">
-                          {artist.stage_name}
-                        </p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {artist.real_name || "Name unknown"}
-                        </p>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleSelectArtist(artist)}
-                        className="shrink-0"
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {filteredArtists.map((artist) => {
+                    const realName = artist.surname
+                      ? `${artist.name || ""} ${artist.surname}`.trim()
+                      : artist.name !== artist.stage_name
+                        ? artist.name
+                        : null;
+                    return (
+                      <div
+                        key={artist.id}
+                        className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card hover:border-foreground/20 transition-colors"
                       >
-                        Select
-                      </Button>
-                    </div>
-                  ))}
+                        <Avatar className="h-10 w-10 shrink-0">
+                          <AvatarImage
+                            src={artist.profile_image_url || undefined}
+                            alt={artist.stage_name}
+                          />
+                          <AvatarFallback className="bg-muted text-muted-foreground text-sm">
+                            {getInitials(artist.stage_name)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm text-foreground truncate">
+                            {artist.stage_name}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {realName || "Nome Cognome"}
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleSelectArtist(artist)}
+                          className="shrink-0"
+                        >
+                          Select
+                        </Button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {step === "booking-details" && selectedArtist && (
+        {/* Step 2: Select Date */}
+        {step === "select-date" && selectedArtist && (
           <div className="px-6 pb-6">
             {/* Selected artist header */}
             <div className="flex items-center justify-between py-4 border-t border-b border-border mb-6">
@@ -238,20 +283,24 @@ export function NewBookingModal({
                     {selectedArtist.stage_name}
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    {selectedArtist.real_name || "Name unknown"}
+                    {selectedArtist.surname
+                      ? `${selectedArtist.name || ""} ${selectedArtist.surname}`.trim()
+                      : selectedArtist.name !== selectedArtist.stage_name
+                        ? selectedArtist.name
+                        : "Nome Cognome"}
                   </p>
                 </div>
               </div>
               <div className="text-right">
                 <p className="font-semibold text-lg text-foreground">
-                  {formatCurrency(selectedArtist.base_rate)}
+                  {formatCurrency(selectedArtist.fee, selectedArtist.currency)}
                 </p>
                 <p className="text-sm text-muted-foreground">Base rate</p>
               </div>
             </div>
 
             {/* Form fields */}
-            <div className="grid grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* Left column */}
               <div className="space-y-6">
                 {/* Select date */}
@@ -260,7 +309,7 @@ export function NewBookingModal({
                     Select date
                   </h4>
                   <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                     <Input
                       type="date"
                       value={date}
@@ -283,7 +332,7 @@ export function NewBookingModal({
                           Start time
                         </label>
                         <div className="relative">
-                          <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                           <Input
                             type="time"
                             value={startTime}
@@ -330,6 +379,73 @@ export function NewBookingModal({
                 className="bg-foreground text-background hover:bg-foreground/90"
               >
                 {isSaving ? "Saving..." : "Save on calendar"}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Success Confirmation */}
+        {step === "success" && selectedArtist && createdBooking && (
+          <div className="px-6 py-12 flex flex-col items-center">
+            <h2 className="text-2xl font-semibold text-center mb-8 text-balance">
+              {"Booking successfully added to Artist's calendar!"}
+            </h2>
+
+            <div className="w-full max-w-3xl border-t border-border pt-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Artist Card */}
+                <div>
+                  <h4 className="text-base font-medium text-foreground mb-3">
+                    Artist
+                  </h4>
+                  <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50">
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage
+                        src={selectedArtist.profile_image_url || undefined}
+                        alt={selectedArtist.stage_name}
+                      />
+                      <AvatarFallback className="bg-muted text-muted-foreground text-sm">
+                        {getInitials(selectedArtist.stage_name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-medium text-sm text-foreground">
+                        {selectedArtist.stage_name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {selectedArtist.surname
+                          ? `${selectedArtist.name || ""} ${selectedArtist.surname}`.trim()
+                          : selectedArtist.name !== selectedArtist.stage_name
+                            ? selectedArtist.name
+                            : "Nome Cognome"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Date Card */}
+                <div>
+                  <h4 className="text-base font-medium text-foreground mb-3">
+                    Date
+                  </h4>
+                  <div className="flex items-center p-4 rounded-lg bg-muted/50">
+                    <p className="font-medium text-sm text-foreground">
+                      {formatBookingDate(createdBooking.date)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-border w-full max-w-3xl mt-8 pt-8 flex justify-center gap-4">
+              <Button variant="outline" onClick={handleBackToDashboard}>
+                Back to Dashboard
+              </Button>
+              <Button
+                onClick={handleStartEventSetup}
+                className="bg-foreground text-background hover:bg-foreground/90"
+              >
+                Start event setup
               </Button>
             </div>
           </div>
