@@ -1,13 +1,30 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useSearchParams } from "next/navigation"
+import { useEffect, useState, useCallback } from "react"
+import { useSearchParams, useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
-import { ChevronRight, Edit, MessageSquare, Plus, Mail, Phone, MapPin, Globe, FileText } from "lucide-react"
+import {
+  ChevronRight,
+  ChevronLeft,
+  Edit,
+  MessageSquare,
+  Plus,
+  FileText,
+  Trash2,
+  Upload,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Calendar } from "@/components/ui/calendar"
 import { getArtist, type Artist, type SocialLink } from "@/lib/actions/artists"
 import { notFound } from "next/navigation"
 
@@ -21,22 +38,21 @@ function getSocialIcon(type: string) {
   if (t.includes("spotify")) return "SP"
   if (t.includes("youtube")) return "YT"
   if (t.includes("tiktok")) return "TT"
-  return "W"
+  if (t.includes("website") || t.includes("web")) return "W"
+  return "CN"
 }
 
 // Parse social links safely
 function parseSocialLinks(socialLinks: unknown): SocialLink[] {
   if (!socialLinks) return []
-  
-  // If it's already an array, return it
+
   if (Array.isArray(socialLinks)) {
     return socialLinks.filter(
       (link): link is SocialLink =>
         typeof link === "object" && link !== null && "type" in link && "url" in link
     )
   }
-  
-  // If it's a string, try to parse as JSON
+
   if (typeof socialLinks === "string") {
     try {
       const parsed = JSON.parse(socialLinks)
@@ -50,7 +66,7 @@ function parseSocialLinks(socialLinks: unknown): SocialLink[] {
       return []
     }
   }
-  
+
   return []
 }
 
@@ -67,23 +83,53 @@ function formatEquipmentList(text: string | null): string[] {
   return text.split("\n").filter((line) => line.trim())
 }
 
+// Valid tab values
+const VALID_TABS = ["overview", "calendar", "documents", "special"] as const
+type TabValue = (typeof VALID_TABS)[number]
+
+function isValidTab(tab: string | null): tab is TabValue {
+  return tab !== null && VALID_TABS.includes(tab as TabValue)
+}
+
 interface ArtistProfileClientProps {
   artist: Artist
 }
 
 function ArtistProfileClient({ artist }: ArtistProfileClientProps) {
   const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
   const [showUpdatedToast, setShowUpdatedToast] = useState(false)
+  const [calendarMonth, setCalendarMonth] = useState(new Date())
+
+  // Get current tab from URL or default to overview
+  const tabParam = searchParams.get("tab")
+  const currentTab: TabValue = isValidTab(tabParam) ? tabParam : "overview"
+
+  // Handle tab change with URL update
+  const handleTabChange = useCallback(
+    (value: string) => {
+      const params = new URLSearchParams(searchParams.toString())
+      params.set("tab", value)
+      router.push(`${pathname}?${params.toString()}`, { scroll: false })
+    },
+    [searchParams, router, pathname]
+  )
 
   useEffect(() => {
     if (searchParams.get("updated") === "1") {
       setShowUpdatedToast(true)
       const timer = setTimeout(() => setShowUpdatedToast(false), 3000)
-      // Clear URL param
-      window.history.replaceState({}, "", `/dashboard/artists/${artist.id}`)
+      // Clear updated param but keep tab
+      const params = new URLSearchParams(searchParams.toString())
+      params.delete("updated")
+      const newUrl = params.toString()
+        ? `${pathname}?${params.toString()}`
+        : pathname
+      window.history.replaceState({}, "", newUrl)
       return () => clearTimeout(timer)
     }
-  }, [searchParams, artist.id])
+  }, [searchParams, pathname])
 
   const displayName = artist.stage_name || artist.name || "Unknown Artist"
   const realName = artist.surname
@@ -95,11 +141,47 @@ function ArtistProfileClient({ artist }: ArtistProfileClientProps) {
   const socialLinks = parseSocialLinks(artist.social_links)
   const djEquipmentList = formatEquipmentList(artist.dj_equipment)
   const soundSystemList = formatEquipmentList(artist.sound_system)
+  const documents = artist.documents || []
 
   // Extract contact name from notes if available
   const contactName = artist.notes?.startsWith("Contact: ")
     ? artist.notes.replace("Contact: ", "").split("\n")[0]
     : null
+
+  // Calendar: no events table yet, so always empty
+  const hasCalendarItems = false
+  const calendarEvents: Array<{
+    id: string
+    date: Date
+    title: string
+    location: string
+    venue: string
+    time: string
+    status: "confirmed" | "pending"
+  }> = []
+
+  // Navigate calendar months
+  const handlePreviousMonth = () => {
+    setCalendarMonth((prev) => {
+      const newDate = new Date(prev)
+      newDate.setMonth(newDate.getMonth() - 1)
+      return newDate
+    })
+  }
+
+  const handleNextMonth = () => {
+    setCalendarMonth((prev) => {
+      const newDate = new Date(prev)
+      newDate.setMonth(newDate.getMonth() + 1)
+      return newDate
+    })
+  }
+
+  const formatMonthYear = (date: Date) => {
+    return date.toLocaleDateString("en-US", { month: "long", year: "numeric" })
+  }
+
+  const selectedDate = new Date()
 
   return (
     <div className="space-y-6 p-6">
@@ -137,11 +219,11 @@ function ArtistProfileClient({ artist }: ArtistProfileClientProps) {
               Edit
             </Link>
           </Button>
-          <Button variant="outline">
+          <Button variant="outline" disabled title="Coming soon">
             <MessageSquare className="mr-2 h-4 w-4" />
             Message
           </Button>
-          <Button>
+          <Button disabled title="Coming soon">
             <Plus className="mr-2 h-4 w-4" />
             New Booking
           </Button>
@@ -157,13 +239,18 @@ function ArtistProfileClient({ artist }: ArtistProfileClientProps) {
             <div className="grid grid-cols-2 gap-y-4 gap-x-8">
               <div>
                 <p className="text-sm text-muted-foreground">Contact name</p>
-                <p className="font-medium">{contactName || realName || displayName}</p>
+                <p className="font-medium">
+                  {contactName || realName || displayName}
+                </p>
               </div>
               <div />
               <div>
                 <p className="text-sm text-muted-foreground">Email</p>
                 {artist.email ? (
-                  <a href={`mailto:${artist.email}`} className="font-medium hover:underline">
+                  <a
+                    href={`mailto:${artist.email}`}
+                    className="font-medium hover:underline"
+                  >
                     {artist.email}
                   </a>
                 ) : (
@@ -173,7 +260,10 @@ function ArtistProfileClient({ artist }: ArtistProfileClientProps) {
               <div>
                 <p className="text-sm text-muted-foreground">Phone number</p>
                 {artist.phone ? (
-                  <a href={`tel:${artist.phone}`} className="font-medium hover:underline">
+                  <a
+                    href={`tel:${artist.phone}`}
+                    className="font-medium hover:underline"
+                  >
                     {artist.phone}
                   </a>
                 ) : (
@@ -182,10 +272,18 @@ function ArtistProfileClient({ artist }: ArtistProfileClientProps) {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Location</p>
-                <p className="font-medium">{artist.location || <span className="text-muted-foreground italic">Not provided</span>}</p>
+                <p className="font-medium">
+                  {artist.location || (
+                    <span className="text-muted-foreground italic">
+                      Not provided
+                    </span>
+                  )}
+                </p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Social media & Website</p>
+                <p className="text-sm text-muted-foreground">
+                  Social media & Website
+                </p>
                 {socialLinks.length > 0 ? (
                   <div className="flex items-center gap-2 mt-1">
                     {socialLinks.map((link, idx) => (
@@ -210,7 +308,7 @@ function ArtistProfileClient({ artist }: ArtistProfileClientProps) {
         </Card>
 
         {/* Pricing Card */}
-        <Card className="bg-gray-50">
+        <Card className="bg-[#f9fafb]">
           <CardContent className="p-6">
             <h3 className="text-lg font-semibold mb-4">Pricing</h3>
             <div className="grid grid-cols-2 gap-y-4 gap-x-8">
@@ -227,11 +325,19 @@ function ArtistProfileClient({ artist }: ArtistProfileClientProps) {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Travel Fee</p>
-                <p className="font-medium">{artist.travel_fee || <span className="text-muted-foreground italic">Not specified</span>}</p>
+                <p className="font-medium">
+                  {artist.travel_fee || (
+                    <span className="text-muted-foreground italic">
+                      Not specified
+                    </span>
+                  )}
+                </p>
               </div>
               {artist.pricing_notes && (
                 <div className="col-span-2">
-                  <p className="text-sm text-muted-foreground">Additional info</p>
+                  <p className="text-sm text-muted-foreground">
+                    Additional info
+                  </p>
                   <p className="text-sm mt-1">{artist.pricing_notes}</p>
                 </div>
               )}
@@ -241,160 +347,409 @@ function ArtistProfileClient({ artist }: ArtistProfileClientProps) {
       </div>
 
       {/* Tabs Section */}
-      <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="w-full justify-start border-b rounded-none h-auto p-0 bg-transparent">
-          <TabsTrigger
-            value="overview"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-black data-[state=active]:bg-transparent px-4 py-2"
+      <Card>
+        <CardContent className="p-6">
+          <Tabs
+            value={currentTab}
+            onValueChange={handleTabChange}
+            className="w-full"
           >
-            Overview
-          </TabsTrigger>
-          <TabsTrigger
-            value="calendar"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-black data-[state=active]:bg-transparent px-4 py-2"
-          >
-            Calendar
-          </TabsTrigger>
-          <TabsTrigger
-            value="documents"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-black data-[state=active]:bg-transparent px-4 py-2"
-          >
-            Documents
-          </TabsTrigger>
-          <TabsTrigger
-            value="special"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-black data-[state=active]:bg-transparent px-4 py-2"
-          >
-            Special requirements
-          </TabsTrigger>
-        </TabsList>
+            <TabsList className="w-full justify-start border-b rounded-none h-auto p-0 bg-transparent">
+              <TabsTrigger
+                value="overview"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent px-4 py-2"
+              >
+                Overview
+              </TabsTrigger>
+              <TabsTrigger
+                value="calendar"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent px-4 py-2"
+              >
+                Calendar
+              </TabsTrigger>
+              <TabsTrigger
+                value="documents"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent px-4 py-2"
+              >
+                Documents
+              </TabsTrigger>
+              <TabsTrigger
+                value="special"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent px-4 py-2"
+              >
+                Special requirements
+              </TabsTrigger>
+            </TabsList>
 
-        {/* Overview Tab */}
-        <TabsContent value="overview" className="mt-6 space-y-8">
-          {/* About Section */}
-          <section>
-            <h3 className="text-xl font-semibold mb-3">About {displayName}</h3>
-            {artist.overview ? (
-              <div className="text-muted-foreground whitespace-pre-wrap leading-relaxed">
-                {artist.overview}
-              </div>
-            ) : (
-              <p className="text-muted-foreground italic">No bio provided yet.</p>
-            )}
-          </section>
-
-          {/* Genres Section */}
-          <section>
-            <h3 className="text-xl font-semibold mb-3">Genres</h3>
-            {artist.genres && artist.genres.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {artist.genres.map((genre) => (
-                  <Badge key={genre} variant="outline" className="px-3 py-1 font-normal">
-                    {genre}
-                  </Badge>
-                ))}
-              </div>
-            ) : (
-              <p className="text-muted-foreground italic">No genres specified.</p>
-            )}
-          </section>
-
-          {/* Equipment Section */}
-          <section>
-            <h3 className="text-xl font-semibold mb-3">Equipment</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div>
-                <h4 className="font-medium mb-2">DJ Equipment</h4>
-                {djEquipmentList.length > 0 ? (
-                  <ul className="space-y-1">
-                    {djEquipmentList.map((item, idx) => (
-                      <li key={idx} className="text-muted-foreground">
-                        • {item}
-                      </li>
-                    ))}
-                  </ul>
+            {/* Overview Tab */}
+            <TabsContent value="overview" className="mt-6 space-y-8">
+              {/* About Section */}
+              <section>
+                <h3 className="text-xl font-semibold mb-3">
+                  About {displayName}
+                </h3>
+                {artist.overview ? (
+                  <div className="text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                    {artist.overview}
+                  </div>
                 ) : (
-                  <p className="text-muted-foreground italic">Not specified</p>
+                  <p className="text-muted-foreground italic">
+                    No bio provided yet.
+                  </p>
                 )}
-              </div>
-              <div>
-                <h4 className="font-medium mb-2">Sound System</h4>
-                {soundSystemList.length > 0 ? (
-                  <ul className="space-y-1">
-                    {soundSystemList.map((item, idx) => (
-                      <li key={idx} className="text-muted-foreground">
-                        • {item}
-                      </li>
+              </section>
+
+              {/* Genres Section */}
+              <section>
+                <h3 className="text-xl font-semibold mb-3">Genres</h3>
+                {artist.genres && artist.genres.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {artist.genres.map((genre) => (
+                      <Badge
+                        key={genre}
+                        variant="outline"
+                        className="px-3 py-1 font-normal"
+                      >
+                        {genre}
+                      </Badge>
                     ))}
-                  </ul>
+                  </div>
                 ) : (
-                  <p className="text-muted-foreground italic">Not specified</p>
+                  <p className="text-muted-foreground italic">
+                    No genres specified.
+                  </p>
                 )}
+              </section>
+
+              {/* Equipment Section */}
+              <section>
+                <h3 className="text-xl font-semibold mb-3">Equipment</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div>
+                    <h4 className="font-medium mb-2">DJ Equipment</h4>
+                    {djEquipmentList.length > 0 ? (
+                      <ul className="space-y-1">
+                        {djEquipmentList.map((item, idx) => (
+                          <li key={idx} className="text-muted-foreground">
+                            • {item}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-muted-foreground italic">
+                        Not specified
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <h4 className="font-medium mb-2">Sound System</h4>
+                    {soundSystemList.length > 0 ? (
+                      <ul className="space-y-1">
+                        {soundSystemList.map((item, idx) => (
+                          <li key={idx} className="text-muted-foreground">
+                            • {item}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-muted-foreground italic">
+                        Not specified
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </section>
+
+              {/* Latest Events Section */}
+              <section>
+                <h3 className="text-xl font-semibold mb-3">Latest events</h3>
+                <p className="text-muted-foreground italic">No events yet.</p>
+              </section>
+            </TabsContent>
+
+            {/* Calendar Tab */}
+            <TabsContent value="calendar" className="mt-6">
+              <div className="flex flex-col lg:flex-row gap-6">
+                {/* Events List Section */}
+                <div className="flex-1">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xl font-semibold">
+                      Active Bookings & Events
+                    </h3>
+                    <Select defaultValue="3" disabled>
+                      <SelectTrigger className="w-[130px]">
+                        <SelectValue placeholder="Select range" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">1 Month</SelectItem>
+                        <SelectItem value="3">3 Months</SelectItem>
+                        <SelectItem value="6">6 Months</SelectItem>
+                        <SelectItem value="12">12 Months</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {hasCalendarItems ? (
+                    /* Populated State - ready for real data */
+                    <div className="space-y-3">
+                      {calendarEvents.map((event) => (
+                        <div
+                          key={event.id}
+                          className="flex items-center justify-between p-4 border rounded-lg"
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="flex flex-col items-center justify-center w-12 h-12 bg-muted rounded text-center">
+                              <span className="text-xs font-medium uppercase text-muted-foreground">
+                                {event.date.toLocaleDateString("en-US", {
+                                  month: "short",
+                                })}
+                              </span>
+                              <span className="text-lg font-semibold">
+                                {event.date.getDate()}
+                              </span>
+                            </div>
+                            <div>
+                              <p className="font-medium">{event.title}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {event.location}, {event.venue} • {event.time}
+                              </p>
+                            </div>
+                          </div>
+                          {event.status === "pending" && (
+                            <Button variant="outline" size="sm">
+                              Continue setup
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+
+                      {/* Pagination would go here */}
+                      <div className="flex items-center justify-between pt-4">
+                        <p className="text-sm text-muted-foreground">
+                          Showing 1-10 of {calendarEvents.length}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <Button variant="ghost" size="sm" disabled>
+                            <ChevronLeft className="h-4 w-4 mr-1" />
+                            Previous
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-8 h-8 p-0"
+                          >
+                            1
+                          </Button>
+                          <Button variant="ghost" size="sm" disabled>
+                            Next
+                            <ChevronRight className="h-4 w-4 ml-1" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Empty State */
+                    <div className="py-8">
+                      <p className="text-muted-foreground mb-4">
+                        No bookings or events scheduled
+                      </p>
+                      <Button disabled title="Coming soon">
+                        <Plus className="mr-2 h-4 w-4" />
+                        New Booking
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Calendar Widget */}
+                <div className="lg:w-[320px]">
+                  <Card>
+                    <CardContent className="p-4">
+                      {/* Month Navigation */}
+                      <div className="flex items-center justify-between mb-4">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={handlePreviousMonth}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <span className="font-medium">
+                          {formatMonthYear(calendarMonth)}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={handleNextMonth}
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      {/* Calendar */}
+                      <Calendar
+                        mode="single"
+                        selected={selectedDate}
+                        month={calendarMonth}
+                        onMonthChange={setCalendarMonth}
+                        className="w-full"
+                        modifiers={{
+                          hasEvent: calendarEvents.map((e) => e.date),
+                        }}
+                        modifiersClassNames={{
+                          hasEvent: "bg-primary/20 font-semibold",
+                        }}
+                      />
+
+                      {/* Selected Date Details */}
+                      <div className="mt-4 pt-4 border-t">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium">
+                            {selectedDate.toLocaleDateString("en-US", {
+                              month: "long",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            disabled
+                            title="Coming soon"
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Nothing scheduled for this day
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
               </div>
-            </div>
-          </section>
+            </TabsContent>
 
-          {/* Latest Events Section */}
-          <section>
-            <h3 className="text-xl font-semibold mb-3">Latest events</h3>
-            <p className="text-muted-foreground italic">No events yet.</p>
-          </section>
-        </TabsContent>
+            {/* Documents Tab */}
+            <TabsContent value="documents" className="mt-6">
+              {documents.length > 0 ? (
+                <div className="space-y-3">
+                  {documents.map((doc, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between p-4 border rounded-lg"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center justify-center w-10 h-10 bg-muted rounded text-xs font-medium">
+                          X
+                        </div>
+                        <span className="font-medium">{doc.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" disabled title="Coming soon">
+                          Preview
+                        </Button>
+                        <Button size="sm" disabled title="Coming soon">
+                          Download
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          disabled
+                          title="Coming soon"
+                        >
+                          <Trash2 className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  <Button disabled title="Coming soon" className="mt-4">
+                    <Upload className="mr-2 h-4 w-4" />
+                    Upload document
+                  </Button>
+                </div>
+              ) : (
+                <div className="text-center py-12 border-2 border-dashed rounded-lg">
+                  <FileText className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                  <p className="text-muted-foreground mb-4">
+                    No documents uploaded yet.
+                  </p>
+                  <Button disabled title="Coming soon">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Upload document
+                  </Button>
+                </div>
+              )}
+            </TabsContent>
 
-        {/* Calendar Tab */}
-        <TabsContent value="calendar" className="mt-6">
-          <div className="text-center py-12 text-muted-foreground">
-            <p>Calendar view coming soon.</p>
-          </div>
-        </TabsContent>
+            {/* Special Requirements Tab */}
+            <TabsContent value="special" className="mt-6 space-y-6">
+              <section>
+                <h4 className="text-lg font-semibold mb-2">Allergies</h4>
+                <p className="text-muted-foreground">
+                  {artist.allergies || (
+                    <span className="italic">None specified</span>
+                  )}
+                </p>
+              </section>
 
-        {/* Documents Tab */}
-        <TabsContent value="documents" className="mt-6">
-          {artist.documents && artist.documents.length > 0 ? (
-            <div className="space-y-2">
-              {artist.documents.map((doc, idx) => (
-                <a
-                  key={idx}
-                  href={doc.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted"
-                >
-                  <FileText className="h-5 w-5 text-muted-foreground" />
-                  <span>{doc.name}</span>
-                </a>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-12 border-2 border-dashed rounded-lg">
-              <FileText className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-              <p className="text-muted-foreground">No documents uploaded yet.</p>
-            </div>
-          )}
-        </TabsContent>
+              <section>
+                <h4 className="text-lg font-semibold mb-2">Special diet</h4>
+                <p className="text-muted-foreground">
+                  {artist.special_diet || (
+                    <span className="italic">None specified</span>
+                  )}
+                </p>
+              </section>
 
-        {/* Special Requirements Tab */}
-        <TabsContent value="special" className="mt-6 space-y-6">
-          <div>
-            <h4 className="font-medium mb-2">Allergies</h4>
-            <p className="text-muted-foreground">
-              {artist.allergies || <span className="italic">None specified</span>}
-            </p>
-          </div>
-          <div>
-            <h4 className="font-medium mb-2">Special Diet</h4>
-            <p className="text-muted-foreground">
-              {artist.special_diet || <span className="italic">None specified</span>}
-            </p>
-          </div>
-          <div>
-            <h4 className="font-medium mb-2">Special Needs & Accessibility</h4>
-            <p className="text-muted-foreground">
-              {artist.special_needs || <span className="italic">None specified</span>}
-            </p>
-          </div>
-        </TabsContent>
-      </Tabs>
+              <section>
+                <h4 className="text-lg font-semibold mb-2">Special needs</h4>
+                <p className="text-muted-foreground">
+                  {artist.special_needs || (
+                    <span className="italic">None specified</span>
+                  )}
+                </p>
+              </section>
+
+              {/* Support Documentation */}
+              <section>
+                <h4 className="text-lg font-semibold mb-3">
+                  Support Documentation
+                </h4>
+                {documents.length > 0 ? (
+                  <div className="space-y-3">
+                    {documents.map((doc, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between p-4 border rounded-lg"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center justify-center w-10 h-10 bg-muted rounded text-xs font-medium">
+                            X
+                          </div>
+                          <span className="font-medium">{doc.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button variant="outline" size="sm" disabled title="Coming soon">
+                            Preview
+                          </Button>
+                          <Button size="sm" disabled title="Coming soon">
+                            Download
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground italic">
+                    No support documentation uploaded.
+                  </p>
+                )}
+              </section>
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
     </div>
   )
 }
@@ -404,7 +759,9 @@ interface ArtistDetailPageProps {
   params: Promise<{ id: string }>
 }
 
-export default async function ArtistDetailPage({ params }: ArtistDetailPageProps) {
+export default async function ArtistDetailPage({
+  params,
+}: ArtistDetailPageProps) {
   const { id } = await params
   const artist = await getArtist(id)
 
