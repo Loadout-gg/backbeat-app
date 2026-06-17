@@ -9,17 +9,33 @@ export interface Booking {
   artist_id: string;
   date: string;
   start_time: string;
-  duration_minutes: number;
+  duration_minutes: number | null;
   notes: string | null;
-  status: "pending" | "confirmed" | "cancelled";
+  status: "in_progress" | "confirmed" | "cancelled" | "completed";
   created_at: string;
   updated_at: string;
   artist?: {
     id: string;
     stage_name: string;
-    real_name: string | null;
+    name: string | null;
+    surname: string | null;
+    location: string | null;
+    fee: number | null;
+    currency: string | null;
     profile_image_url: string | null;
-    base_rate: number | null;
+  } | null;
+}
+
+export interface BookingWithArtist extends Booking {
+  artist: {
+    id: string;
+    stage_name: string;
+    name: string | null;
+    surname: string | null;
+    location: string | null;
+    fee: number | null;
+    currency: string | null;
+    profile_image_url: string | null;
   };
 }
 
@@ -45,7 +61,7 @@ export async function getBookings(): Promise<Booking[]> {
     .select(
       `
       *,
-      artist:artists(id, stage_name, real_name, profile_image_url, base_rate)
+      artist:artists(id, stage_name, name, surname, location, fee, currency, profile_image_url)
     `
     )
     .eq("workspace_id", membership.workspace_id)
@@ -56,7 +72,7 @@ export async function getBookings(): Promise<Booking[]> {
     return [];
   }
 
-  return bookings || [];
+  return (bookings || []) as Booking[];
 }
 
 export async function createBooking(formData: {
@@ -93,14 +109,14 @@ export async function createBooking(formData: {
       artist_id: formData.artistId,
       date: formData.date,
       start_time: formData.startTime,
-      duration_minutes: formData.durationMinutes,
+      duration_minutes: formData.durationMinutes || null,
       notes: formData.notes || null,
-      status: "pending",
+      status: "in_progress",
     })
     .select(
       `
       *,
-      artist:artists(id, stage_name, real_name, profile_image_url, base_rate)
+      artist:artists(id, stage_name, name, surname, location, fee, currency, profile_image_url)
     `
     )
     .single();
@@ -169,6 +185,118 @@ export async function deleteBooking(
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/artists");
+
+  return { success: true };
+}
+
+export async function getBooking(
+  bookingId: string
+): Promise<BookingWithArtist | null> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  // Get user's workspace
+  const { data: membership } = await supabase
+    .from("workspace_members")
+    .select("workspace_id")
+    .eq("user_id", user.id)
+    .single();
+
+  if (!membership) return null;
+
+  const { data: booking, error } = await supabase
+    .from("bookings")
+    .select(
+      `
+      *,
+      artist:artists(id, stage_name, name, surname, location, fee, currency, profile_image_url)
+    `
+    )
+    .eq("id", bookingId)
+    .eq("workspace_id", membership.workspace_id)
+    .single();
+
+  if (error || !booking) {
+    console.error("Error fetching booking:", error);
+    return null;
+  }
+
+  return booking as BookingWithArtist;
+}
+
+export async function updateBooking(
+  bookingId: string,
+  patch: {
+    date?: string;
+    start_time?: string;
+    duration_minutes?: number | null;
+    notes?: string | null;
+    status?: "in_progress" | "confirmed" | "cancelled" | "completed";
+    venue_name?: string;
+    venue_address?: string;
+    event_type?: string;
+    expected_audience?: string;
+    driver_name?: string;
+    driver_phone?: string;
+    driver_distance?: string;
+    contact_name_main?: string;
+    contact_phone_main?: string;
+    contact_email_main?: string;
+    contact_name_secondary?: string;
+    contact_phone_secondary?: string;
+    contact_email_secondary?: string;
+  }
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { success: false, error: "Not authenticated" };
+  }
+
+  // Get user's workspace
+  const { data: membership } = await supabase
+    .from("workspace_members")
+    .select("workspace_id")
+    .eq("user_id", user.id)
+    .single();
+
+  if (!membership) {
+    return { success: false, error: "No workspace found" };
+  }
+
+  // Only update fields that are in the bookings table schema
+  const dbPatch: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (patch.date !== undefined) dbPatch.date = patch.date;
+  if (patch.start_time !== undefined) dbPatch.start_time = patch.start_time;
+  if (patch.duration_minutes !== undefined)
+    dbPatch.duration_minutes = patch.duration_minutes;
+  if (patch.notes !== undefined) dbPatch.notes = patch.notes;
+  if (patch.status !== undefined) dbPatch.status = patch.status;
+
+  const { error } = await supabase
+    .from("bookings")
+    .update(dbPatch)
+    .eq("id", bookingId)
+    .eq("workspace_id", membership.workspace_id);
+
+  if (error) {
+    console.error("Error updating booking:", error);
+    return { success: false, error: error.message };
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/artists");
+  revalidatePath(`/dashboard/bookings/${bookingId}`);
 
   return { success: true };
 }

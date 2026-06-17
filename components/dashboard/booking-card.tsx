@@ -1,18 +1,19 @@
 "use client"
 
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 
 interface BookingCardProps {
+  id: string
   month: string
   day: string
   artistName: string
   venue: string
   location: string
   time: string
-  onContinueSetup?: () => void
 }
 
-export function BookingCard({ month, day, artistName, venue, location, time, onContinueSetup }: BookingCardProps) {
+export function BookingCard({ id, month, day, artistName, venue, location, time }: BookingCardProps) {
   return (
     <div className="flex items-center justify-between rounded-lg border bg-card p-3">
       <div className="flex items-center gap-4">
@@ -23,12 +24,14 @@ export function BookingCard({ month, day, artistName, venue, location, time, onC
         <div className="flex-1 min-w-0">
           <h3 className="font-medium text-sm">{artistName}</h3>
           <p className="text-xs text-muted-foreground">
-            {location}, {venue} • {time}
+            {location}{location && venue ? ", " : ""}{venue}{(location || venue) && time ? " \u2022 " : ""}{time}
           </p>
         </div>
       </div>
-      <Button variant="outline" size="sm" onClick={onContinueSetup}>
-        Continue setup
+      <Button variant="outline" size="sm" asChild>
+        <Link href={`/dashboard/bookings/${id}`}>
+          Continue setup
+        </Link>
       </Button>
     </div>
   )
