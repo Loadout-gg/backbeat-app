@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Clock, Calendar, CheckCircle2 } from "lucide-react";
 import {
@@ -40,6 +40,7 @@ export function NewBookingModal({
   );
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [createdBooking, setCreatedBooking] = useState<Booking | null>(null);
 
   // Form state
@@ -51,6 +52,8 @@ export function NewBookingModal({
   // Load artists when modal opens at step 1
   useEffect(() => {
     if (open && !preselectedArtist) {
+      // This controlled modal stays mounted; loading starts on each external open transition.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsLoading(true);
       getArtists()
         .then(setArtists)
@@ -58,10 +61,16 @@ export function NewBookingModal({
     }
   }, [open, preselectedArtist]);
 
-  // Reset state when modal opens/closes or preselectedArtist changes
+  const previousSelection = useRef<{ open: boolean; artistId?: string }>({ open: false });
+
+  // Reset only for a new modal session or a different artist, not an RSC refresh.
   useEffect(() => {
-    if (open) {
+    const previous = previousSelection.current;
+    previousSelection.current = { open, artistId: preselectedArtist?.id };
+    if (open && (!previous.open || previous.artistId !== preselectedArtist?.id)) {
       if (preselectedArtist) {
+        // A controlled open/artist transition initializes this modal's draft.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setSelectedArtist(preselectedArtist);
         setStep("booking-details");
       } else {
@@ -74,6 +83,7 @@ export function NewBookingModal({
       setDuration("00:00");
       setNotes("");
       setCreatedBooking(null);
+      setSaveError(null);
     }
   }, [open, preselectedArtist]);
 
@@ -99,24 +109,30 @@ export function NewBookingModal({
     if (!selectedArtist || !date || !startTime) return;
 
     setIsSaving(true);
+    setSaveError(null);
 
     // Parse duration (HH:MM format) to minutes
     const [hours, minutes] = duration.split(":").map(Number);
     const durationMinutes = (hours || 0) * 60 + (minutes || 0);
 
-    const result = await createBooking({
-      artistId: selectedArtist.id,
-      date,
-      startTime,
-      durationMinutes,
-      notes: notes || undefined,
-    });
-
-    setIsSaving(false);
-
-    if (result.success && result.booking) {
-      setCreatedBooking(result.booking);
-      setStep("success");
+    try {
+      const result = await createBooking({
+        artistId: selectedArtist.id,
+        date,
+        startTime,
+        durationMinutes,
+        notes: notes || undefined,
+      });
+      if (result.success && result.booking) {
+        setCreatedBooking(result.booking);
+        setStep("success");
+      } else {
+        setSaveError(result.error || "Unable to save booking. Please try again.");
+      }
+    } catch {
+      setSaveError("Unable to save booking. Please try again.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -174,7 +190,7 @@ export function NewBookingModal({
 
   return (
     <Dialog open={open} onOpenChange={step === "success" ? () => {} : onOpenChange}>
-      <DialogContent className={dialogClassName} showCloseButton={step !== "success"}>
+      <DialogContent aria-describedby={undefined} className={dialogClassName} showCloseButton={step !== "success"}>
         {/* ========== STEP 1: Select Artist ========== */}
         {step === "select-artist" && (
           <>
@@ -388,6 +404,7 @@ export function NewBookingModal({
                 </div>
               </div>
 
+              {saveError && <p role="alert" className="mt-4 text-sm text-destructive">{saveError}</p>}
               {/* Save button */}
               <div className="flex justify-end mt-6">
                 <Button

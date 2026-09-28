@@ -42,7 +42,7 @@ export function DashboardContent({
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false)
 
   // Filter bookings in progress
-  const bookingsInProgress = bookings.filter((b) => b.status === "in_progress" || b.status === "pending")
+  const bookingsInProgress = bookings.filter((b) => b.status === "in_progress")
 
   return (
     <div className="flex flex-col min-h-full">

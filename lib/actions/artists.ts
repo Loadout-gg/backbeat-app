@@ -139,8 +139,7 @@ export async function createArtist(
     .from("artists")
     .insert({
       workspace_id: workspaceId,
-      // Use stage_name as the primary name field
-      name: input.stage_name,
+      name: input.name?.trim() || input.stage_name,
       stage_name: input.stage_name,
       surname: input.surname || null,
       location: input.location || null,
@@ -205,7 +204,6 @@ export async function updateArtist(
   // Only include fields that are explicitly provided
   if (input.stage_name !== undefined) {
     updateData.stage_name = input.stage_name
-    updateData.name = input.stage_name // Keep name in sync with stage_name
   }
   if (input.name !== undefined) updateData.name = input.name
   if (input.surname !== undefined) updateData.surname = input.surname || null

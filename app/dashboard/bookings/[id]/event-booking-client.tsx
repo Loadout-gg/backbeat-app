@@ -8,13 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+
 import { updateBooking, deleteBooking, type BookingWithArtist } from "@/lib/actions/bookings";
 
 interface EventBookingClientProps {
@@ -36,6 +30,7 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabValue>("Performance");
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -43,11 +38,7 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
   const [startTime, setStartTime] = useState(
     booking.start_time ? booking.start_time.slice(0, 5) : "10:30"
   );
-  const [amPm, setAmPm] = useState<"AM" | "PM">(() => {
-    if (!booking.start_time) return "PM";
-    const hour = parseInt(booking.start_time.split(":")[0], 10);
-    return hour >= 12 ? "PM" : "AM";
-  });
+  const amPm = startTime ? (Number(startTime.split(":")[0]) >= 12 ? "PM" : "AM") : "-";
   const [durationMinutes, setDurationMinutes] = useState(
     booking.duration_minutes || 0
   );
@@ -122,10 +113,7 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
   const computeEndTime = () => {
     if (!startTime || !durationMinutes) return "-";
     const [h, m] = startTime.split(":").map(Number);
-    let totalMins = h * 60 + m + durationMinutes;
-    // Adjust for AM/PM
-    if (amPm === "PM" && h < 12) totalMins += 12 * 60;
-    if (amPm === "AM" && h === 12) totalMins -= 12 * 60;
+    const totalMins = h * 60 + m + durationMinutes;
     const endH = Math.floor((totalMins % (24 * 60)) / 60);
     const endM = totalMins % 60;
     const endAmPm = endH >= 12 ? "PM" : "AM";
@@ -135,19 +123,24 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
 
   const handleUpdateBooking = async () => {
     setIsSaving(true);
-    // Convert 12h to 24h for storage
-    let [h, m] = startTime.split(":").map(Number);
-    if (amPm === "PM" && h < 12) h += 12;
-    if (amPm === "AM" && h === 12) h = 0;
-    const time24 = `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+    setSaveError(null);
 
-    await updateBooking(booking.id, {
-      start_time: time24,
-      duration_minutes: durationMinutes || null,
-      notes: notes || null,
-    });
-    setIsSaving(false);
-    router.refresh();
+    try {
+      const result = await updateBooking(booking.id, {
+        start_time: startTime,
+        duration_minutes: durationMinutes || null,
+        notes: notes || null,
+      });
+      if (!result.success) {
+        setSaveError(result.error || "Unable to save booking. Please try again.");
+        return;
+      }
+      router.refresh();
+    } catch {
+      setSaveError("Unable to save booking. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleDelete = async () => {
@@ -165,6 +158,7 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
 
   return (
     <div className="max-w-5xl mx-auto">
+      {saveError && <p role="alert" className="mb-4 text-sm text-destructive">{saveError}</p>}
       {/* Card container */}
       <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
         {/* Header row */}
@@ -258,7 +252,7 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
                     Performance time
                   </h3>
                   <div className="border border-border rounded-lg p-4">
-                    <div className="grid grid-cols-4 gap-3">
+                    <div className="grid grid-cols-[minmax(8rem,1.3fr)_3.5rem_minmax(6rem,1fr)_minmax(6rem,1fr)] gap-3">
                       <div>
                         <label className="text-xs font-medium text-foreground mb-1.5 block">
                           Start time
@@ -277,18 +271,9 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
                         <label className="text-xs font-medium text-foreground mb-1.5 block">
                           &nbsp;
                         </label>
-                        <Select
-                          value={amPm}
-                          onValueChange={(v) => setAmPm(v as "AM" | "PM")}
-                        >
-                          <SelectTrigger className="h-9 text-sm">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="AM">AM</SelectItem>
-                            <SelectItem value="PM">PM</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <div aria-label="Start time period" className="flex items-center h-9 px-3 bg-muted/50 rounded-md text-sm text-muted-foreground">
+                          {amPm}
+                        </div>
                       </div>
                       <div>
                         <label className="text-xs font-medium text-foreground mb-1.5 block">
@@ -319,6 +304,10 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
                 </div>
               </div>
 
+              <fieldset disabled aria-describedby="unavailable-booking-fields" className="min-w-0 space-y-8">
+                <p id="unavailable-booking-fields" className="text-sm text-muted-foreground">
+                  Not available yet: venue, additional details, lineup, driver and contact fields are not saved.
+                </p>
               {/* Venue & Additional details */}
               <div className="grid grid-cols-2 gap-8">
                 <div>
@@ -441,6 +430,7 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
                   </h3>
                   <div className="flex items-center gap-2">
                     <Checkbox
+                      disabled
                       id="same-driver"
                       checked={sameDriver}
                       onCheckedChange={(checked) =>
@@ -585,6 +575,8 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
                   </div>
                 </div>
               </div>
+
+              </fieldset>
 
               {/* Notes */}
               <div>

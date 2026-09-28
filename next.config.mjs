@@ -1,8 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  typescript: {
-    ignoreBuildErrors: true,
-  },
+  // A server-only local flag must also guard the browser bundle.
+  ...(process.env.BACKBEAT_ENV === "development" ? {
+    env: { NEXT_PUBLIC_BACKBEAT_ENV: "development" },
+  } : {}),
   images: {
     unoptimized: true,
   },

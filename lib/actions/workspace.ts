@@ -126,5 +126,17 @@ export async function getCurrentWorkspaceId(): Promise<string> {
     redirect("/onboarding")
   }
 
+  const { data: membership, error: membershipError } = await supabase
+    .from("workspace_members")
+    .select("workspace_id")
+    .eq("workspace_id", onboardingStatus.workspace_id)
+    .eq("user_id", user.id)
+    .eq("status", "active")
+    .single()
+
+  if (membershipError || !membership) {
+    throw new Error("No active workspace membership")
+  }
+
   return onboardingStatus.workspace_id
 }

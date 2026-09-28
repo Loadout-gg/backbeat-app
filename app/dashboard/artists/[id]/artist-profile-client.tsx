@@ -154,6 +154,8 @@ export function ArtistProfileClient({ artist }: ArtistProfileClientProps) {
 
   useEffect(() => {
     if (searchParams.get("updated") === "1") {
+      // The URL is an external navigation signal; consume it once and retain the timed toast.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowUpdatedToast(true)
       const timer = setTimeout(() => setShowUpdatedToast(false), 3000)
       // Clear updated param but keep tab
