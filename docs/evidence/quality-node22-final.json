@@ -1,0 +1,35 @@
+{
+  "node": "22.23.2",
+  "checks": [
+    {
+      "command": "pnpm install --frozen-lockfile --ignore-scripts",
+      "exit_code": 0,
+      "output": "\u2713 Lockfile passes supply-chain policies (verified 49m ago)\nLockfile is up to date, resolution step is skipped\nDone in 64ms using pnpm v12.3.4\n\n"
+    },
+    {
+      "command": "pnpm test",
+      "exit_code": 0,
+      "output": "\n\u001b[1m\u001b[30m\u001b[46m RUN \u001b[49m\u001b[39m\u001b[22m \u001b[36mv4.1.11 \u001b[39m\u001b[90m/Users/derek/Documents/Loadout/Backbeat/backbeat-app\u001b[39m\n\n \u001b[32m\u2713\u001b[39m tests/unit/workspace.test.ts \u001b[2m(\u001b[22m\u001b[2m3 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 6\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m\u2713\u001b[39m tests/unit/artists.test.ts \u001b[2m(\u001b[22m\u001b[2m5 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 5\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m\u2713\u001b[39m tests/unit/local-analytics.test.ts \u001b[2m(\u001b[22m\u001b[2m2 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 7\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m\u2713\u001b[39m tests/unit/bookings.test.ts \u001b[2m(\u001b[22m\u001b[2m30 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 15\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m\u2713\u001b[39m tests/unit/supabase-environment.test.ts \u001b[2m(\u001b[22m\u001b[2m10 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 81\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m\u2713\u001b[39m tests/component/booking-create.test.tsx \u001b[2m(\u001b[22m\u001b[2m3 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 236\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m\u2713\u001b[39m tests/component/booking-save.test.tsx \u001b[2m(\u001b[22m\u001b[2m8 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[33m 513\u001b[2mms\u001b[22m\u001b[39m\n\n\u001b[2m Test Files \u001b[22m \u001b[1m\u001b[32m7 passed\u001b[39m\u001b[22m\u001b[90m (7)\u001b[39m\n\u001b[2m      Tests \u001b[22m \u001b[1m\u001b[32m61 passed\u001b[39m\u001b[22m\u001b[90m (61)\u001b[39m\n\u001b[2m   Start at \u001b[22m 01:31:06\n\u001b[2m   Duration \u001b[22m 1.82s\u001b[2m (transform 547ms, setup 0ms, import 1.17s, tests 864ms, environment 2.58s)\u001b[22m\n\n\n$ vitest run\n"
+    },
+    {
+      "command": "pnpm run test:runtime",
+      "exit_code": 0,
+      "output": "TAP version 13\n# Subtest: launcher refuses to start Next without an isolated environment\nok 1 - launcher refuses to start Next without an isolated environment\n  ---\n  duration_ms: 33.586834\n  type: 'test'\n  ...\n# Subtest: accepts only the explicit isolated development configuration\nok 2 - accepts only the explicit isolated development configuration\n  ---\n  duration_ms: 1.078292\n  type: 'test'\n  ...\n# Subtest: forwards traffic to the designated upstream and releases its sockets\nok 3 - forwards traffic to the designated upstream and releases its sockets\n  ---\n  duration_ms: 12.620417\n  type: 'test'\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 93.735\n\n$ node --test tests/runtime/*.test.cjs\n"
+    },
+    {
+      "command": "pnpm exec tsc --noEmit --incremental false --pretty false",
+      "exit_code": 0,
+      "output": "\n"
+    },
+    {
+      "command": "pnpm run lint",
+      "exit_code": 0,
+      "output": "\n$ eslint . --max-warnings=0\n"
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0,
+      "output": "\n"
+    }
+  ]
+}

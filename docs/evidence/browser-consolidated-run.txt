@@ -1,0 +1,29 @@
+
+Running 1 test using 1 worker
+
+  ✘  1 tests/e2e/core-booking.spec.mjs:7:1 › local operator completes onboarding, artist and booking persistence, and recovers from save failure (2.0m)
+
+
+  1) tests/e2e/core-booking.spec.mjs:7:1 › local operator completes onboarding, artist and booking persistence, and recovers from save failure › booking creation, update after reload and visible failed-save recovery
+
+    Test timeout of 120000ms exceeded.
+
+    Error: browserContext.cookies: Protocol error (Storage.getCookies): Failed to find browser context for id 30BC3FA207EBCCB0F619EB62C32D9B69
+
+      158 |     })
+      159 |   } finally {
+    > 160 |     const cookieNames = (await page.context().cookies()).map(cookie => cookie.name)
+          |                                               ^
+      161 |     await testInfo.attach('safe-browser-diagnostics', { body: JSON.stringify({ network, pageErrors, blockedOrigins: [...blockedOrigins], cookieNames }, null, 2), contentType: 'application/json' })
+      162 |     // Only this invocation's synthetic fixture may be removed.
+      163 |     await guard()
+        at /Users/derek/Documents/Loadout/Backbeat/backbeat-app/tests/e2e/core-booking.spec.mjs:160:47
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/browser/core-booking-local-operato-ed220--recovers-from-save-failure/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/browser/core-booking-local-operato-ed220--recovers-from-save-failure/error-context.md
+
+  1 failed
+    tests/e2e/core-booking.spec.mjs:7:1 › local operator completes onboarding, artist and booking persistence, and recovers from save failure

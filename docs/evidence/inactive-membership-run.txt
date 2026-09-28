@@ -1,0 +1,24 @@
+BEGIN
+DO
+1ec5db2a-f311-4b2c-ae0e-7b2c75fdae5f
+642de6c9-4184-47be-836b-9f66edb8fccb
+77822ab8-0510-4d24-a276-600004a713f6
+INSERT 0 1
+1ec5db2a-f311-4b2c-ae0e-7b2c75fdae5f
+authenticated
+SET
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+DO
+RESET
+UPDATE 1
+SET
+DO
+RESET
+DO
+ROLLBACK
+PASS: inactive membership cannot read, insert, update, delete or select workspace data; fixtures rolled back.

@@ -1,0 +1,29 @@
+✖ Backbeat M1: isolated development schema and user-JWT RLS (84.859166ms)
+ℹ Synthetic fixture run: m1-fcbba82f-941a-4270-964f-fc18d00617ad; no raw HTTP errors or credentials are emitted
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 175.13575
+
+✖ failing tests:
+
+test at Loadout/Backbeat/backbeat-schema-m1/tests/integration/core.test.mjs:45:1
+✖ Backbeat M1: isolated development schema and user-JWT RLS (84.859166ms)
+  AssertionError [ERR_ASSERTION]: development marker must exist before any mutation: HTTP 404; code PGRST205
+      at ok (file:///Users/derek/Documents/Loadout/Backbeat/backbeat-schema-m1/tests/integration/core.test.mjs:32:10)
+      at guard (file:///Users/derek/Documents/Loadout/Backbeat/backbeat-schema-m1/tests/integration/core.test.mjs:72:18)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///Users/derek/Documents/Loadout/Backbeat/backbeat-schema-m1/tests/integration/core.test.mjs:106:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

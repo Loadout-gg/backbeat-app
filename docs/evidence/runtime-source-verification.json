@@ -1,0 +1,134 @@
+{
+  "verified_at": "2026-09-28T23:32:55.284197+00:00",
+  "deployment": "dep_C5JeYO9Kqi_EyoWv",
+  "project": "proj_Pg3H1x0aJwuwuV1L",
+  "environment": "development",
+  "source_files_verified": 77,
+  "source_sha256": {
+    ".dockerignore": "ac18a238d63275ba4c79213e14227d93650275dc543586d14c50148a357cf580",
+    "app/auth/error/page.tsx": "a4d5f9789eac10d7392c86efc7cf689dd2050f84b2ae86a883912c55ffb96df1",
+    "app/auth/login/page.tsx": "41516db9e9ef13a6abc5ea342c6ca775cb031b018dfde0075862af2c05953680",
+    "app/auth/signup-success/page.tsx": "2f3b077117faa183898b0bd1226be63a693bb5443cce76fc5c6282bdc6503343",
+    "app/auth/signup/page.tsx": "8df87e7ce8491506f367165d1daa2fb81af2b1b08e8a9a1aea51b64036f217aa",
+    "app/dashboard/artists/[id]/artist-profile-client.tsx": "f5f55313e3803e809c81d86ce93bed558ef3eba7b38820f30f24c72e4fc92804",
+    "app/dashboard/artists/[id]/edit/page.tsx": "74e331aba5fe365a481c98e42b22c02db4908f0a41768ee0253bb3cc10a2b494",
+    "app/dashboard/artists/[id]/loading.tsx": "9e1ac4077d21536321677f9b65d9cf9ab3c44496a8d336c502a58570df373ac2",
+    "app/dashboard/artists/[id]/page.tsx": "56119c56c442146caac37d151f8f0cf0b26c369221762218dee358ff2d5774c2",
+    "app/dashboard/artists/loading.tsx": "9e1ac4077d21536321677f9b65d9cf9ab3c44496a8d336c502a58570df373ac2",
+    "app/dashboard/artists/new/page.tsx": "ce46b1b5db3f28e699d4b569774d9fb9ae2fe06b579f9460fc526c26b3f5d244",
+    "app/dashboard/artists/page.tsx": "9fd5c786bf203f71d14849cf48d1aab54682396bd005543904bf2db9737c333b",
+    "app/dashboard/bookings/[id]/event-booking-client.tsx": "38ec72b95b57aae365d2e9d6b2b730d7711879d1ebe8f950d3622a7e9051615a",
+    "app/dashboard/bookings/[id]/page.tsx": "f7b8b67f19ef751c68473d4781febf13f30be30899e788703d7d3650f215ed13",
+    "app/dashboard/dashboard-content.tsx": "5a123ed5aea8153b8c90f42ea6c8f96837d46cfb121a266696a8fd29c3d1e44a",
+    "app/dashboard/events/new/page.tsx": "bbb1b22fec80eb65ee1daac4bf3a971add502958b1db4473d663417ef67dbbd2",
+    "app/dashboard/events/page.tsx": "261f6f9019098e21316f1995e6b57518e13c41977e6ed0b97d45b1ce98f8de44",
+    "app/dashboard/layout.tsx": "5485d0b9bf340e9dcf0c25271d3518f4e5d166418ef7985a137289fecee174a9",
+    "app/dashboard/page.tsx": "05441b0fb012dab6b5814f16cf19ff34b37bd6babd99abe6fe74dae3b2f0fcc2",
+    "app/dashboard/settings/page.tsx": "55e83e348bbad537be5bc3c37bd9f0ab6be7a0893e689b4cd60973272465933b",
+    "app/globals.css": "f3705f000d71c9b9d0e1bdcb974b644610895f4e529581c58e1b07c6e0b0bf6c",
+    "app/layout.tsx": "ac2317e4487eb217dd410c7e36e0fd77f4fd0e787f8885c40f0abd061b1d63a7",
+    "app/onboarding/page.tsx": "5deac1d408988951ff037b77f427a854c4025828b8af4ab88afbbbb5cad40eee",
+    "app/page.tsx": "542925abd98fea672c1c3d6915c30b919ecb54e92386a03eb5ac868bbf8cc70d",
+    "components/backbeat-logo.tsx": "45bb3a279dd57d733224c9b784bc63353da8b9a263210ed819df0b17ff7dfe72",
+    "components/dashboard/booking-card.tsx": "91546949b8cdf07ed11332e1c0cc00d6c3c5c5a383378eb6873163a3828286ff",
+    "components/dashboard/event-card.tsx": "b98b484fc665c6ed058d606ab7ca07e6a6a5a3cd99d27cec1caa0be005382d91",
+    "components/dashboard/header.tsx": "f3214675685b490c0035566bb31f2195f163d31f104838c2fc95d7c43f4e66df",
+    "components/dashboard/new-booking-modal.tsx": "e891b0884ceede07f4ef667e0945c9ed02101d922c784bb68fa57b26d58d8332",
+    "components/dashboard/quick-actions.tsx": "d91c98b80eae84021c08076d45539a17553ca4803e0e94e241ddcf4af9e96859",
+    "components/dashboard/sidebar.tsx": "bb0d64c6d2b3610a8c5f7bbd54b28d13a3883876a7f96519d3d870d796fbe3e6",
+    "components/dashboard/stats-card.tsx": "ce86e81658d3022ceb478f5ba0c73e470436efc49a741655ea8c4afa4d442cb9",
+    "components/theme-provider.tsx": "7c1edcfa7a0614bfc279aeb8ce3e60e0642b1c24a6ff3d4d03d3e256efc95b20",
+    "components/ui/avatar.tsx": "9effa6f9decfeb6230e20958c815cdfef8bd84f6ec6aafc8e2e87c5e4c64b4b2",
+    "components/ui/badge.tsx": "92dfe1cb7278ffac5c23656e33d0827da93b067724f377923f618c248204fa67",
+    "components/ui/button.tsx": "7cb96ee534dedef7eb138952dc02fda0cb2caf2e02f2d3c08afab7f978d58dc3",
+    "components/ui/calendar.tsx": "11b817aaa791d8ebd39a882f80827a7d4a99c6d451c8b836a81b186fcb2de87a",
+    "components/ui/card.tsx": "541ffffc9e6533063116770ae651e359b41de8546c52a29a3b560074878a37db",
+    "components/ui/checkbox.tsx": "f4629326151cdb4fefbb8d49ff20bcc3ffab3f791fb31b795937650877eae212",
+    "components/ui/dialog.tsx": "2341f5d3379758c9659806e518299f9a3dc394128571e379ed83941deae83403",
+    "components/ui/dropdown-menu.tsx": "3124a8b0edfe90400cf4d14d438dfe6ac3af9ec9a6181feee10f48390aeb1815",
+    "components/ui/input.tsx": "b67dea8a8d35c004c6d94c22aacbbf2340b0e536c614e4c87a69d8814a7b4502",
+    "components/ui/label.tsx": "dfd466a53a86f0bd002050d33e96b5385ac4e102e93485ff8d9943fdc2fbeb12",
+    "components/ui/select.tsx": "e2b4198bbf3968eae76d71fd04074b43f802357d997dbd01a1721a96e5895383",
+    "components/ui/table.tsx": "7e4ec95a993de8b29a144facf8c5e99271239ee40ca158a93cbc8b6853e7ca54",
+    "components/ui/tabs.tsx": "23cc67b5360458decab2e93b3827aebbe142fd2d9f76ec418f96cb3269f1820a",
+    "components/ui/textarea.tsx": "cf31ce99f03ac69f9821b4463a366c66698ae8e7eba5c06d2ede63d5cf7309bd",
+    "compose.yaml": "3a205f4f67e7fbeb5cd6b654ac310d63066126dd4b94bed9264d662949c4ffad",
+    "lib/actions/artists.ts": "3b20e1c7a4b76c1013366852b2363f5e55e4ec2fc11a72cc34f5b51883ff12dc",
+    "lib/actions/bookings.ts": "393ac692cfbf90245732786abb949f32f850e0be30e512b27f3f9143b39ac36a",
+    "lib/actions/dashboard.ts": "ceb6105094c3d56697f5cca9059b58f14566fdbacd6f011b75b3fdb1bad5d85a",
+    "lib/actions/events.ts": "985ed74efbf36cc046513aa834a341fb476f4888e349440bc7a3d6e26103d8c1",
+    "lib/actions/workspace.ts": "3bc95261b47d412defeaafd76dce95cfe1c2d6c6a5a0261bd863a588f7183c49",
+    "lib/booking-status.ts": "7bb331b467eb8f624455b88cea8525afb86fba368a368c54c9a48f5996b8059b",
+    "lib/booking-validation.ts": "fcad19e7b13ba5ccc2b82534df051fc1800a54de40936a671dccc8967c534d8d",
+    "lib/supabase/client.ts": "69d145aac8767b218926d35c9667ca272dac6d731b9d5160313a5f8593636be2",
+    "lib/supabase/environment.ts": "a53e04390d62119408a019394a0a1c7c448edba63366dae7cd20d21fd8be6f7c",
+    "lib/supabase/proxy.ts": "1a3e19a9e76fbf5cf473f668789f03232a8844c9ffd70821c76f641fc8ee858f",
+    "lib/supabase/server.ts": "ac0ba689dfb1e9a2a94f0a9a200aa7b31311a31b001e912ec8e4b2ea73762d14",
+    "lib/utils.ts": "e46429536f43f5910f5b2b0c50bb2769b510a4558bb4b5d20a3b0a9091dbf7c3",
+    "next.config.mjs": "085253730843b38d162725bc6bfffd02e3cd25c1fbf8ec331b30ee7aba26d486",
+    "ops/local/Dockerfile": "829d6a1eb0319d0b839ee2225cce47448256150ae00fe3f9fe11f8382d89b419",
+    "ops/local/lima.yaml": "9d952d684fd69593d8da483d3aeaeca076d7112ccf1337ca132ba358fa203093",
+    "ops/local/start.cjs": "35afd37536d9af670961d516a3352c29ef7b29580f9290e332acd1d88cbbb52e",
+    "package.json": "c34bba0bd9d74489e6acc2726678d3bba13b0bd9028bc23ca2d71b8341b6119e",
+    "pnpm-lock.yaml": "af3cbc413f11e8673b92e15c572bd60b0194efb9f751ea4caf41429dfcd36ab8",
+    "public/apple-icon.png": "da678942d4656a903f61000551cc51c09464d7a223faaae304e8210e1ca19257",
+    "public/icon-dark-32x32.png": "8a1570b2955c3748b6844356a7487d88c60f9f1e699e870a3452a3decd1ba03c",
+    "public/icon-light-32x32.png": "83145e5bb033ace23cd8e7fbb63e7c39733aaf58f8a7280d7800995cced6f7c2",
+    "public/icon.svg": "263f117c0c69a44d3206a5702105c178ebaa164bca325f3c3973a13bd948f1bf",
+    "public/placeholder-logo.png": "d7c39d978af643ba9525de6fb8171e0f834882db4110c82ecad0df3f4f69551a",
+    "public/placeholder-logo.svg": "19a9e968f4656d52a4c249b4056117ad109370ba9da51cdc630ddded74cec73b",
+    "public/placeholder-user.jpg": "22be067d748175598a5e00123902f5c8332dd7f101de03dfb92ec08d85bb5e53",
+    "public/placeholder.jpg": "14be0c7aa11cca1e78f0966176b286a6d36d00ec64be027775dfeb33d8e2dfdf",
+    "public/placeholder.svg": "64badf7aabda0b9630b87020ffb6095cb858ccbcf66b355c2aa08b1063954d3b",
+    "styles/globals.css": "7f30dbe34b65246e3b80a5a7185b75d330eb583be354020e50c2210ceb8daa6f",
+    "tsconfig.json": "9c43305b728b4b57e97c63dcef97739d59491469c9c2ddfd24408fdf63e70f86"
+  },
+  "app_http": 200,
+  "server_to_backend_http": 200,
+  "runtime": [
+    {
+      "name": "/openship-backbeat-dev-supabase-development-backbeat",
+      "state": "running",
+      "networks": [
+        "openship-backbeat-dev-supabase-development"
+      ],
+      "ports": {
+        "3101/tcp": [
+          {
+            "HostIp": "127.0.0.1",
+            "HostPort": "3101"
+          }
+        ]
+      }
+    },
+    {
+      "name": "/openship-backbeat-dev-supabase-development-kong",
+      "state": "running",
+      "networks": [
+        "openship-backbeat-dev-supabase-development"
+      ],
+      "ports": {
+        "8000/tcp": [
+          {
+            "HostIp": "127.0.0.1",
+            "HostPort": "55322"
+          }
+        ]
+      }
+    },
+    {
+      "name": "/openship-backbeat-dev-supabase-development-db",
+      "state": "running",
+      "networks": [
+        "openship-backbeat-dev-supabase-development"
+      ],
+      "ports": {}
+    }
+  ],
+  "fixture_cleanup": [
+    "auth_users=0",
+    "workspaces=0",
+    "artists=0",
+    "bookings=0"
+  ]
+}

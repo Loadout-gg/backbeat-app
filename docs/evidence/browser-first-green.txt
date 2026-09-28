@@ -1,0 +1,6 @@
+
+Running 1 test using 1 worker
+
+  ✓  1 tests/e2e/core-booking.spec.mjs:7:1 › local operator completes onboarding, artist and booking persistence, and recovers from save failure (12.3s)
+
+  1 passed (13.8s)

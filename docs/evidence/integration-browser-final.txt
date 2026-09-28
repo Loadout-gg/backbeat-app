@@ -1,0 +1,93 @@
+TAP version 13
+# Subtest: Backbeat M1: isolated development schema and user-JWT RLS
+    # Subtest: all required tables and columns exist in the real REST schema
+    ok 1 - all required tables and columns exist in the real REST schema
+      ---
+      duration_ms: 62.06875
+      type: 'test'
+      ...
+    # Subtest: a: signup triggers, own profile, create/select workspace before membership, onboarding
+    ok 2 - a: signup triggers, own profile, create/select workspace before membership, onboarding
+      ---
+      duration_ms: 116.032334
+      type: 'test'
+      ...
+    # Subtest: b: signup triggers, own profile, create/select workspace before membership, onboarding
+    ok 3 - b: signup triggers, own profile, create/select workspace before membership, onboarding
+      ---
+      duration_ms: 105.128042
+      type: 'test'
+      ...
+    # Subtest: artist real/stage names and booking CRUD persist with existing app joins
+    ok 4 - artist real/stage names and booking CRUD persist with existing app joins
+      ---
+      duration_ms: 32.768125
+      type: 'test'
+      ...
+    # Subtest: creator cannot be forged; foreign self-join and membership tampering fail
+    ok 5 - creator cannot be forged; foreign self-join and membership tampering fail
+      ---
+      duration_ms: 102.801667
+      type: 'test'
+      ...
+    # Subtest: foreign SELECT/UPDATE/DELETE cannot expose or change real target rows
+    ok 6 - foreign SELECT/UPDATE/DELETE cannot expose or change real target rows
+      ---
+      duration_ms: 300.86
+      type: 'test'
+      ...
+    # Subtest: foreign inserts and moving artist/booking workspace are rejected
+    ok 7 - foreign inserts and moving artist/booking workspace are rejected
+      ---
+      duration_ms: 82.310375
+      type: 'test'
+      ...
+    # Subtest: composite FKs reject cross-workspace artist/promoter links with 23503
+    ok 8 - composite FKs reject cross-workspace artist/promoter links with 23503
+      ---
+      duration_ms: 48.615167
+      type: 'test'
+      ...
+    # Subtest: anonymous access denied on every application table; sentinel is read-only
+    ok 9 - anonymous access denied on every application table; sentinel is read-only
+      ---
+      duration_ms: 85.748667
+      type: 'test'
+      ...
+    # Subtest: booking required date/status constraints return PostgreSQL errors
+    ok 10 - booking required date/status constraints return PostgreSQL errors
+      ---
+      duration_ms: 27.330625
+      type: 'test'
+      ...
+    # Subtest: artist delete cascades bookings and nulls only event artist; promoter delete preserves workspace
+    ok 11 - artist delete cascades bookings and nulls only event artist; promoter delete preserves workspace
+      ---
+      duration_ms: 52.465042
+      type: 'test'
+      ...
+    1..11
+ok 1 - Backbeat M1: isolated development schema and user-JWT RLS
+  ---
+  duration_ms: 1864.339458
+  type: 'test'
+  ...
+# Synthetic fixture run: m1-6d59670b-ccee-45b0-be70-d434df3aa017; no raw HTTP errors or credentials are emitted
+1..1
+# tests 12
+# suites 0
+# pass 12
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1917.230208
+
+Running 1 test using 1 worker
+
+  ✓  1 tests/e2e/core-booking.spec.mjs:7:1 › local operator completes onboarding, artist and booking persistence, and recovers from save failure (12.5s)
+
+  1 passed (14.4s)
+
+$ node --test tests/integration/*.test.mjs
+$ playwright test

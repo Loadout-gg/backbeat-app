@@ -1,0 +1,350 @@
+{
+  "advisories": {
+    "1115806": {
+      "findings": [
+        {
+          "version": "4.17.23",
+          "paths": [
+            ".>recharts>lodash"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1115806,
+      "title": "lodash vulnerable to Code Injection via `_.template` imports key names",
+      "module_name": "lodash",
+      "vulnerable_versions": ">=4.0.0 <=4.17.23",
+      "patched_versions": ">=4.18.1",
+      "severity": "high",
+      "cwe": "CWE-94",
+      "github_advisory_id": "GHSA-r5fr-rjxr-66jc",
+      "url": "https://github.com/advisories/GHSA-r5fr-rjxr-66jc"
+    },
+    "1115810": {
+      "findings": [
+        {
+          "version": "4.17.23",
+          "paths": [
+            ".>recharts>lodash"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1115810,
+      "title": "lodash vulnerable to Prototype Pollution via array path bypass in `_.unset` and `_.omit`",
+      "module_name": "lodash",
+      "vulnerable_versions": "<=4.17.23",
+      "patched_versions": ">=4.18.1",
+      "severity": "moderate",
+      "cwe": "CWE-1321",
+      "github_advisory_id": "GHSA-f23m-r3pf-42rh",
+      "url": "https://github.com/advisories/GHSA-f23m-r3pf-42rh"
+    },
+    "1117015": {
+      "findings": [
+        {
+          "version": "8.5.6",
+          "paths": [
+            ".>autoprefixer>postcss",
+            ".>@tailwindcss/postcss>postcss",
+            ".>postcss"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1117015,
+      "title": "PostCSS has XSS via Unescaped </style> in its CSS Stringify Output",
+      "module_name": "postcss",
+      "vulnerable_versions": "<8.5.10",
+      "patched_versions": ">=8.5.10",
+      "severity": "moderate",
+      "cwe": "CWE-79",
+      "github_advisory_id": "GHSA-qx2v-qp2m-jg93",
+      "url": "https://github.com/advisories/GHSA-qx2v-qp2m-jg93"
+    },
+    "1119108": {
+      "findings": [
+        {
+          "version": "8.19.0",
+          "paths": [
+            ".>@supabase/ssr>@supabase/supabase-js>@supabase/realtime-js>ws",
+            ".>@supabase/supabase-js>@supabase/realtime-js>ws"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1119108,
+      "title": "ws: Uninitialized memory disclosure",
+      "module_name": "ws",
+      "vulnerable_versions": ">=8.0.0 <8.20.1",
+      "patched_versions": ">=8.20.1",
+      "severity": "moderate",
+      "cwe": "CWE-908",
+      "github_advisory_id": "GHSA-58qx-3vcg-4xpx",
+      "url": "https://github.com/advisories/GHSA-58qx-3vcg-4xpx"
+    },
+    "1123259": {
+      "findings": [
+        {
+          "version": "8.19.0",
+          "paths": [
+            ".>@supabase/ssr>@supabase/supabase-js>@supabase/realtime-js>ws",
+            ".>@supabase/supabase-js>@supabase/realtime-js>ws"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1123259,
+      "title": "ws: Memory exhaustion DoS from tiny fragments and data chunks",
+      "module_name": "ws",
+      "vulnerable_versions": ">=8.0.0 <8.21.0",
+      "patched_versions": ">=8.21.0",
+      "severity": "high",
+      "cwe": "CWE-400, CWE-770, CWE-1050",
+      "github_advisory_id": "GHSA-96hv-2xvq-fx4p",
+      "url": "https://github.com/advisories/GHSA-96hv-2xvq-fx4p"
+    },
+    "1124252": {
+      "findings": [
+        {
+          "version": "8.5.6",
+          "paths": [
+            ".>autoprefixer>postcss",
+            ".>@tailwindcss/postcss>postcss",
+            ".>postcss"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1124252,
+      "title": "PostCSS: Arbitrary file read and information disclosure via attacker-controlled sourceMappingURL in CSS comments",
+      "module_name": "postcss",
+      "vulnerable_versions": "<=8.5.11",
+      "patched_versions": ">=8.5.12",
+      "severity": "high",
+      "cwe": "CWE-22, CWE-200",
+      "github_advisory_id": "GHSA-6g55-p6wh-862q",
+      "url": "https://github.com/advisories/GHSA-6g55-p6wh-862q"
+    },
+    "1130709": {
+      "findings": [
+        {
+          "version": "8.5.6",
+          "paths": [
+            ".>autoprefixer>postcss",
+            ".>@tailwindcss/postcss>postcss",
+            ".>postcss"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1130709,
+      "title": "PostCSS: incomplete fix of GHSA-6g55-p6wh-862q — attacker-controlled sourceMappingURL reads arbitrary .map files when `from` is unset",
+      "module_name": "postcss",
+      "vulnerable_versions": "<=8.5.22",
+      "patched_versions": ">=8.5.23",
+      "severity": "moderate",
+      "cwe": "CWE-22, CWE-200",
+      "github_advisory_id": "GHSA-fxqj-rqcc-2cmp",
+      "url": "https://github.com/advisories/GHSA-fxqj-rqcc-2cmp"
+    },
+    "1138811": {
+      "findings": [
+        {
+          "version": "3.3.11",
+          "paths": [
+            ".>autoprefixer>postcss>nanoid",
+            ".>@tailwindcss/postcss>postcss>nanoid",
+            ".>postcss>nanoid"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1138811,
+      "title": "nanoid: non-secure generators can loop indefinitely with negative size",
+      "module_name": "nanoid",
+      "vulnerable_versions": "<3.3.16",
+      "patched_versions": ">=3.3.16",
+      "severity": "high",
+      "cwe": "CWE-835",
+      "github_advisory_id": "GHSA-28wg-ghj8-5hjv",
+      "url": "https://github.com/advisories/GHSA-28wg-ghj8-5hjv"
+    },
+    "1139427": {
+      "findings": [
+        {
+          "version": "3.3.11",
+          "paths": [
+            ".>autoprefixer>postcss>nanoid",
+            ".>@tailwindcss/postcss>postcss>nanoid",
+            ".>postcss>nanoid"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1139427,
+      "title": "nanoid: custom generators can loop indefinitely when size is zero",
+      "module_name": "nanoid",
+      "vulnerable_versions": "<3.3.18",
+      "patched_versions": ">=3.3.18",
+      "severity": "high",
+      "cwe": "CWE-835",
+      "github_advisory_id": "GHSA-2v37-7h3g-55p8",
+      "url": "https://github.com/advisories/GHSA-2v37-7h3g-55p8"
+    },
+    "1139510": {
+      "findings": [
+        {
+          "version": "8.5.6",
+          "paths": [
+            ".>autoprefixer>postcss",
+            ".>@tailwindcss/postcss>postcss",
+            ".>postcss"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1139510,
+      "title": "PostCSS: Path Traversal in Previous Source Map Auto-Loading (sourceMappingURL) leads to Arbitrary .map File Disclosure",
+      "module_name": "postcss",
+      "vulnerable_versions": "<=8.5.17",
+      "patched_versions": ">=8.5.18",
+      "severity": "high",
+      "cwe": "CWE-22",
+      "github_advisory_id": "GHSA-r28c-9q8g-f849",
+      "url": "https://github.com/advisories/GHSA-r28c-9q8g-f849"
+    },
+    "1153171": {
+      "findings": [
+        {
+          "version": "4.28.1",
+          "paths": [
+            ".>next>styled-jsx>@babel/core>@babel/helper-compilation-targets>browserslist",
+            ".>@vercel/analytics>next>styled-jsx>@babel/core>@babel/helper-compilation-targets>browserslist",
+            ".>autoprefixer>browserslist",
+            ".>eslint-config-next>eslint-plugin-react-hooks>@babel/core>@babel/helper-compilation-targets>browserslist"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1153171,
+      "title": "Browserslist: Unbounded memory growth (no cache eviction) via distinct query results, leading to eventual OOM",
+      "module_name": "browserslist",
+      "vulnerable_versions": "<=4.28.6",
+      "patched_versions": ">=4.28.7",
+      "severity": "high",
+      "cwe": "CWE-770",
+      "github_advisory_id": "GHSA-c83g-rgw3-j3cx",
+      "url": "https://github.com/advisories/GHSA-c83g-rgw3-j3cx"
+    },
+    "1153172": {
+      "findings": [
+        {
+          "version": "4.28.1",
+          "paths": [
+            ".>next>styled-jsx>@babel/core>@babel/helper-compilation-targets>browserslist",
+            ".>@vercel/analytics>next>styled-jsx>@babel/core>@babel/helper-compilation-targets>browserslist",
+            ".>autoprefixer>browserslist",
+            ".>eslint-config-next>eslint-plugin-react-hooks>@babel/core>@babel/helper-compilation-targets>browserslist"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1153172,
+      "title": "Browserslist: Uncaught crash / prototype write via untrusted browserslist-stats.json custom stats (normalizeStats)",
+      "module_name": "browserslist",
+      "vulnerable_versions": "<=4.28.6",
+      "patched_versions": ">=4.28.7",
+      "severity": "high",
+      "cwe": "CWE-248, CWE-1321",
+      "github_advisory_id": "GHSA-73wf-gq98-2v4g",
+      "url": "https://github.com/advisories/GHSA-73wf-gq98-2v4g"
+    },
+    "1153189": {
+      "findings": [
+        {
+          "version": "3.3.11",
+          "paths": [
+            ".>autoprefixer>postcss>nanoid",
+            ".>@tailwindcss/postcss>postcss>nanoid",
+            ".>postcss>nanoid"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1153189,
+      "title": "nanoid: Integer Overflow or Wraparound",
+      "module_name": "nanoid",
+      "vulnerable_versions": "<3.3.12",
+      "patched_versions": ">=3.3.12",
+      "severity": "high",
+      "cwe": "CWE-190",
+      "github_advisory_id": "GHSA-xwg4-73v4-xw9w",
+      "url": "https://github.com/advisories/GHSA-xwg4-73v4-xw9w"
+    },
+    "1193686": {
+      "findings": [
+        {
+          "version": "2.9.18",
+          "paths": [
+            ".>next>styled-jsx>@babel/core>@babel/helper-compilation-targets>browserslist>baseline-browser-mapping",
+            ".>@vercel/analytics>next>styled-jsx>@babel/core>@babel/helper-compilation-targets>browserslist>baseline-browser-mapping",
+            ".>autoprefixer>browserslist>baseline-browser-mapping",
+            ".>eslint-config-next>eslint-plugin-react-hooks>@babel/core>@babel/helper-compilation-targets>browserslist>baseline-browser-mapping"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1193686,
+      "title": "baseline-browser-mapping process termination on invalid input causes denial of service",
+      "module_name": "baseline-browser-mapping",
+      "vulnerable_versions": ">=2.0.0 <2.11.0",
+      "patched_versions": ">=2.11.0",
+      "severity": "moderate",
+      "cwe": "CWE-705",
+      "github_advisory_id": "GHSA-w5vr-8v7q-w6rv",
+      "url": "https://github.com/advisories/GHSA-w5vr-8v7q-w6rv"
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 5,
+      "high": 9,
+      "critical": 0
+    },
+    "dependencies": 216,
+    "devDependencies": 433,
+    "optionalDependencies": 122,
+    "totalDependencies": 694
+  }
+}

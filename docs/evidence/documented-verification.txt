@@ -1,0 +1,31 @@
+▶ Backbeat M1: isolated development schema and user-JWT RLS
+  ✔ all required tables and columns exist in the real REST schema (49.374875ms)
+  ✔ a: signup triggers, own profile, create/select workspace before membership, onboarding (79.048459ms)
+  ✔ b: signup triggers, own profile, create/select workspace before membership, onboarding (62.150875ms)
+  ✔ artist real/stage names and booking CRUD persist with existing app joins (24.139ms)
+  ✔ creator cannot be forged; foreign self-join and membership tampering fail (51.058125ms)
+  ✔ foreign SELECT/UPDATE/DELETE cannot expose or change real target rows (165.817083ms)
+  ✔ foreign inserts and moving artist/booking workspace are rejected (55.871875ms)
+  ✔ composite FKs reject cross-workspace artist/promoter links with 23503 (21.622833ms)
+  ✔ anonymous access denied on every application table; sentinel is read-only (37.050792ms)
+  ✔ booking required date/status constraints return PostgreSQL errors (13.963667ms)
+  ✔ artist delete cascades bookings and nulls only event artist; promoter delete preserves workspace (25.638375ms)
+✔ Backbeat M1: isolated development schema and user-JWT RLS (1375.041541ms)
+ℹ Synthetic fixture run: m1-d8277edf-6fbc-43f8-a88c-c01671f3cb81; no raw HTTP errors or credentials are emitted
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1439.921792
+
+Running 1 test using 1 worker
+
+  ✓  1 tests/e2e/core-booking.spec.mjs:7:1 › local operator completes onboarding, artist and booking persistence, and recovers from save failure (10.8s)
+
+  1 passed (13.2s)
+
+$ node --test tests/integration/*.test.mjs
+$ playwright test
