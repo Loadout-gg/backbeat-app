@@ -17,7 +17,7 @@ const columns = {
   artists: 'id,workspace_id,name,email,phone,notes,stage_name,surname,location,travel_fee,pricing_notes,overview,dj_equipment,sound_system,allergies,special_diet,special_needs,genres,fee,currency,social_links,documents,profile_image_url,created_at,updated_at',
   promoters: 'id,workspace_id,name,company_name,email,phone,notes,created_at',
   events: 'id,workspace_id,title,date,location,status,artist_id,promoter_id,public_token,created_at',
-  bookings: 'id,workspace_id,artist_id,date,start_time,duration_minutes,notes,status,created_at,updated_at',
+  bookings: 'id,workspace_id,artist_id,date,start_time,duration_minutes,notes,status,created_at,updated_at,venue_name,venue_address,contact_name_main,contact_phone_main,contact_email_main',
 };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -193,6 +193,30 @@ test('Backbeat M1: isolated development schema and user-JWT RLS', async (t) => {
     assert.equal(event.public_token, `${tag}-${a.id}`);
     assert.equal(event.artists.id, a.artist.id);
     assert.equal(event.promoters.id, a.promoter.id);
+  });
+  await t.test('M2 nullable details persist, omitted fields remain and explicit null clears', async () => {
+    const fields = { venue_name: 'Synthetic venue', venue_address: '1 Synthetic Road', contact_name_main: 'Synthetic Contact', contact_phone_main: '+39 (06) 123 ext. 4', contact_email_main: 'contact@example.test' };
+    const query = `id=eq.${a.booking.id}`;
+    const initial = (await rows(a, 'bookings', query))[0];
+    for (const key of Object.keys(fields)) assert.equal(initial[key], null, `${key}: old/minimal booking is nullable`);
+    ok(await rest(a, 'bookings', 'PATCH', fields, query), 'M2 update');
+    for (const [key, value] of Object.entries(fields)) assert.equal((await rows(a, 'bookings', query))[0][key], value);
+    ok(await rest(a, 'bookings', 'PATCH', { notes: `${tag}-M2 unrelated note` }, query), 'M2 unrelated patch');
+    for (const [key, value] of Object.entries(fields)) assert.equal((await rows(a, 'bookings', query))[0][key], value, `${key}: omitted stays unchanged`);
+    const before = (await rows(a, 'bookings', query))[0];
+    assert.deepEqual(await rows(b, 'bookings', `${query}&select=id,venue_name,contact_email_main`), []);
+    untouched(await rest(b, 'bookings', 'PATCH', { venue_name: 'foreign', contact_email_main: 'foreign@example.test' }, query), 'M2 cross-workspace update');
+    assert.deepEqual((await rows(a, 'bookings', query))[0], before);
+    ok(await rest(a, 'bookings', 'PATCH', Object.fromEntries(Object.keys(fields).map(key => [key, null])), query), 'M2 clear');
+    for (const key of Object.keys(fields)) assert.equal((await rows(a, 'bookings', query))[0][key], null);
+  });
+  await t.test('M2 database bounds reject oversized values without changing the booking', async () => {
+    const query = `id=eq.${a.booking.id}`;
+    const before = (await rows(a, 'bookings', query))[0];
+    for (const [field, limit] of Object.entries({ venue_name: 200, venue_address: 1000, contact_name_main: 200, contact_phone_main: 100, contact_email_main: 254 })) {
+      denied(await rest(a, 'bookings', 'PATCH', { [field]: 'x'.repeat(limit + 1) }, query), `M2 ${field} bound`, '23514');
+    }
+    assert.deepEqual((await rows(a, 'bookings', query))[0], before);
   });
   await t.test('creator cannot be forged; foreign self-join and membership tampering fail', async () => {
     const forgedId = randomUUID();
