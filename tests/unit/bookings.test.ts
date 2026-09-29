@@ -108,3 +108,32 @@ it.each([
   expect((await action()).success).toBe(false)
   expect(db.from).not.toHaveBeenCalled()
 })
+
+const details = { venue_name: " Studio A ", venue_address: " 1 Synthetic Road ", contact_name_main: " Demo Contact ", contact_phone_main: " +39 (06) 123 ext. 4 ", contact_email_main: " demo@example.test " }
+it("persists normalized venue and primary contact only inside the current workspace", async () => {
+  expect(await updateBooking(id, details)).toEqual({ success: true })
+  expect(query.update).toHaveBeenCalledWith(expect.objectContaining(Object.fromEntries(Object.entries(details).map(([key, value]) => [key, value.trim()]))))
+  expect(query.eq).toHaveBeenCalledWith("workspace_id", "selected-workspace")
+  expect(query.eq).toHaveBeenCalledWith("id", id)
+})
+it.each(["", "   ", null])("clears all explicit M2 fields set to %j", async value => {
+  const cleared = Object.fromEntries(Object.keys(details).map(key => [key, value]))
+  expect((await updateBooking(id, cleared)).success).toBe(true)
+  expect(query.update).toHaveBeenCalledWith(expect.objectContaining(Object.fromEntries(Object.keys(details).map(key => [key, null]))))
+})
+it("leaves omitted M2 values untouched and never persists unsupported placeholders", async () => {
+  await updateBooking(id, { notes: "Changed note", venue_name: undefined, driver_name: "Unsupported" })
+  const payload = query.update.mock.calls[0][0]
+  for (const key of [...Object.keys(details), "driver_name"]) expect(payload).not.toHaveProperty(key)
+  expect(payload.notes).toBe("Changed note")
+})
+
+it.each([
+  { venue_name: "x".repeat(201) }, { venue_address: "x".repeat(1001) },
+  { contact_name_main: "x".repeat(201) }, { contact_phone_main: "x".repeat(101) },
+  { contact_email_main: "x".repeat(255) }, { contact_email_main: "not-an-email" },
+])("rejects invalid M2 detail input before backend access: %j", async input => {
+  expect((await updateBooking(id, input)).success).toBe(false)
+  expect(db.from).not.toHaveBeenCalled()
+  expect(db.auth.getUser).not.toHaveBeenCalled()
+})

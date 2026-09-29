@@ -218,6 +218,69 @@ test('local operator completes onboarding, artist and booking persistence, and r
       // Native Chrome time controls plus the leading icon must remain readable.
       expect((await startTimeInput.boundingBox()).width).toBeGreaterThanOrEqual(128)
       await expect(notes).toHaveValue(`${tag} initial note`)
+      await test.step('M2 venue and primary contact save, reload, clear and failed-save retry', async () => {
+        const fields = [
+          ['venue_name', 'Venue name', ' Synthetic venue '],
+          ['venue_address', 'Venue address', ' 1 Test Road, Rome '],
+          ['contact_name_main', 'Contact name', ' Demo Contact '],
+          ['contact_phone_main', 'Phone number', ' +39 (06) 123 ext. 4 '],
+          ['contact_email_main', 'Email', 'contact@example.test'],
+        ];
+        const input = placeholder => page.getByPlaceholder(placeholder, { exact: true }).first();
+        const readDetails = async () => {
+          const [row] = await request(`/rest/v1/bookings?id=eq.${bookingId}`);
+          return Object.fromEntries(fields.map(([key]) => [key, row[key]]));
+        };
+        const empty = Object.fromEntries(fields.map(([key]) => [key, null]));
+        expect(await readDetails()).toEqual(empty);
+        for (const [, placeholder, value] of fields) {
+          await expect(input(placeholder)).toBeEnabled();
+          await expect(input(placeholder)).toHaveValue('');
+          await input(placeholder).fill(value);
+        }
+        const save = page.getByRole('button', { name: 'Update booking', exact: true });
+        const expected = Object.fromEntries(fields.map(([key,, value]) => [key, value.trim()]));
+        await save.click();
+        await expect.poll(readDetails).toEqual(expected);
+        await page.reload();
+        for (const [key, placeholder] of fields) await expect(input(placeholder)).toHaveValue(expected[key]);
+        await page.screenshot({ path: testInfo.outputPath('08-m2-booking-details.png'), fullPage: true });
+        await input('Email').fill('invalid-email');
+        await save.click();
+        await expect(page.getByRole('alert').filter({ hasText: 'Enter a valid primary contact email' })).toBeVisible();
+        expect(await readDetails()).toEqual(expected);
+        await input('Email').fill('retry@example.test');
+        await input('Contact name').fill('Retry Contact');
+        let failedM2 = false;
+        await page.route('**/dashboard/bookings/**', async route => {
+          if (!failedM2 && route.request().method() === 'POST' && route.request().headers()['next-action']) {
+            failedM2 = true;
+            await route.fulfill({ status: 503, contentType: 'text/plain', body: 'Synthetic M2 failure' });
+          } else await route.fallback();
+        });
+        await save.click();
+        await expect(page.getByRole('alert').filter({ hasText: 'Unable to save booking. Please try again.' })).toBeVisible();
+        await expect(save).toBeEnabled();
+        expect(failedM2).toBe(true);
+        expect(await readDetails()).toEqual(expected);
+        await expect(input('Contact name')).toHaveValue('Retry Contact');
+        await expect(input('Email')).toHaveValue('retry@example.test');
+        await page.unroute('**/dashboard/bookings/**');
+        await save.click();
+        expected.contact_name_main = 'Retry Contact'; expected.contact_email_main = 'retry@example.test';
+        await expect.poll(readDetails).toEqual(expected);
+        await page.reload();
+        for (const [key, placeholder] of fields) await expect(input(placeholder)).toHaveValue(expected[key]);
+        for (const [, placeholder] of fields) await input(placeholder).fill('');
+        await save.click();
+        await expect.poll(readDetails).toEqual(empty);
+        await page.reload();
+        for (const [, placeholder] of fields) await expect(input(placeholder)).toHaveValue('');
+        for (const placeholder of ['Event type', 'Expected audience', 'Driver name', 'Driver phone number', 'Distance']) await expect(page.getByPlaceholder(placeholder, { exact: true })).toBeDisabled();
+        for (const placeholder of ['Contact name', 'Phone number', 'Email']) await expect(page.getByPlaceholder(placeholder, { exact: true }).nth(1)).toBeDisabled();
+        await expect(page.getByRole('button', { name: 'Add artist', exact: true })).toBeDisabled();
+        await expect(page.getByRole('checkbox', { name: 'Same driver Inbound/Outbound' })).toBeDisabled();
+      });
       await notes.fill(`${tag} persisted update`)
       await page.getByRole('button', { name: 'Update booking', exact: true }).click()
       await expect.poll(async () => (await request(`/rest/v1/bookings?id=eq.${bookingId}`))[0].notes).toBe(`${tag} persisted update`)
@@ -245,7 +308,7 @@ test('local operator completes onboarding, artist and booking persistence, and r
       await expect.poll(async () => (await request(`/rest/v1/bookings?id=eq.${bookingId}`))[0].notes).toBe(`${tag} recovered update`)
       await page.reload()
       await expect(notes).toHaveValue(`${tag} recovered update`)
-      await expect(page.getByPlaceholder('Venue name', { exact: true })).toBeDisabled()
+      await expect(page.getByPlaceholder('Venue name', { exact: true })).toBeEnabled()
       await expect(page.getByText(/Not available yet.*fields are not saved/)).toBeVisible()
       for (const time of ['21:15', '09:45']) {
         await page.locator('input[type=time]').nth(0).fill(time)

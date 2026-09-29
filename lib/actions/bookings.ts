@@ -14,6 +14,11 @@ export interface Booking {
   start_time: string;
   duration_minutes: number | null;
   notes: string | null;
+  venue_name: string | null;
+  venue_address: string | null;
+  contact_name_main: string | null;
+  contact_phone_main: string | null;
+  contact_email_main: string | null;
   status: BookingStatus;
   created_at: string;
   updated_at: string;
@@ -246,16 +251,16 @@ export async function updateBooking(
     duration_minutes?: number | null;
     notes?: string | null;
     status?: BookingStatus;
-    venue_name?: string;
-    venue_address?: string;
+    venue_name?: string | null;
+    venue_address?: string | null;
     event_type?: string;
     expected_audience?: string;
     driver_name?: string;
     driver_phone?: string;
     driver_distance?: string;
-    contact_name_main?: string;
-    contact_phone_main?: string;
-    contact_email_main?: string;
+    contact_name_main?: string | null;
+    contact_phone_main?: string | null;
+    contact_email_main?: string | null;
     contact_name_secondary?: string;
     contact_phone_secondary?: string;
     contact_email_secondary?: string;
@@ -280,12 +285,10 @@ export async function updateBooking(
     updated_at: new Date().toISOString(),
   };
 
-  if (patch.date !== undefined) dbPatch.date = patch.date;
-  if (patch.start_time !== undefined) dbPatch.start_time = patch.start_time;
-  if (patch.duration_minutes !== undefined)
-    dbPatch.duration_minutes = patch.duration_minutes;
-  if (patch.notes !== undefined) dbPatch.notes = patch.notes;
-  if (patch.status !== undefined) dbPatch.status = patch.status;
+  // The schema is the write allowlist and carries normalized M2 values.
+  for (const [field, value] of Object.entries(validation.data)) {
+    if (value !== undefined) dbPatch[field] = value;
+  }
 
   const { data: changedBooking, error } = await supabase
     .from("bookings")

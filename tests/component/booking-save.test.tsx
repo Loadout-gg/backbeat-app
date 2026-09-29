@@ -9,10 +9,86 @@ import { EventBookingClient } from "@/app/dashboard/bookings/[id]/event-booking-
 import type { BookingWithArtist } from "@/lib/actions/bookings"
 const booking: BookingWithArtist = {
   id: "booking-a", workspace_id: "workspace-a", artist_id: "artist-a", date: "2026-10-12", start_time: "19:00:00",
+  venue_name: null, venue_address: null, contact_name_main: null, contact_phone_main: null, contact_email_main: null,
   duration_minutes: 60, notes: "Original note", status: "in_progress", created_at: "", updated_at: "",
   artist: { id: "artist-a", stage_name: "DJ Moon", name: "Luna", surname: null, location: null, fee: null, currency: null, profile_image_url: null },
 }
-afterEach(cleanup)
+const venueContact = {
+  venue_name: "Moon Hall", venue_address: "12 Orbit Road", contact_name_main: "Alex Moon",
+  contact_phone_main: "+39 123 456", contact_email_main: "alex@example.com",
+}
+const fieldLabels = {
+  venue_name: "Venue name", venue_address: "Venue Address", contact_name_main: "Contact name (main)",
+  contact_phone_main: "Phone number", contact_email_main: "Email",
+} as const
+it.each([
+  venueContact,
+  Object.fromEntries(Object.keys(venueContact).map(key => [key, null])),
+  Object.fromEntries(Object.keys(venueContact).map(key => [key, undefined])),
+])(
+  "initializes venue and main contact from booking values %j", (fields) => {
+    render(<EventBookingClient booking={{ ...booking, ...fields }} />)
+    for (const [key, label] of Object.entries(fieldLabels)) {
+      const input = screen.getAllByPlaceholderText(label === "Venue Address" ? "Venue address" : label === "Contact name (main)" ? "Contact name" : label)[0] as HTMLInputElement
+      expect(input.value).toBe(fields[key as keyof typeof fields] ?? "")
+    }
+  },
+)
+it("enables exactly the five approved fields with unique labels and an email input", () => {
+  const { container } = render(<EventBookingClient booking={booking} />)
+  const approved = Object.values(fieldLabels).map(label => screen.getByLabelText(label))
+  for (const input of approved) {
+    expect(input.matches(":disabled")).toBe(false)
+    expect(input.id).not.toBe("")
+    expect(container.querySelectorAll(`[id="${input.id}"]`)).toHaveLength(1)
+    input.focus()
+    expect(document.activeElement).toBe(input)
+  }
+  expect(screen.getByLabelText("Email").getAttribute("type")).toBe("email")
+  const enabled = Array.from(container.querySelectorAll("input:not([type=time])")).filter(input => !input.matches(":disabled"))
+  expect(enabled).toEqual(approved)
+})
+it.each(["edited", "blank"])("submits explicit %s venue and main contact strings", async (mode) => {
+  updateBooking.mockResolvedValueOnce({ success: true })
+  render(<EventBookingClient booking={{ ...booking, ...venueContact }} />)
+  const draft = Object.fromEntries(Object.entries(venueContact).map(([key, value]) => [key, mode === "blank" ? "" : key === "contact_email_main" ? "edited@example.com" : ` ${value} edited `]))
+  for (const [key, label] of Object.entries(fieldLabels)) {
+    fireEvent.change(screen.getByLabelText(label), { target: { value: draft[key] } })
+  }
+  fireEvent.click(screen.getByRole("button", { name: "Update booking" }))
+  await waitFor(() => expect(updateBooking).toHaveBeenCalledWith(booking.id, {
+    start_time: "19:00", duration_minutes: 60, notes: "Original note", ...draft,
+  }))
+  expect(refresh).toHaveBeenCalledOnce()
+})
+it.each(["returned", "thrown"])("preserves the new-field draft across %s failure and retry", async (failure) => {
+  if (failure === "returned") updateBooking.mockResolvedValueOnce({ success: false, error: "Save denied" })
+  else updateBooking.mockRejectedValueOnce(new Error("Network unavailable"))
+  updateBooking.mockResolvedValueOnce({ success: true })
+  render(<EventBookingClient booking={{ ...booking, ...venueContact }} />)
+  const draft = { venue_name: "New venue", venue_address: "", contact_name_main: "New contact", contact_phone_main: "", contact_email_main: "new@example.com" }
+  for (const [key, label] of Object.entries(fieldLabels)) {
+    fireEvent.change(screen.getByLabelText(label), { target: { value: draft[key as keyof typeof draft] } })
+  }
+  fireEvent.click(screen.getByRole("button", { name: "Update booking" }))
+  expect((await screen.findByRole("alert")).textContent).toContain(failure === "returned" ? "Save denied" : "Unable to save booking. Please try again.")
+  expect(refresh).not.toHaveBeenCalled()
+  for (const [key, label] of Object.entries(fieldLabels)) {
+    expect((screen.getByLabelText(label) as HTMLInputElement).value).toBe(draft[key as keyof typeof draft])
+  }
+  const payload = { start_time: "19:00", duration_minutes: 60, notes: "Original note", ...draft }
+  expect(updateBooking).toHaveBeenNthCalledWith(1, booking.id, payload)
+  fireEvent.click(screen.getByRole("button", { name: "Update booking" }))
+  await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
+  expect(updateBooking).toHaveBeenCalledTimes(2)
+  expect(updateBooking).toHaveBeenNthCalledWith(2, booking.id, payload)
+  expect(screen.queryByRole("alert")).toBeNull()
+})
+afterEach(() => {
+  cleanup()
+  updateBooking.mockReset()
+  refresh.mockReset()
+})
 it.each([
   ["19:00:00", "09:00", "AM", "10:00 AM"],
   ["09:00:00", "19:00", "PM", "8:00 PM"],
@@ -26,6 +102,7 @@ it.each([
   fireEvent.click(screen.getByRole("button", { name: "Update booking" }))
   await waitFor(() => expect(updateBooking).toHaveBeenCalledWith(booking.id, {
     start_time: edited, duration_minutes: 60, notes: "Original note",
+    venue_name: "", venue_address: "", contact_name_main: "", contact_phone_main: "", contact_email_main: "",
   }))
   expect(screen.getByText(end)).toBeTruthy()
   expect(screen.getByText(period)).toBeTruthy()
@@ -33,7 +110,7 @@ it.each([
 })
 it("disables unsaved placeholder inputs, nested buttons and the driver checkbox", () => {
   render(<EventBookingClient booking={booking} />)
-  const placeholders = ["Venue name", "Venue address", "Event type", "Expected audience", "Artist name", "Driver name", "Driver phone number", "Distance", "Contact name", "Phone number", "Email"]
+  const placeholders = ["Event type", "Expected audience", "Artist name", "Driver name", "Driver phone number", "Distance"]
   for (const placeholder of placeholders) {
     for (const input of screen.getAllByPlaceholderText(placeholder)) {
       expect(input.matches(":disabled"), placeholder).toBe(true)
@@ -41,6 +118,13 @@ it("disables unsaved placeholder inputs, nested buttons and the driver checkbox"
       expect(document.activeElement).not.toBe(input)
       expect((input as HTMLInputElement).value).toBe("")
     }
+  }
+  for (const placeholder of ["Contact name", "Phone number", "Email"]) {
+    const secondary = screen.getAllByPlaceholderText(placeholder)[1]
+    expect(secondary.matches(":disabled")).toBe(true)
+    secondary.focus()
+    expect(document.activeElement).not.toBe(secondary)
+    expect((secondary as HTMLInputElement).value).toBe("")
   }
   const addArtist = screen.getByRole("button", { name: "Add artist" })
   expect(addArtist.matches(":disabled")).toBe(true)
@@ -50,7 +134,7 @@ it("disables unsaved placeholder inputs, nested buttons and the driver checkbox"
   expect(checkbox.matches(":disabled")).toBe(true)
   fireEvent.click(checkbox)
   expect(checkbox.getAttribute("aria-checked")).toBe("true")
-  expect(screen.getByText(/Not available yet.*fields are not saved/)).toBeTruthy()
+  expect(screen.getByText("Not available yet: event type, expected audience, lineup, driver and secondary contact fields are not saved.")).toBeTruthy()
   expect(screen.getByDisplayValue("19:00").matches(":disabled")).toBe(false)
   expect(screen.getByDisplayValue("Original note").matches(":disabled")).toBe(false)
   expect(screen.getByRole("button", { name: "Update booking" }).matches(":disabled")).toBe(false)

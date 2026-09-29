@@ -44,9 +44,9 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
   );
   const [notes, setNotes] = useState(booking.notes || "");
 
-  // Venue fields (not stored in DB yet - placeholder UI)
-  const [venueName, setVenueName] = useState("");
-  const [venueAddress, setVenueAddress] = useState("");
+  // Venue fields
+  const [venueName, setVenueName] = useState(booking.venue_name ?? "");
+  const [venueAddress, setVenueAddress] = useState(booking.venue_address ?? "");
   const [eventType, setEventType] = useState("");
   const [expectedAudience, setExpectedAudience] = useState("");
 
@@ -61,10 +61,10 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
   const [driverPhone, setDriverPhone] = useState("");
   const [driverDistance, setDriverDistance] = useState("");
 
-  // Contact info (placeholder UI)
-  const [contactNameMain, setContactNameMain] = useState("");
-  const [contactPhoneMain, setContactPhoneMain] = useState("");
-  const [contactEmailMain, setContactEmailMain] = useState("");
+  // Main contact and secondary contact placeholders
+  const [contactNameMain, setContactNameMain] = useState(booking.contact_name_main ?? "");
+  const [contactPhoneMain, setContactPhoneMain] = useState(booking.contact_phone_main ?? "");
+  const [contactEmailMain, setContactEmailMain] = useState(booking.contact_email_main ?? "");
   const [contactNameSecondary, setContactNameSecondary] = useState("");
   const [contactPhoneSecondary, setContactPhoneSecondary] = useState("");
   const [contactEmailSecondary, setContactEmailSecondary] = useState("");
@@ -130,6 +130,11 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
         start_time: startTime,
         duration_minutes: durationMinutes || null,
         notes: notes || null,
+        venue_name: venueName,
+        venue_address: venueAddress,
+        contact_name_main: contactNameMain,
+        contact_phone_main: contactPhoneMain,
+        contact_email_main: contactEmailMain,
       });
       if (!result.success) {
         setSaveError(result.error || "Unable to save booking. Please try again.");
@@ -304,9 +309,8 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
                 </div>
               </div>
 
-              <fieldset disabled aria-describedby="unavailable-booking-fields" className="min-w-0 space-y-8">
                 <p id="unavailable-booking-fields" className="text-sm text-muted-foreground">
-                  Not available yet: venue, additional details, lineup, driver and contact fields are not saved.
+                  Not available yet: event type, expected audience, lineup, driver and secondary contact fields are not saved.
                 </p>
               {/* Venue & Additional details */}
               <div className="grid grid-cols-2 gap-8">
@@ -317,22 +321,24 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
                   <div className="border border-border rounded-lg p-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="text-xs font-medium text-foreground mb-1.5 block">
+                        <label htmlFor="venue-name" className="text-xs font-medium text-foreground mb-1.5 block">
                           Venue name
                         </label>
                         <Input
                           placeholder="Venue name"
+                          id="venue-name"
                           value={venueName}
                           onChange={(e) => setVenueName(e.target.value)}
                           className="h-9 text-sm"
                         />
                       </div>
                       <div>
-                        <label className="text-xs font-medium text-foreground mb-1.5 block">
+                        <label htmlFor="venue-address" className="text-xs font-medium text-foreground mb-1.5 block">
                           Venue Address
                         </label>
                         <Input
                           placeholder="Venue address"
+                          id="venue-address"
                           value={venueAddress}
                           onChange={(e) => setVenueAddress(e.target.value)}
                           className="h-9 text-sm"
@@ -341,7 +347,7 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
                     </div>
                   </div>
                 </div>
-                <div>
+                <fieldset disabled aria-describedby="unavailable-booking-fields" className="min-w-0">
                   <h3 className="text-base font-medium text-muted-foreground/80 mb-3">
                     Additional details
                   </h3>
@@ -371,9 +377,10 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
                       </div>
                     </div>
                   </div>
-                </div>
+                </fieldset>
               </div>
 
+              <fieldset disabled aria-describedby="unavailable-booking-fields" className="min-w-0 space-y-8">
               {/* Lineup */}
               <div>
                 <h3 className="text-base font-medium text-muted-foreground/80 mb-3">
@@ -484,6 +491,8 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
                 </div>
               </div>
 
+              </fieldset>
+
               {/* Contact info */}
               <div>
                 <h3 className="text-base font-medium text-muted-foreground/80 mb-3">
@@ -494,33 +503,37 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
                   <div className="border border-border rounded-lg p-4">
                     <div className="grid grid-cols-3 gap-4">
                       <div>
-                        <label className="text-xs font-medium text-foreground mb-1.5 block">
+                        <label htmlFor="contact-name-main" className="text-xs font-medium text-foreground mb-1.5 block">
                           Contact name (main)
                         </label>
                         <Input
                           placeholder="Contact name"
+                          id="contact-name-main"
                           value={contactNameMain}
                           onChange={(e) => setContactNameMain(e.target.value)}
                           className="h-9 text-sm"
                         />
                       </div>
                       <div>
-                        <label className="text-xs font-medium text-foreground mb-1.5 block">
+                        <label htmlFor="contact-phone-main" className="text-xs font-medium text-foreground mb-1.5 block">
                           Phone number
                         </label>
                         <Input
                           placeholder="Phone number"
+                          id="contact-phone-main"
                           value={contactPhoneMain}
                           onChange={(e) => setContactPhoneMain(e.target.value)}
                           className="h-9 text-sm"
                         />
                       </div>
                       <div>
-                        <label className="text-xs font-medium text-foreground mb-1.5 block">
+                        <label htmlFor="contact-email-main" className="text-xs font-medium text-foreground mb-1.5 block">
                           Email
                         </label>
                         <Input
                           placeholder="Email"
+                          id="contact-email-main"
+                          type="email"
                           value={contactEmailMain}
                           onChange={(e) => setContactEmailMain(e.target.value)}
                           className="h-9 text-sm"
@@ -530,7 +543,7 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
                   </div>
 
                   {/* Secondary contact */}
-                  <div className="border border-border rounded-lg p-4">
+                  <fieldset disabled aria-describedby="unavailable-booking-fields" className="min-w-0 border border-border rounded-lg p-4">
                     <div className="grid grid-cols-3 gap-4">
                       <div>
                         <label className="text-xs font-medium text-foreground mb-1.5 block">
@@ -572,11 +585,9 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
                         />
                       </div>
                     </div>
-                  </div>
+                  </fieldset>
                 </div>
               </div>
-
-              </fieldset>
 
               {/* Notes */}
               <div>
