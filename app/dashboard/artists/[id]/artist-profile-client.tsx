@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react"
 import { useSearchParams, useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
-import { parseISO, startOfDay } from "date-fns"
+import { parseISO } from "date-fns"
 import type { Booking } from "@/lib/actions/bookings"
 import type { EventWithRelations } from "@/lib/actions/events"
 import {
@@ -127,14 +127,15 @@ interface ArtistProfileClientProps {
   bookings: Booking[]
   events: EventWithRelations[]
   calendarError?: boolean
+  calendarToday: string
 }
 
-export function ArtistProfileClient({ artist, bookings, events, calendarError = false }: ArtistProfileClientProps) {
+export function ArtistProfileClient({ artist, bookings, events, calendarError = false, calendarToday }: ArtistProfileClientProps) {
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
   const [showUpdatedToast, setShowUpdatedToast] = useState(false)
-  const [calendarMonth, setCalendarMonth] = useState(new Date())
+  const [calendarMonth, setCalendarMonth] = useState(() => parseISO(calendarToday))
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false)
 
   // Get current tab from URL or default to overview
@@ -185,8 +186,8 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
     ? artist.notes.replace("Contact: ", "").split("\n")[0]
     : null
 
-  // Date-only database values are local calendar days, not UTC instants.
-  const today = startOfDay(new Date())
+  // One server-selected date-only reference is shared with hydration and the day picker.
+  const today = parseISO(calendarToday)
   const isUpcomingActive = (item: Booking | EventWithRelations) =>
     item.artist_id === artist.id &&
     (item.status === "in_progress" || item.status === "confirmed") &&
@@ -598,6 +599,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                     </div>
                     <Calendar
                       mode="multiple"
+                      today={today}
                       selected={calendarEvents.map((event) => event.date)}
                       month={calendarMonth}
                       onMonthChange={setCalendarMonth}

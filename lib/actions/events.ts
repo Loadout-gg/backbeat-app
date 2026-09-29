@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentWorkspaceId } from "./workspace"
 import { revalidatePath } from "next/cache"
+import { z } from "zod"
 
 // Types derived from Supabase schema
 export type Event = {
@@ -33,11 +34,14 @@ export type EventWithRelations = Event & {
   promoters: { id: string; name: string; company_name: string | null } | null
 }
 
-export async function listEvents(): Promise<EventWithRelations[]> {
+export async function listEvents(options: { artistId?: string } = {}): Promise<EventWithRelations[]> {
+  if (options.artistId !== undefined && !z.string().uuid().safeParse(options.artistId).success) {
+    throw new Error("Invalid artist ID")
+  }
   const supabase = await createClient()
   const workspaceId = await getCurrentWorkspaceId()
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("events")
     .select(`
       *,
@@ -45,7 +49,10 @@ export async function listEvents(): Promise<EventWithRelations[]> {
       promoters:promoter_id (id, name, company_name)
     `)
     .eq("workspace_id", workspaceId)
-    .order("date", { ascending: false })
+
+  if (options.artistId !== undefined) query = query.eq("artist_id", options.artistId)
+
+  const { data, error } = await query.order("date", { ascending: false })
     .order("created_at", { ascending: false })
 
   if (error) {

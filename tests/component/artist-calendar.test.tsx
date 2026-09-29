@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
-import { cleanup, render, screen } from "@testing-library/react"
+import { act, cleanup, render, screen } from "@testing-library/react"
+import { renderToString } from "react-dom/server"
+import { hydrateRoot } from "react-dom/client"
 import ArtistPage from "@/app/dashboard/artists/[id]/page"
 import type { Artist } from "@/lib/actions/artists"
 import type { Booking } from "@/lib/actions/bookings"
@@ -26,7 +28,24 @@ beforeEach(() => {
   mocks.getBookings.mockResolvedValue([booking])
   mocks.listEvents.mockResolvedValue([event])
 })
-afterEach(() => { cleanup(); vi.useRealTimers() })
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllEnvs() })
+it("shares the configured server day across filtering, initial month and today marker despite a different client clock", async () => {
+  vi.stubEnv("BACKBEAT_CALENDAR_TIME_ZONE", "Europe/Rome")
+  vi.setSystemTime(new Date("2026-09-30T22:30:00Z"))
+  mocks.getBookings.mockResolvedValue([
+    { ...booking, id: "yesterday", date: "2026-09-30" },
+    { ...booking, id: "today", date: "2026-10-01" },
+  ])
+  mocks.listEvents.mockResolvedValue([])
+  const page = await ArtistPage({ params: Promise.resolve({ id: artist.id }) })
+  expect(page.props.calendarToday).toBe("2026-10-01")
+  // The browser clock is not an authority for the already-rendered response.
+  vi.setSystemTime(new Date("2026-09-29T10:00:00Z"))
+  const { container } = render(page)
+  expect(screen.getAllByRole("link", { name: /DJ Alice/ }).map(link => link.getAttribute("href"))).toEqual(["/dashboard/bookings/today"])
+  expect(screen.getAllByText("October 2026").length).toBeGreaterThan(0)
+  expect(container.querySelector('[data-today="true"]')?.textContent).toBe("1")
+})
 it("shows only this artist's today/future active entries, sorted by date, with an honest all-upcoming policy", async () => {
   mocks.getBookings.mockResolvedValue([
     { ...booking, id: "later", date: "2027-03-01", status: "confirmed" }, booking,
@@ -78,7 +97,47 @@ it("reads scoped persisted calendar data and renders a booking link and event wi
   render(await ArtistPage({ params: Promise.resolve({ id: artist.id }) }))
   expect(mocks.getBookings).toHaveBeenCalledWith({ artistId: artist.id, failOnError: true })
   expect(mocks.listEvents).toHaveBeenCalledOnce()
+  expect(mocks.listEvents).toHaveBeenCalledWith({ artistId: artist.id })
   expect(screen.getByRole("link", { name: /DJ Alice/ }).getAttribute("href")).toBe("/dashboard/bookings/booking-a")
   expect(screen.getByText("Autumn show").closest("a")).toBeNull()
   expect(screen.queryByText("No upcoming bookings or events for this artist.")).toBeNull()
+})
+it("hydrates a UTC server response in Los Angeles across Rome midnight without changing rows, month or today", async () => {
+  vi.stubEnv("BACKBEAT_CALENDAR_TIME_ZONE", "Europe/Rome")
+  vi.stubEnv("TZ", "UTC")
+  vi.setSystemTime(new Date("2026-09-30T22:30:00Z"))
+  expect(new Date().getTimezoneOffset()).toBe(0)
+  mocks.getBookings.mockResolvedValue([
+    { ...booking, id: "old", date: "2026-09-30" },
+    { ...booking, id: "current", date: "2026-10-01" },
+  ])
+  mocks.listEvents.mockResolvedValue([])
+  const page = await ArtistPage({ params: Promise.resolve({ id: artist.id }) })
+  const html = renderToString(page)
+  vi.stubEnv("TZ", "America/Los_Angeles")
+  expect(new Date().getTimezoneOffset()).toBe(420)
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  container.innerHTML = html
+  const hydrationErrors: unknown[] = []
+  let root: ReturnType<typeof hydrateRoot> | undefined
+  try {
+    await act(async () => {
+      root = hydrateRoot(container, page, { onRecoverableError: error => hydrationErrors.push(error) })
+    })
+    expect(hydrationErrors).toEqual([])
+    expect(container.querySelector('a[href="/dashboard/bookings/old"]')).toBeNull()
+    expect(container.querySelector('a[href="/dashboard/bookings/current"]')).not.toBeNull()
+    expect(container.textContent).toContain("October 2026")
+    expect(container.querySelector('[data-today="true"]')?.textContent).toBe("1")
+  } finally {
+    await act(async () => { root?.unmount() })
+    container.remove()
+  }
+})
+it("uses UTC when no calendar timezone is configured (boundary characterization)", async () => {
+  vi.stubEnv("BACKBEAT_CALENDAR_TIME_ZONE", undefined)
+  vi.setSystemTime(new Date("2026-09-30T22:30:00Z"))
+  const page = await ArtistPage({ params: Promise.resolve({ id: artist.id }) })
+  expect(page.props.calendarToday).toBe("2026-09-30")
 })
