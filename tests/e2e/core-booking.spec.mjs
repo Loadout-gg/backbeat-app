@@ -112,6 +112,94 @@ test('local operator completes onboarding, artist and booking persistence, and r
       await page.screenshot({ path: testInfo.outputPath('02-artist.png'), fullPage: true })
     })
 
+    await test.step('artist optional-field clearing, invalid edits and recoverable save preserve real stored data', async () => {
+      const [artist] = await request(`/rest/v1/artists?workspace_id=eq.${workspaceId}`)
+      const stepOne = ['name', 'surname', 'location', 'contact_name', 'phone', 'email', 'pricing_notes']
+      const stepTwo = ['overview', 'dj_equipment', 'sound_system']
+      const stepFour = ['allergies', 'special_diet', 'special_needs']
+      const nullable = ['surname', 'location', 'phone', 'email', 'pricing_notes', ...stepTwo, ...stepFour]
+      const initial = Object.fromEntries([...stepOne, ...stepTwo, ...stepFour].filter(key => key !== 'contact_name').map(key => [key, 'Synthetic existing value']))
+      initial.email = 'synthetic@example.test'
+      initial.notes = 'Contact: Synthetic contact\nUnrelated synthetic note'
+      initial.fee = 125
+      initial.currency = '$'
+      initial.genres = ['House']
+      initial.social_links = [{ type: 'Website', url: 'https://example.test' }]
+      await guard()
+      await request(`/rest/v1/artists?id=eq.${artist.id}&workspace_id=eq.${workspaceId}`, { method: 'PATCH', body: initial })
+      const readArtist = async () => (await request(`/rest/v1/artists?id=eq.${artist.id}`))[0]
+      const openEdit = async () => {
+        await page.goto(`${APP}/dashboard/artists/${artist.id}/edit`)
+        await expect(page.getByRole('heading', { name: 'Edit Artist', exact: true })).toBeVisible()
+      }
+      const finishSteps = async () => {
+        for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Continue', exact: true }).click()
+      }
+      const closeSuccess = async () => {
+        await expect(page.getByRole('heading', { name: 'Artist successfully updated.' })).toBeVisible()
+        await page.getByRole('button', { name: 'Ok', exact: true }).click()
+        await expect(page).toHaveURL(url => url.pathname === `/dashboard/artists/${artist.id}`)
+        await page.reload()
+      }
+      await openEdit()
+      for (const field of stepOne) await page.locator(`#${field}`).fill('')
+      await page.locator('#fee').fill('')
+      await page.getByText('Website: https://example.test', { exact: true }).locator('..').getByRole('button').click()
+      await page.getByRole('button', { name: 'Continue', exact: true }).click()
+      for (const field of stepTwo) await page.locator(`#${field}`).fill('')
+      await page.getByRole('checkbox', { name: 'House', exact: true }).uncheck()
+      for (let i = 0; i < 2; i++) await page.getByRole('button', { name: 'Continue', exact: true }).click()
+      for (const field of stepFour) await page.locator(`#${field}`).fill('')
+      let failed = false
+      await page.route('**/dashboard/artists/**/edit', async route => {
+        if (!failed && route.request().method() === 'POST' && route.request().headers()['next-action']) {
+          failed = true
+          await route.fulfill({ status: 503, contentType: 'text/plain', body: 'Synthetic local test failure' })
+        } else await route.fallback()
+      })
+      const save = page.getByRole('button', { name: 'Save and Complete', exact: true })
+      await save.click()
+      await expect(page.getByRole('alert').filter({ hasText: 'Unable to save artist. Please try again.' })).toHaveText('Unable to save artist. Please try again.')
+      await expect(save).toBeEnabled()
+      expect((await readArtist()).fee).toBe(125)
+      await page.screenshot({ path: testInfo.outputPath('06-artist-save-error.png'), fullPage: true })
+      await page.unroute('**/dashboard/artists/**/edit')
+      await save.click()
+      await closeSuccess()
+      const cleared = await readArtist()
+      expect(cleared.name).toBe('')
+      for (const field of nullable) expect(cleared[field], field).toBeNull()
+      expect(cleared.fee).toBeNull()
+      expect(cleared.genres).toEqual([])
+      expect(cleared.social_links).toEqual([])
+      expect(cleared.notes).toBe('Unrelated synthetic note')
+      await openEdit()
+      for (const field of stepOne) await expect(page.locator(`#${field}`)).toHaveValue('')
+      await expect(page.locator('#fee')).toHaveValue('')
+      await page.locator('#email').fill('invalid-email')
+      await finishSteps()
+      await save.click()
+      await expect(page.getByRole('alert').filter({ hasText: 'Enter a valid email address' })).toHaveText('Enter a valid email address')
+      expect((await readArtist()).email).toBeNull()
+      for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Previous', exact: true }).click()
+      await page.locator('#email').fill('updated@example.test')
+      await page.locator('#fee').fill('-1')
+      await finishSteps()
+      await save.click()
+      await expect(page.getByRole('alert').filter({ hasText: 'Base rate must be zero or positive' })).toHaveText('Base rate must be zero or positive')
+      expect((await readArtist()).fee).toBeNull()
+      for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Previous', exact: true }).click()
+      await page.locator('#fee').fill('0')
+      await finishSteps()
+      await save.click()
+      await closeSuccess()
+      await expect(page.getByText('$0/event', { exact: true })).toBeVisible()
+      expect((await readArtist()).fee).toBe(0)
+      expect((await readArtist()).email).toBe('updated@example.test')
+      expect((await readArtist()).notes).toBe('Unrelated synthetic note')
+      await page.screenshot({ path: testInfo.outputPath('07-artist-cleared-zero.png'), fullPage: true })
+    })
+
     await test.step('booking creation, update after reload and visible failed-save recovery', async () => {
       await page.getByRole('button', { name: 'New Booking', exact: true }).click()
       const dialog = page.getByRole('dialog')

@@ -358,7 +358,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
             <div className="grid grid-cols-2 gap-y-4 gap-x-8">
               <div>
                 <p className="text-sm text-muted-foreground">Base rate</p>
-                {artist.fee ? (
+                {artist.fee !== null && artist.fee !== undefined ? (
                   <p className="font-medium text-lg">
                     {artist.currency || "$"}
                     {artist.fee.toLocaleString()}/event

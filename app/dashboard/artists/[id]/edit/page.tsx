@@ -194,33 +194,34 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
 
     const input: UpdateArtistInput = {
       stage_name: formData.stage_name,
-      name: formData.name || undefined,
-      surname: formData.surname || undefined,
-      location: formData.location || undefined,
-      contact_name: formData.contact_name || undefined,
-      phone: formData.phone || undefined,
+      name: formData.name,
+      surname: formData.surname,
+      location: formData.location,
+      contact_name: formData.contact_name,
+      phone: formData.phone,
       email: formData.email,
-      fee: formData.fee ? Number.parseFloat(formData.fee) : undefined,
+      fee: formData.fee.trim() ? Number(formData.fee) : null,
       currency: formData.currency || undefined,
       travel_fee: formData.travel_fee || undefined,
-      pricing_notes: formData.pricing_notes || undefined,
-      social_links: formData.social_links.length > 0 ? formData.social_links : undefined,
-      overview: formData.overview || undefined,
-      genres: formData.genres.length > 0 ? formData.genres : undefined,
-      dj_equipment: formData.dj_equipment || undefined,
-      sound_system: formData.sound_system || undefined,
+      pricing_notes: formData.pricing_notes,
+      social_links: formData.social_links,
+      overview: formData.overview,
+      genres: formData.genres,
+      dj_equipment: formData.dj_equipment,
+      sound_system: formData.sound_system,
       documents: formData.documents.length > 0 ? formData.documents : undefined,
-      allergies: formData.allergies || undefined,
-      special_diet: formData.special_diet || undefined,
-      special_needs: formData.special_needs || undefined,
+      allergies: formData.allergies,
+      special_diet: formData.special_diet,
+      special_needs: formData.special_needs,
     }
 
-    const result = await updateArtist(artistId, input)
-
-    if (result.success) {
-      setShowSuccess(true)
-    } else {
-      setError(result.error || "Failed to update artist")
+    try {
+      const result = await updateArtist(artistId, input)
+      if (result.success) setShowSuccess(true)
+      else setError(result.error || "Failed to update artist")
+    } catch {
+      setError("Unable to save artist. Please try again.")
+    } finally {
       setIsLoading(false)
     }
   }
@@ -285,7 +286,7 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-6">
             {error && (
-              <div className="mb-4 p-3 text-sm text-red-500 bg-red-50 border border-red-200 rounded-md">{error}</div>
+              <div role="alert" className="mb-4 p-3 text-sm text-red-500 bg-red-50 border border-red-200 rounded-md">{error}</div>
             )}
 
             {/* Step 1: General Info */}

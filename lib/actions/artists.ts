@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentWorkspaceId } from "./workspace"
 import { revalidatePath } from "next/cache"
+import { z } from "zod"
 
 export type SocialLink = {
   type: string
@@ -178,19 +179,26 @@ export async function createArtist(
   return { success: true, artistId: data.id }
 }
 
-export type UpdateArtistInput = Partial<CreateArtistInput>
+export type UpdateArtistInput = Omit<Partial<CreateArtistInput>, "fee"> & { fee?: number | null }
 
 export async function updateArtist(
   id: string,
   input: UpdateArtistInput,
 ): Promise<{ success: boolean; error?: string }> {
+  const validated = z.object({
+    stage_name: z.string().trim().min(1, "Stage name is required").optional(),
+    email: z.string().trim().refine(value => value === "" || z.string().email().safeParse(value).success, "Enter a valid email address").optional(),
+    fee: z.number().finite().nonnegative("Base rate must be zero or positive").nullable().optional(),
+  }).safeParse(input)
+  if (!validated.success) return { success: false, error: validated.error.issues[0].message }
+  input = { ...input, ...validated.data }
   const supabase = await createClient()
   const workspaceId = await getCurrentWorkspaceId()
 
-  // First verify the artist belongs to this workspace
+  // Read contact-note context only within the authoritative workspace.
   const { data: existing } = await supabase
     .from("artists")
-    .select("id")
+    .select("id, notes")
     .eq("id", id)
     .eq("workspace_id", workspaceId)
     .single()
@@ -211,9 +219,11 @@ export async function updateArtist(
   if (input.email !== undefined) updateData.email = input.email || null
   if (input.phone !== undefined) updateData.phone = input.phone || null
   if (input.contact_name !== undefined) {
-    updateData.notes = input.contact_name ? `Contact: ${input.contact_name}` : null
+    const notes: string = existing.notes ?? ""
+    const body = notes.startsWith("Contact: ") ? notes.split("\n").slice(1).join("\n") : notes
+    updateData.notes = [input.contact_name ? `Contact: ${input.contact_name}` : "", body].filter(Boolean).join("\n") || null
   }
-  if (input.fee !== undefined) updateData.fee = input.fee || null
+  if (input.fee !== undefined) updateData.fee = input.fee
   if (input.currency !== undefined) updateData.currency = input.currency || "USD"
   if (input.travel_fee !== undefined) updateData.travel_fee = input.travel_fee || null
   if (input.pricing_notes !== undefined) updateData.pricing_notes = input.pricing_notes || null
@@ -227,15 +237,19 @@ export async function updateArtist(
   if (input.special_diet !== undefined) updateData.special_diet = input.special_diet || null
   if (input.special_needs !== undefined) updateData.special_needs = input.special_needs || null
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("artists")
     .update(updateData)
     .eq("id", id)
     .eq("workspace_id", workspaceId)
+    .select("id")
+    .single()
 
   if (error) {
     return { success: false, error: error.message }
   }
+
+  if (!updated) return { success: false, error: "Artist not found" }
 
   revalidatePath("/dashboard/artists")
   revalidatePath(`/dashboard/artists/${id}`)
