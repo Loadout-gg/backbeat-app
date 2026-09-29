@@ -107,6 +107,20 @@ Expected final line begins `PASS: inactive membership`. This command is valid on
 - The artist Calendar reads saved bookings and events for that artist. **All upcoming** means today/future `in_progress` and `confirmed` entries; cancelled/completed entries are excluded. Booking links target their real detail pages; no event detail route is invented. Displayed dates are marked on the calendar.
 - Clearing an artist's email sends an explicit empty value and persists `null`. This change does not silently alter the semantics of other optional fields.
 
+### Calendar day and query scope
+
+The artist page computes one date-only `calendarToday` on the server and passes it to the client. Filtering, the initial displayed month and the today marker use that same response snapshot, not the browser clock or container timezone. Refreshing the page obtains a new day; live midnight rollover without refresh is not implemented.
+
+`BACKBEAT_CALENDAR_TIME_ZONE` selects the reference zone. The local development Dockerfile explicitly sets `Europe/Rome`; an unset variable defaults to `UTC`, and an invalid timezone fails rather than silently using host-local time. This is a local demo policy, not a per-workspace timezone product feature. The artist event reader applies both the authoritative workspace and artist ID in the database query; existing workspace-wide callers still work without a filter. A failed calendar read remains a visible all-or-error state.
+
+Regression checks include actual React hydration of a UTC server render in a simulated Los Angeles browser, with a Rome midnight/month boundary, plus date-only DST/year cases:
+
+```sh
+TZ=UTC node node_modules/vitest/vitest.mjs run tests/component/artist-calendar.test.tsx tests/unit/calendar-day.test.ts tests/unit/events.test.ts
+TZ=America/Los_Angeles node node_modules/vitest/vitest.mjs run tests/component/artist-calendar.test.tsx tests/unit/calendar-day.test.ts
+```
+
+
 The separately retained agent-only demo account `hermes.demo@backbeat.test` is not removed by disposable regression tests. On this existing Mac, its repeatable exploratory runner is outside the application repository:
 
 ```sh
