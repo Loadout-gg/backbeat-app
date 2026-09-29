@@ -1,6 +1,6 @@
 # Backbeat
 
-Next.js application for artist and booking management. This checkout is the **local milestone-1 recovery branch**, not a production release.
+Next.js application for artist and booking management. This checkout is the **isolated local development branch**, not a production release. The Agent shell/dashboard visual system is documented in `PRODUCT.md`, `DESIGN.md` and `docs/milestone-3.md`.
 
 ## Safety boundary
 

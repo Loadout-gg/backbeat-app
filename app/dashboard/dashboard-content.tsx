@@ -45,18 +45,14 @@ export function DashboardContent({
   const bookingsInProgress = bookings.filter((b) => b.status === "in_progress")
 
   return (
-    <div className="flex flex-col min-h-full">
-      <div className="flex-1">
+    <div className="flex min-w-0 flex-1 flex-col">
+      <div className="min-w-0 flex-1">
         {/* Welcome message */}
-        <h2 className="text-2xl font-semibold mb-6">{welcomeMessage}</h2>
+        <h1 className="mb-5 break-words text-2xl font-semibold tracking-tight">{welcomeMessage}</h1>
 
         {/* Stats row */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
-          <StatsCard
-            label="Performance in progress"
-            value={stats.eventsInProgress}
-          />
-          <StatsCard label="Event in progress" value={stats.eventsInProgress} />
+        <div role="region" aria-label="Workspace overview" className="grid grid-cols-1 gap-2 rounded-xl bg-muted/60 p-2 mb-6 sm:grid-cols-3">
+          <StatsCard label="Events in progress" value={stats.eventsInProgress} />
           <StatsCard
             label="Bookings in progress"
             value={bookingsInProgress.length}
@@ -65,76 +61,77 @@ export function DashboardContent({
         </div>
 
         {/* Main content grid */}
-        <div className="flex gap-6">
+        <div className="grid min-w-0 grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_16rem]">
+          {/* Right column - Quick Actions */}
+          <div className="row-start-1 min-w-0 xl:col-start-2 xl:row-start-1">
+            <QuickActions onNewBooking={() => setIsBookingModalOpen(true)} />
+          </div>
           {/* Left column - Events and Bookings */}
-          <div className="flex-1 space-y-6">
+          <div className="min-w-0 space-y-7">
             {/* Events in progress panel */}
-            <section className="rounded-lg border bg-card p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-base font-semibold">Events in progress</h2>
+            <section aria-labelledby="dashboard-events" className="min-w-0">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 id="dashboard-events" className="text-base font-semibold">Events in progress</h2>
                 <Link
                   href="/dashboard/events"
-                  className="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground transition-colors"
+                  className="rounded-sm py-1 text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
                 >
                   View all
                 </Link>
               </div>
               {eventsInProgress.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="rounded-xl bg-muted/60 px-4 py-6 text-sm text-muted-foreground">
                   No events in progress at the moment
                 </p>
               ) : (
-                <div className="space-y-2">
+                <ul className="space-y-2 rounded-xl bg-muted/60 p-2">
                   {eventsInProgress.slice(0, 6).map((event) => {
-                    const date = new Date(event.date)
+                    const hasTime = /[T ]\d{2}:\d{2}/.test(event.date)
+                    const date = new Date(hasTime ? event.date : `${event.date}T00:00:00`)
                     return (
-                      <EventCard
-                        key={event.id}
-                        month={date
-                          .toLocaleDateString("en-US", { month: "short" })
-                          .toUpperCase()}
-                        day={String(date.getDate())}
-                        artistName={event.artists?.name || event.title}
-                        location={event.location || "TBD"}
-                        venue={
-                          event.promoters?.company_name ||
-                          event.promoters?.name ||
-                          ""
-                        }
-                        time={`${date.toLocaleTimeString("en-US", {
-                          hour: "numeric",
-                          minute: "2-digit",
-                          hour12: true,
-                        })} - ${new Date(
-                          date.getTime() + 2 * 60 * 60 * 1000
-                        ).toLocaleTimeString("en-US", {
-                          hour: "numeric",
-                          minute: "2-digit",
-                          hour12: true,
-                        })}`}
-                      />
+                      <li key={event.id}>
+                        <EventCard
+                          month={date
+                            .toLocaleDateString("en-US", { month: "short" })
+                            .toUpperCase()}
+                          day={String(date.getDate())}
+                          artistName={event.artists?.name || event.title}
+                          location={event.location || "TBD"}
+                          venue={
+                            event.promoters?.company_name ||
+                            event.promoters?.name ||
+                            ""
+                          }
+                          time={hasTime ? date.toLocaleTimeString("en-US", {
+                            hour: "numeric",
+                            minute: "2-digit",
+                            hour12: true,
+                          }) : undefined}
+                        />
+                      </li>
                     )
                   })}
-                </div>
+                </ul>
               )}
             </section>
 
             {/* Bookings in progress panel */}
-            <section className="rounded-lg border bg-card p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-base font-semibold">Bookings in progress</h2>
+            <section aria-labelledby="dashboard-bookings" className="min-w-0">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 id="dashboard-bookings" className="text-base font-semibold">Bookings in progress</h2>
                 <Link
                   href="/dashboard/bookings"
-                  className="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground transition-colors"
+                  className="rounded-sm py-1 text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
                 >
                   View all
                 </Link>
               </div>
               {bookingsInProgress.length === 0 ? (
-                <div className="space-y-3">
+                <div className="space-y-3 rounded-xl bg-muted/60 px-4 py-6">
                   <p className="text-sm text-muted-foreground">
                     No bookings in progress at the moment
                   </p>
+                  <p className="text-sm text-muted-foreground">Create a booking to choose an artist and add a date.</p>
                   <Button
                     className="gap-2"
                     onClick={() => setIsBookingModalOpen(true)}
@@ -144,35 +141,33 @@ export function DashboardContent({
                   </Button>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <ul className="space-y-2 rounded-xl bg-muted/60 p-2">
                   {bookingsInProgress.map((booking) => {
-                    const date = new Date(booking.date)
+                    const date = new Date(`${booking.date}T00:00:00`)
                     return (
-                      <BookingCard
-                        key={booking.id}
-                        id={booking.id}
-                        month={date
-                          .toLocaleDateString("en-US", { month: "short" })
-                          .toUpperCase()}
-                        day={String(date.getDate())}
-                        artistName={
-                          booking.artist?.stage_name || "Unknown Artist"
-                        }
-                        venue=""
-                        location=""
-                        time={booking.start_time}
-                      />
+                      <li key={booking.id}>
+                        <BookingCard
+                          id={booking.id}
+                          month={date
+                            .toLocaleDateString("en-US", { month: "short" })
+                            .toUpperCase()}
+                          day={String(date.getDate())}
+                          artistName={
+                            booking.artist?.stage_name || "Unknown Artist"
+                          }
+                          venue={booking.venue_name || ""}
+                          location={booking.venue_address || ""}
+                          time={booking.start_time}
+                        />
+                      </li>
                     )
                   })}
-                </div>
+                </ul>
               )}
             </section>
           </div>
 
-          {/* Right column - Quick Actions */}
-          <div className="w-72 shrink-0">
-            <QuickActions />
-          </div>
+
         </div>
       </div>
 
@@ -182,54 +177,9 @@ export function DashboardContent({
         onOpenChange={setIsBookingModalOpen}
       />
 
-      {/* Footer */}
-      <footer className="mt-8 pt-6 border-t">
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <svg
-              className="h-5 w-5"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M9 18V12.6C9 12.0399 9 11.7599 9.109 11.546C9.20487 11.3578 9.35785 11.2049 9.54601 11.109C9.75992 11 10.0399 11 10.6 11H13.4C13.9601 11 14.2401 11 14.454 11.109C14.6422 11.2049 14.7951 11.3578 14.891 11.546C15 11.7599 15 12.0399 15 12.6V18M11.0177 3.76407L4.23539 8.03912C3.78202 8.32524 3.55534 8.4683 3.39203 8.65866C3.24737 8.8277 3.1396 9.0238 3.07403 9.2344C3 9.47131 3 9.73256 3 10.2551V16.8C3 17.9201 3 18.4802 3.21799 18.908C3.40973 19.2843 3.71569 19.5903 4.09202 19.782C4.51984 20 5.07989 20 6.2 20H17.8C18.9201 20 19.4802 20 19.908 19.782C20.2843 19.5903 20.5903 19.2843 20.782 18.908C21 18.4802 21 17.9201 21 16.8V10.2551C21 9.73256 21 9.47131 20.926 9.2344C20.8604 9.0238 20.7526 8.8277 20.608 8.65866C20.4447 8.4683 20.218 8.32524 19.7646 8.03912L12.9823 3.76407C12.631 3.54027 12.4553 3.42837 12.2659 3.38388C12.0987 3.34468 11.9013 3.34468 11.7341 3.38388C11.5447 3.42837 11.369 3.54027 11.0177 3.76407Z"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            <span className="font-medium text-foreground">Backbeat</span>
-          </div>
-          <div className="flex items-center gap-6">
-            <Link
-              href="/terms"
-              className="hover:text-foreground transition-colors"
-            >
-              Terms
-            </Link>
-            <Link
-              href="/privacy"
-              className="hover:text-foreground transition-colors"
-            >
-              Privacy
-            </Link>
-            <Link
-              href="/help"
-              className="hover:text-foreground transition-colors"
-            >
-              Help
-            </Link>
-            <Link
-              href="/contact"
-              className="hover:text-foreground transition-colors"
-            >
-              Contact
-            </Link>
-          </div>
-          <span>© 2025 Backbeat. All rights reserved.</span>
-        </div>
+      <footer className="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-muted/60 px-4 py-4 text-xs text-muted-foreground">
+        <span>© 2025 Backbeat. All rights reserved.</span>
+        <span>Terms, Privacy, Help and Contact are currently unavailable.</span>
       </footer>
     </div>
   )
