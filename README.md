@@ -129,6 +129,14 @@ python3 ../development/qa/run-demo-flows.py
 
 It verifies the local environment and exact marked account, rotates only that account's password in memory, and saves a new result directory per run. Exit 0 means every scenario passed, 2 means observed product failures, and 1 means a runner/precondition failure. No password file, recurring schedule or human credential sharing is required. Baseline evidence in `docs/milestone-1.md` remains historical; post-baseline QA evidence and closure live under `../development/qa-fixes/`.
 
+## Artist edit integrity
+
+The existing edit wizard now distinguishes empty values from omitted updates: clearing supported text fields writes an empty real name or nullable value as appropriate; removing the final genre/social link writes an empty array; clearing base rate writes `null`, while zero remains `0` and is displayed as such. Editing a contact preserves the free-note body stored alongside the historical `Contact:` prefix. Server-side partial updates still leave omitted fields untouched.
+
+Edit actions validate stage name, email and finite nonnegative base rate; email is trimmed and a blank email becomes `null`. Success requires an affected row inside the authoritative workspace. Returned or thrown save failures show an alert, retain the form draft and permit retry. The Chrome journey seeds a disposable artist, clears values through the wizard, verifies persisted state after reload, injects a failed save and retries, then tests rejected email/negative fee and a saved zero fee.
+
+This does not complete all artist functionality: create-form semantics, a clear option for the travel-fee/currency selectors, document upload/removal, concurrent-editor conflict resolution and general validation of every optional field remain separate. Known dialog-description warnings are recorded, not silenced.
+
 ## Schema and release boundaries
 
 `migrations/001_development_schema.sql` is a **fresh-only development bootstrap**, already applied to this local environment. It refuses existing application tables. Do not rerun it, apply `scripts/*.sql` first, or promote it to production. Historical numbered SQL is retained as evidence, not a complete migration sequence.
