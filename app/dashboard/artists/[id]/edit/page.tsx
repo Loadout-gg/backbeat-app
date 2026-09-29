@@ -199,7 +199,7 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
       location: formData.location || undefined,
       contact_name: formData.contact_name || undefined,
       phone: formData.phone || undefined,
-      email: formData.email || undefined,
+      email: formData.email,
       fee: formData.fee ? Number.parseFloat(formData.fee) : undefined,
       currency: formData.currency || undefined,
       travel_fee: formData.travel_fee || undefined,

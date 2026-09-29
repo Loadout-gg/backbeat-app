@@ -22,6 +22,19 @@ it("does not overwrite real name when only stage name changes", async () => {
   expect(query.update.mock.calls[0][0]).not.toHaveProperty("name")
   expect(query.eq).toHaveBeenCalledWith("workspace_id", "workspace-a")
 })
+it("clears an explicitly blank email to null (characterization)", async () => {
+  expect(await updateArtist("artist-a", { email: "" })).toEqual({ success: true })
+  expect(query.update).toHaveBeenCalledWith({ email: null })
+})
+it.each([{}, { email: undefined }])("leaves email unchanged when not supplied: %j (characterization)", async (input) => {
+  expect(await updateArtist("artist-a", { stage_name: "DJ Sun", ...input })).toEqual({ success: true })
+  expect(query.update).toHaveBeenCalledWith({ stage_name: "DJ Sun" })
+  expect(query.update.mock.calls[0][0]).not.toHaveProperty("email")
+})
+it("updates a nonblank email (characterization)", async () => {
+  expect(await updateArtist("artist-a", { email: "new@example.test" })).toEqual({ success: true })
+  expect(query.update).toHaveBeenCalledWith({ email: "new@example.test" })
+})
 it.each([undefined, "", "   "])("falls back to stage name when real name is %s (characterization)", async (name) => {
   await createArtist({ stage_name: "DJ Moon", name })
   expect(query.insert).toHaveBeenCalledWith(expect.objectContaining({ name: "DJ Moon" }))
