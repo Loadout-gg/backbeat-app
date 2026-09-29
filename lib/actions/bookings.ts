@@ -42,17 +42,23 @@ export interface BookingWithArtist extends Booking {
   };
 }
 
-export async function getBookings(): Promise<Booking[]> {
+export async function getBookings(options: { artistId?: string; failOnError?: boolean } = {}): Promise<Booking[]> {
+  if (options.artistId !== undefined && !createBookingSchema.shape.artistId.safeParse(options.artistId).success) {
+    throw new Error("Invalid artist ID");
+  }
   const supabase = await createClient();
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return [];
+  if (!user) {
+    if (options.failOnError) throw new Error("Not authenticated");
+    return [];
+  }
 
   const workspaceId = await getCurrentWorkspaceId();
 
-  const { data: bookings, error } = await supabase
+  let query = supabase
     .from("bookings")
     .select(
       `
@@ -60,11 +66,14 @@ export async function getBookings(): Promise<Booking[]> {
       artist:artists(id, stage_name, name, surname, location, fee, currency, profile_image_url)
     `
     )
-    .eq("workspace_id", workspaceId)
-    .order("date", { ascending: true });
+    .eq("workspace_id", workspaceId);
+
+  if (options.artistId !== undefined) query = query.eq("artist_id", options.artistId);
+  const { data: bookings, error } = await query.order("date", { ascending: true });
 
   if (error) {
     console.error("Error fetching bookings:", error);
+    if (options.failOnError) throw new Error("Unable to load bookings. Please try again.");
     return [];
   }
 
@@ -116,6 +125,7 @@ export async function createBooking(formData: {
   }
 
   revalidatePath("/dashboard");
+  revalidatePath("/dashboard/bookings");
   revalidatePath("/dashboard/artists");
 
   return { success: true, booking };
@@ -154,6 +164,7 @@ export async function updateBookingStatus(
   if (!changedBooking) return { success: false, error: "Booking not found" };
 
   revalidatePath("/dashboard");
+  revalidatePath("/dashboard/bookings");
   revalidatePath("/dashboard/artists");
 
   return { success: true };
@@ -189,6 +200,7 @@ export async function deleteBooking(
   if (!changedBooking) return { success: false, error: "Booking not found" };
 
   revalidatePath("/dashboard");
+  revalidatePath("/dashboard/bookings");
   revalidatePath("/dashboard/artists");
 
   return { success: true };
@@ -290,6 +302,7 @@ export async function updateBooking(
   if (!changedBooking) return { success: false, error: "Booking not found" };
 
   revalidatePath("/dashboard");
+  revalidatePath("/dashboard/bookings");
   revalidatePath("/dashboard/artists");
   revalidatePath(`/dashboard/bookings/${bookingId}`);
 

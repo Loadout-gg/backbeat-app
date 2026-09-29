@@ -8,6 +8,7 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn(async () => db) })
 vi.mock("@/lib/actions/workspace", () => ({ getCurrentWorkspaceId: workspace }))
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))
 import { createBooking, updateBooking, updateBookingStatus, deleteBooking, getBookings, getBooking } from "@/lib/actions/bookings"
+import { revalidatePath } from "next/cache"
 const id = "11111111-1111-4111-8111-111111111111"
 const input = { artistId: id, date: "2026-10-12", startTime: "19:00", durationMinutes: 60 }
 beforeEach(() => {
@@ -16,6 +17,37 @@ beforeEach(() => {
   for (const method of Object.values(query)) method.mockReturnValue(query)
   query.single.mockResolvedValue({ data: { id, workspace_id: "wrong-workspace" }, error: null })
   query.order.mockResolvedValue({ data: [], error: null })
+})
+it.each([
+  ["create", () => createBooking(input)],
+  ["update", () => updateBooking(id, { notes: "Updated" })],
+  ["status", () => updateBookingStatus(id, "confirmed")],
+  ["delete", () => deleteBooking(id)],
+])("invalidates the new booking list after %s", async (_label, action) => {
+  await action()
+  expect(revalidatePath).toHaveBeenCalledWith("/dashboard/bookings")
+})
+it("filters an artist booking query inside the authoritative workspace", async () => {
+  await getBookings({ artistId: id })
+  expect(query.eq).toHaveBeenCalledWith("workspace_id", "selected-workspace")
+  expect(query.eq).toHaveBeenCalledWith("artist_id", id)
+})
+it("reports strict booking-read failure instead of a false empty list", async () => {
+  query.order.mockResolvedValueOnce({ data: null, error: { message: "backend unavailable" } })
+  const log = vi.spyOn(console, "error").mockImplementation(() => {})
+  try {
+    await expect(getBookings({ failOnError: true })).rejects.toThrow("Unable to load bookings")
+  } finally { log.mockRestore() }
+})
+it.each(["", "not-an-artist-id"])("rejects malformed artist filter %j before backend access", async (artistId) => {
+  await expect(getBookings({ artistId })).rejects.toThrow("Invalid artist ID")
+  expect(db.from).not.toHaveBeenCalled()
+  expect(db.auth.getUser).not.toHaveBeenCalled()
+})
+it("does not report an empty strict list after the session expires", async () => {
+  db.auth.getUser.mockResolvedValueOnce({ data: { user: null } })
+  await expect(getBookings({ failOnError: true })).rejects.toThrow("Not authenticated")
+  expect(db.from).not.toHaveBeenCalled()
 })
 it("creates in the authoritative selected workspace rather than arbitrary membership", async () => {
   await createBooking(input)
