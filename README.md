@@ -137,12 +137,20 @@ Edit actions validate stage name, email and finite nonnegative base rate; email 
 
 This does not complete all artist functionality: create-form semantics, a clear option for the travel-fee/currency selectors, document upload/removal, concurrent-editor conflict resolution and general validation of every optional field remain separate. Known dialog-description warnings are recorded, not silenced.
 
+## Milestone 2: venue and primary contact
+
+Bookings now include optional venue name/address and a primary contact name/phone/email. The existing editor enables only these five controls. Values are trimmed; explicit blanks clear to NULL, while omitted fields in a server patch stay unchanged. Phone formatting is preserved; nonblank email is validated. Maximum lengths are 200/1000/200/100/254 characters respectively. No venue directory or contact-address-book relationship is introduced.
+
+`migrations/002_booking_venue_primary_contact.sql` is the additive local Development migration after the original bootstrap. It verifies the exact synthetic marker and existing RLS, refuses repeated/partial application, adds five nullable text columns with length bounds, and does not change old rows, grants or policies. It is already applied to this existing Development stack: **do not rerun it or migration 001**. A separately authorized fresh environment needs 001 followed by 002. Retaining nullable columns and restoring the previous compatible application is the nondestructive rollback path; dropping columns requires a new approval.
+
+The HTTP suite covers nullable defaults, persistence/clear/omitted-field behavior, database bounds and cross-workspace denial. The Chrome journey covers all five fields, invalid email, failure/retry, reload and independent row readback while preserving excluded disabled controls. The persistent demo runner adds F15 for saved synthetic venue/main-contact details. See [`docs/milestone-2.md`](docs/milestone-2.md) for the contract and limits.
+
 ## Schema and release boundaries
 
 `migrations/001_development_schema.sql` is a **fresh-only development bootstrap**, already applied to this local environment. It refuses existing application tables. Do not rerun it, apply `scripts/*.sql` first, or promote it to production. Historical numbered SQL is retained as evidence, not a complete migration sequence.
 
 The bootstrap adds the missing local schema, a read-only synthetic-development marker, active-member RLS, restricted self-bootstrap membership, tenant-consistent foreign keys and nullable artist image metadata. It intentionally is not a verified representation of live production policies.
 
-Venue, lineup, driver and booking contact persistence are outside M1. Financial/travel/accommodation/document features and legal/help pages are not completed by this tranche. Shared staging, source publication and production changes need a separate decision.
+Venue and primary contact persistence are implemented in M2; lineup, driver and secondary contact persistence remain unavailable. Financial/travel/accommodation/document features and legal/help pages are not completed by this tranche. Shared staging, source publication and production changes need a separate decision.
 
 See [`docs/milestone-1.md`](docs/milestone-1.md) and `docs/evidence/` for measured baseline, current verification and residual risks. `pnpm audit` is currently nonclean; the advisory report is not a production clearance.
