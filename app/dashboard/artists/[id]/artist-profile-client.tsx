@@ -3,6 +3,9 @@
 import { useEffect, useState, useCallback } from "react"
 import { useSearchParams, useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
+import { parseISO, startOfDay } from "date-fns"
+import type { Booking } from "@/lib/actions/bookings"
+import type { EventWithRelations } from "@/lib/actions/events"
 import {
   ChevronRight,
   ChevronLeft,
@@ -17,13 +20,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Calendar } from "@/components/ui/calendar"
 import { type Artist, type SocialLink } from "@/lib/actions/artists"
 import { NewBookingModal } from "@/components/dashboard/new-booking-modal"
@@ -128,9 +124,12 @@ function isValidTab(tab: string | null): tab is TabValue {
 
 interface ArtistProfileClientProps {
   artist: Artist
+  bookings: Booking[]
+  events: EventWithRelations[]
+  calendarError?: boolean
 }
 
-export function ArtistProfileClient({ artist }: ArtistProfileClientProps) {
+export function ArtistProfileClient({ artist, bookings, events, calendarError = false }: ArtistProfileClientProps) {
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
@@ -186,17 +185,25 @@ export function ArtistProfileClient({ artist }: ArtistProfileClientProps) {
     ? artist.notes.replace("Contact: ", "").split("\n")[0]
     : null
 
-  // Calendar: no events table yet, so always empty
-  const hasCalendarItems = false
-  const calendarEvents: Array<{
-    id: string
-    date: Date
-    title: string
-    location: string
-    venue: string
-    time: string
-    status: "confirmed" | "pending"
-  }> = []
+  // Date-only database values are local calendar days, not UTC instants.
+  const today = startOfDay(new Date())
+  const isUpcomingActive = (item: Booking | EventWithRelations) =>
+    item.artist_id === artist.id &&
+    (item.status === "in_progress" || item.status === "confirmed") &&
+    parseISO(item.date) >= today
+
+  const calendarEvents = [
+    ...bookings.filter(isUpcomingActive).map((booking) => ({
+      id: `booking-${booking.id}`, date: parseISO(booking.date),
+      title: `${displayName} · Booking`, location: "", time: booking.start_time,
+      href: `/dashboard/bookings/${booking.id}`,
+    })),
+    ...events.filter(isUpcomingActive).map((event) => ({
+      id: `event-${event.id}`, date: parseISO(event.date), title: event.title,
+      location: event.location || "", time: "", href: null,
+    })),
+  ].sort((a, b) => a.date.getTime() - b.date.getTime() || a.time.localeCompare(b.time))
+  const hasCalendarItems = calendarEvents.length > 0
 
   // Navigate calendar months
   const handlePreviousMonth = () => {
@@ -218,8 +225,6 @@ export function ArtistProfileClient({ artist }: ArtistProfileClientProps) {
   const formatMonthYear = (date: Date) => {
     return date.toLocaleDateString("en-US", { month: "long", year: "numeric" })
   }
-
-  const selectedDate = new Date()
 
   return (
     <div className="space-y-6 p-6">
@@ -514,21 +519,15 @@ export function ArtistProfileClient({ artist }: ArtistProfileClientProps) {
                     <h3 className="text-xl font-semibold">
                       Active Bookings & Events
                     </h3>
-                    <Select defaultValue="3" disabled>
-                      <SelectTrigger className="w-[130px]">
-                        <SelectValue placeholder="Select range" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1">1 Month</SelectItem>
-                        <SelectItem value="3">3 Months</SelectItem>
-                        <SelectItem value="6">6 Months</SelectItem>
-                        <SelectItem value="12">12 Months</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <span className="text-sm text-muted-foreground">All upcoming</span>
                   </div>
 
-                  {hasCalendarItems ? (
-                    /* Populated State - ready for real data */
+                  {calendarError ? (
+                    <div role="alert" className="text-center py-12 border rounded-lg text-destructive">
+                      Unable to load this artist’s calendar. Please refresh to try again.
+                    </div>
+                  ) : hasCalendarItems ? (
+                    /* Persisted bookings and events */
                     <div className="space-y-3">
                       {calendarEvents.map((event) => (
                         <div
@@ -547,43 +546,19 @@ export function ArtistProfileClient({ artist }: ArtistProfileClientProps) {
                               </span>
                             </div>
                             <div>
-                              <p className="font-medium">{event.title}</p>
+                              <p className="font-medium">
+                                {event.href ? <Link href={event.href} className="hover:underline">{event.title}</Link> : event.title}
+                              </p>
                               <p className="text-sm text-muted-foreground">
-                                {event.location}, {event.venue} • {event.time}
+                                {[event.location, event.time].filter(Boolean).join(" • ")}
                               </p>
                             </div>
                           </div>
-                          {event.status === "pending" && (
-                            <Button variant="outline" size="sm">
-                              Continue setup
-                            </Button>
-                          )}
+
                         </div>
                       ))}
 
-                      {/* Pagination would go here */}
-                      <div className="flex items-center justify-between pt-4">
-                        <p className="text-sm text-muted-foreground">
-                          Showing 1-10 of {calendarEvents.length}
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <Button variant="ghost" size="sm" disabled>
-                            <ChevronLeft className="h-4 w-4 mr-1" />
-                            Previous
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="bg-primary text-primary-foreground"
-                          >
-                            1
-                          </Button>
-                          <Button variant="ghost" size="sm" disabled>
-                            Next
-                            <ChevronRight className="h-4 w-4 ml-1" />
-                          </Button>
-                        </div>
-                      </div>
+
                     </div>
                   ) : (
                     /* Empty State */
@@ -622,8 +597,8 @@ export function ArtistProfileClient({ artist }: ArtistProfileClientProps) {
                       </Button>
                     </div>
                     <Calendar
-                      mode="single"
-                      selected={selectedDate}
+                      mode="multiple"
+                      selected={calendarEvents.map((event) => event.date)}
                       month={calendarMonth}
                       onMonthChange={setCalendarMonth}
                       className="rounded-md"
