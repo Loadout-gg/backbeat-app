@@ -42,7 +42,7 @@ pnpm run lint
 git diff --check
 ```
 
-Tests and lint must exit 0. Native dependency install scripts remain blocked; images are unoptimized. Do not globally approve package build scripts to silence an installation warning.
+Tests and lint must exit 0. Native dependency install scripts remain blocked; images are unoptimized. `pnpm-workspace.yaml` explicitly denies the `sharp` and `unrs-resolver` lifecycle scripts, and the Dockerfile copies that policy before installing. Unknown dependency builds still need an explicit decision; no script is allowlisted. Do not globally approve package build scripts to silence an installation warning.
 
 For a credential-free build-only check, which does NOT prove runtime connectivity:
 
@@ -100,6 +100,20 @@ limactl shell backbeat-dev sudo -n docker exec -i \
 ```
 
 Expected final line begins `PASS: inactive membership`. This command is valid only for the named development VM/container; do not substitute a remote database URL.
+
+## Post-M1 demo-flow corrections
+
+- `/dashboard/bookings` now lists the current workspace's saved bookings, including status and links to their existing detail routes. Read errors and a genuinely empty list are distinct states.
+- The artist Calendar reads saved bookings and events for that artist. **All upcoming** means today/future `in_progress` and `confirmed` entries; cancelled/completed entries are excluded. Booking links target their real detail pages; no event detail route is invented. Displayed dates are marked on the calendar.
+- Clearing an artist's email sends an explicit empty value and persists `null`. This change does not silently alter the semantics of other optional fields.
+
+The separately retained agent-only demo account `hermes.demo@backbeat.test` is not removed by disposable regression tests. On this existing Mac, its repeatable exploratory runner is outside the application repository:
+
+```sh
+python3 ../development/qa/run-demo-flows.py
+```
+
+It verifies the local environment and exact marked account, rotates only that account's password in memory, and saves a new result directory per run. Exit 0 means every scenario passed, 2 means observed product failures, and 1 means a runner/precondition failure. No password file, recurring schedule or human credential sharing is required. Baseline evidence in `docs/milestone-1.md` remains historical; post-baseline QA evidence and closure live under `../development/qa-fixes/`.
 
 ## Schema and release boundaries
 
