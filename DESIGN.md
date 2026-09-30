@@ -33,7 +33,7 @@ spacing:
 
 Use the operator-confirmed Obra/shadcn foundation as an operational component language, not a new visual identity or a literal dashboard template. The supplied reference establishes white content, inset pale navigation, restrained depth and legible compact lists. The existing logo and neutral palette remain authorities.
 
-This record accompanies the bounded Agent shell/dashboard refinement. It does not authorize redesigning auth, the booking editor or the performer experience. The shell and dashboard geometry was checked at desktop, tablet and narrow mobile widths.
+This record covers the bounded Agent workspace refinements: M3 shell/dashboard, followed by M4 heading corrections and presentation/accessibility alignment of the existing booking Performance editor. M4 does not authorize new booking capabilities, auth changes or the performer experience. Previously verified M3 geometry remains the shared foundation; editor-specific geometry must pass its own desktop/mobile checks.
 
 ## Colors
 
@@ -63,6 +63,7 @@ Use the existing radius vocabulary: controls use the control radius, navigation 
 - Booking rows show stored venue/address when present and retain Continue setup links and record IDs. Event rows must not invent an end time.
 - Empty states explain existing creation paths. Loading and unavailable states are honest; no static demo records are inserted.
 - The booking creation dialog remains the established implementation, with its supported fields and persistence behavior unchanged.
+- The existing booking editor uses a bounded desktop form, responsive summary/field groups and a wrapping Radix tab group. Preserve supported labels, unavailable controls and draft state across panels. Its supported Update booking action is primary; desktop actions stick to the viewport bottom while mobile actions remain in flow.
 
 ## Do's and Don'ts
 
