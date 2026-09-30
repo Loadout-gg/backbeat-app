@@ -26,6 +26,7 @@ export default async function ArtistsPage() {
 
   return (
     <div className="space-y-6 p-6">
+      <h1 className="sr-only">Artists</h1>
       <div className="flex items-center justify-between gap-4">
         <div className="flex-1 max-w-md relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
