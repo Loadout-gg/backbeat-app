@@ -135,10 +135,12 @@ test('Artists directory finds every workspace artist with truthful controls and 
     workspaces.push({ id: workspace.id, name: workspace.name, actor: primary })
     const avatar = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="black"/></svg>')
     await mutate(`/rest/v1/profiles?id=eq.${primary.id}`, { method: 'PATCH', token: primary.jwt, body: { avatar_url: avatar } })
-    const [other] = await mutate('/rest/v1/workspaces', { method: 'POST', token: secondary.jwt, body: { name: `${tag}-b` } })
-    workspaces.push({ id: other.id, name: other.name, actor: secondary })
-    await mutate('/rest/v1/workspace_members', { method: 'POST', token: secondary.jwt,
-      body: { workspace_id: other.id, user_id: secondary.id, role: 'admin', status: 'active' } })
+    const otherId = await mutate('/rest/v1/rpc/backbeat_bootstrap_workspace', { method: 'POST', token: secondary.jwt, body: { workspace_name: `${tag}-b` } })
+    expect(otherId).toMatch(/^[0-9a-f-]{36}$/)
+    workspaces.push({ id: otherId, name: `${tag}-b`, actor: secondary })
+    const [other] = await request(`/rest/v1/workspaces?id=eq.${otherId}`, { token: secondary.jwt })
+    expect(other.created_by).toBe(secondary.id)
+    expect(await request(`/rest/v1/workspace_members?workspace_id=eq.${otherId}`, { token: secondary.jwt })).toEqual([{ workspace_id: otherId, user_id: secondary.id, role: 'master', status: 'active' }])
     await mutate('/rest/v1/artists', { method: 'POST', token: secondary.jwt,
       body: { workspace_id: other.id, name: 'Other Workspace', stage_name: 'Tenant-only forbidden directory artist' } })
     await page.goto(`${APP}/dashboard/artists`)

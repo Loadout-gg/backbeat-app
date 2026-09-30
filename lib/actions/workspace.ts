@@ -23,53 +23,31 @@ export async function updateProfile(fullName: string) {
 }
 
 export async function createWorkspace(name: string) {
+  if (typeof name !== "string" || !name.trim() || [...name.trim()].length > 200 || /[\u0000-\u001f\u007f]/.test(name)) {
+    throw new Error("Workspace name must be 1–200 characters without control characters.")
+  }
   const supabase = await createClient()
 
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser()
-  if (!user) {
+  if (authError || !user) {
     throw new Error("Not authenticated")
   }
 
-  const { data: insertResult, error: workspaceError } = await supabase
-    .from("workspaces")
-    .insert({
-      name,
+  try {
+    const { data: workspaceId, error } = await supabase.rpc("backbeat_bootstrap_workspace", {
+      workspace_name: name.trim(),
     })
-    .select("id")
+    if (error || typeof workspaceId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(workspaceId)) {
+      throw new Error("Unable to create workspace. Please try again.")
+    }
 
-  if (workspaceError || !insertResult || insertResult.length === 0) {
-    throw new Error(workspaceError?.message || "Failed to create workspace")
+    return { success: true, workspaceId }
+  } catch {
+    throw new Error("Unable to create workspace. Please try again.")
   }
-
-  const workspaceId = insertResult[0].id
-
-  const { error: memberError } = await supabase.from("workspace_members").insert({
-    workspace_id: workspaceId,
-    user_id: user.id,
-    role: "admin",
-    status: "active",
-  })
-
-  if (memberError) {
-    throw new Error(memberError.message)
-  }
-
-  // Mark onboarding as complete
-  const { error: onboardingError } = await supabase
-    .from("onboarding_status")
-    .update({
-      completed: true,
-      workspace_id: workspaceId,
-    })
-    .eq("user_id", user.id)
-
-  if (onboardingError) {
-    throw new Error(onboardingError.message)
-  }
-
-  return { success: true, workspaceId }
 }
 
 export async function getCurrentUser() {

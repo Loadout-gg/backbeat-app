@@ -52,11 +52,12 @@ test('artist base-rate denomination survives profile, booking creation and saved
     const login = await client.auth.signInWithPassword({ email, password })
     if (login.error || !login.data.session) throw new Error('Synthetic API session setup failed')
     jwt = login.data.session.access_token
-    const [workspace] = await mutate('/rest/v1/workspaces', { method: 'POST', body: { name: tag } })
-    workspaceId = workspace.id
+    workspaceId = await mutate('/rest/v1/rpc/backbeat_bootstrap_workspace', { method: 'POST', body: { workspace_name: tag } })
+    expect(workspaceId).toMatch(/^[0-9a-f-]{36}$/)
+    const [workspace] = await request(`/rest/v1/workspaces?id=eq.${workspaceId}`)
     expect(workspace.created_by).toBe(userId)
-    await mutate('/rest/v1/workspace_members', { method: 'POST', body: { workspace_id: workspaceId, user_id: userId, role: 'admin', status: 'active' } })
-    await mutate(`/rest/v1/onboarding_status?user_id=eq.${userId}`, { method: 'PATCH', body: { completed: true, workspace_id: workspaceId } })
+    expect(await request(`/rest/v1/workspace_members?workspace_id=eq.${workspaceId}`)).toEqual([{ workspace_id: workspaceId, user_id: userId, role: 'master', status: 'active' }])
+    expect(await request(`/rest/v1/onboarding_status?user_id=eq.${userId}&select=completed,workspace_id`)).toEqual([{ completed: true, workspace_id: workspaceId }])
     await mutate(`/rest/v1/profiles?id=eq.${userId}`, { method: 'PATCH', body: { full_name: 'Currency Synthetic Operator', avatar_url: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="black"/></svg>') } })
     await page.context().route('**/*', async route => {
       const url = new URL(route.request().url())

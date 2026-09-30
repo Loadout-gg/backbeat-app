@@ -138,7 +138,7 @@ test('Backbeat M1: isolated development schema and user-JWT RLS', async (t) => {
     }
   });
   for (const [label, actor] of [['a', a], ['b', b]]) {
-    await t.test(`${label}: signup triggers, own profile, create/select workspace before membership, onboarding`, async () => {
+    await t.test(`${label}: signup triggers, own profile, atomic Master bootstrap, direct-write closure`, async () => {
       const profile = await rows(actor, 'profiles', `id=eq.${actor.id}`);
       assert.equal(profile.length, 1, 'signup trigger creates profile');
       const onboarding = await rows(actor, 'onboarding_status', `user_id=eq.${actor.id}`);
@@ -147,17 +147,21 @@ test('Backbeat M1: isolated development schema and user-JWT RLS', async (t) => {
       assert.equal(onboarding[0].workspace_id, null);
       ok(await rest(actor, 'profiles', 'PATCH', { full_name: `${tag}-${label}` }, `id=eq.${actor.id}`), 'own profile update');
       assert.equal((await rows(actor, 'profiles', `id=eq.${actor.id}`))[0].full_name, `${tag}-${label}`);
-      // Match app contract: no created_by supplied; INSERT .select must work now.
-      const workspace = await insert(actor, 'workspaces', { name: `${tag}-${label}` });
-      actor.workspace = workspace.id;
-      workspaces.push({ actor, id: workspace.id });
+      denied(await rest(actor, 'workspaces', 'POST', { name: `${tag}-${label}-direct` }), 'direct workspace provisioning denied');
+      const id = ok(await rest(actor, 'rpc/backbeat_bootstrap_workspace', 'POST', { workspace_name: `${tag}-${label}` }), 'atomic ordinary-JWT bootstrap');
+      assert.match(id, uuid);
+      actor.workspace = id;
+      workspaces.push({ actor, id });
+      const [workspace] = await rows(actor, 'workspaces', `id=eq.${id}`);
       assert.equal(workspace.created_by, actor.id);
-      assert.equal((await rows(actor, 'workspaces', `id=eq.${workspace.id}`)).length, 1);
-      for (const membership of [{ role: 'admin', status: 'inactive' }, { role: 'admin', status: 'pending' }, { role: 'member', status: 'active' }]) {
-        denied(await rest(actor, 'workspace_members', 'POST', { workspace_id: workspace.id, user_id: actor.id, ...membership }), 'bootstrap allows only active admin');
+      assert.equal((await rows(actor, 'workspaces', `id=eq.${id}`)).length, 1);
+      assert.deepEqual(await rows(actor, 'workspace_members', `workspace_id=eq.${id}`), [{ workspace_id: id, user_id: actor.id, role: 'master', status: 'active' }]);
+      for (const membership of [{ role: 'admin', status: 'inactive' }, { role: 'admin', status: 'pending' }, { role: 'member', status: 'active' }, { role: 'admin', status: 'active' }, { role: 'master', status: 'active' }]) {
+        denied(await rest(actor, 'workspace_members', 'POST', { workspace_id: id, user_id: actor.id, ...membership }), 'all direct membership provisioning denied');
       }
-      await insert(actor, 'workspace_members', { workspace_id: workspace.id, user_id: actor.id, role: 'admin', status: 'active' });
-      ok(await rest(actor, 'onboarding_status', 'PATCH', { completed: true, workspace_id: workspace.id }, `user_id=eq.${actor.id}`), 'complete onboarding');
+      denied(await rest(actor, 'onboarding_status', 'PATCH', { completed: false, workspace_id: null }, `user_id=eq.${actor.id}`), 'direct own onboarding changes denied');
+      assert.equal(ok(await rest(actor, 'rpc/backbeat_bootstrap_workspace', 'POST', { workspace_name: `${tag}-${label}-retry` }), 'retry bootstrap'), id);
+      assert.equal((await rows(actor, 'workspaces', `id=eq.${id}`))[0].name, `${tag}-${label}`);
       const done = await rows(actor, 'onboarding_status', `user_id=eq.${actor.id}&select=*,workspaces(*)`);
       assert.equal(done[0].completed, true);
       assert.equal(done[0].workspaces.id, workspace.id);
@@ -229,7 +233,7 @@ test('Backbeat M1: isolated development schema and user-JWT RLS', async (t) => {
       untouched(await rest(b, 'workspace_members', 'PATCH', patch, `workspace_id=eq.${b.workspace}&user_id=eq.${b.id}`), 'membership tampering');
     }
     untouched(await rest(b, 'workspace_members', 'DELETE', undefined, `workspace_id=eq.${b.workspace}&user_id=eq.${b.id}`), 'membership deletion');
-    assert.deepEqual(await rows(b, 'workspace_members', `user_id=eq.${b.id}`), [{ workspace_id: b.workspace, user_id: b.id, role: 'admin', status: 'active' }]);
+    assert.deepEqual(await rows(b, 'workspace_members', `user_id=eq.${b.id}`), [{ workspace_id: b.workspace, user_id: b.id, role: 'master', status: 'active' }]);
     denied(await rest(b, 'onboarding_status', 'PATCH', { workspace_id: a.workspace }, `user_id=eq.${b.id}`), 'foreign onboarding pointer');
     assert.equal((await rows(b, 'onboarding_status', `user_id=eq.${b.id}`))[0].workspace_id, b.workspace);
   });

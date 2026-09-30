@@ -4,6 +4,12 @@ import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
 export async function updateSession(request: NextRequest) {
+  // GoTrue fetches this static template before sending email. It must not depend
+  // on an Auth session or call back into the Auth service that requested it.
+  if (request.nextUrl.pathname === "/auth/signup-confirmation.html") {
+    return NextResponse.next({ request })
+  }
+
   const { url, key } = getSupabaseEnvironment()
   let supabaseResponse = NextResponse.next({
     request,
