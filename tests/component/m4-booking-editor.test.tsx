@@ -13,6 +13,24 @@ const booking: BookingWithArtist = {
   artist: { id: "artist-a", stage_name: "DJ Moon", name: "Luna", surname: null, location: null, fee: null, currency: "EUR", profile_image_url: null },
 }
 afterEach(cleanup)
+it.each([
+  ["£", 400, "£400"], ["GBP", 400, "£400"],
+  ["€", 400, "€400"], ["EUR", 400, "€400"],
+  ["$", 400, "$400"], ["USD", 400, "$400"],
+  ["CHF", 400, "CHF 400"], ["credits", 400, "credits 400"],
+  [null, 400, "400 (currency unavailable)"], ["", 400, "400 (currency unavailable)"],
+  ["   ", 400, "400 (currency unavailable)"], ["GBP", 0, "£0"],
+  [null, 0, "0 (currency unavailable)"], ["USD", 1234.5, "$1,234.5"],
+  ["GBP", null, "N/A"],
+] as const)("presents artist currency %s and fee %s as %s", (currency, fee, display) => {
+  render(<EventBookingClient booking={{ ...booking, artist: { ...booking.artist, fee, currency } }} />)
+  expect(screen.getByText(display, { exact: true })).toBeTruthy()
+})
+
+it("displays a saved booking artist rate in pounds", () => {
+  render(<EventBookingClient booking={{ ...booking, artist: { ...booking.artist, fee: 400, currency: "GBP" } }} />)
+  expect(screen.getByText("£400", { exact: true })).toBeTruthy()
+})
 it.each([[0, "€0"], [null, "N/A"]] as const)("presents EUR fee %s as %s", (fee, display) => {
   render(<EventBookingClient booking={{ ...booking, artist: { ...booking.artist, fee } }} />)
   expect(screen.getByText(display, { exact: true })).toBeTruthy()

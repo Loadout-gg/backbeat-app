@@ -23,6 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Calendar } from "@/components/ui/calendar"
 import { type Artist, type SocialLink } from "@/lib/actions/artists"
 import { NewBookingModal } from "@/components/dashboard/new-booking-modal"
+import { formatArtistBaseRate } from "@/lib/artist-base-rate"
 
 // Social icon mapping
 function getSocialIcon(type: string) {
@@ -360,8 +361,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                 <p className="text-sm text-muted-foreground">Base rate</p>
                 {artist.fee !== null && artist.fee !== undefined ? (
                   <p className="font-medium text-lg">
-                    {artist.currency || "$"}
-                    {artist.fee.toLocaleString()}/event
+                    {formatArtistBaseRate(artist.fee, artist.currency)}/event
                   </p>
                 ) : (
                   <p className="text-muted-foreground italic">Not specified</p>

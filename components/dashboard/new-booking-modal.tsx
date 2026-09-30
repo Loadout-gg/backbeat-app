@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getArtists, type Artist } from "@/lib/actions/artists";
 import { createBooking, type Booking } from "@/lib/actions/bookings";
+import { formatArtistBaseRate } from "@/lib/artist-base-rate";
 
 type ModalStep = "select-artist" | "booking-details" | "success";
 
@@ -146,12 +147,6 @@ export function NewBookingModal({
       onOpenChange(false);
       router.push(`/dashboard/bookings/${createdBooking.id}`);
     }
-  };
-
-  const formatCurrency = (amount: number | null, currency?: string | null) => {
-    if (!amount) return "N/A";
-    const symbol = currency === "EUR" ? "\u20AC" : "$";
-    return `${symbol}${amount.toLocaleString()}`;
   };
 
   const getInitials = (name: string) => {
@@ -326,7 +321,7 @@ export function NewBookingModal({
                 </div>
                 <div className="text-right">
                   <p className="font-semibold text-lg text-foreground">
-                    {formatCurrency(selectedArtist.base_rate, selectedArtist.currency)}
+                    {formatArtistBaseRate(selectedArtist.base_rate, selectedArtist.currency)}
                   </p>
                   <p className="text-sm text-muted-foreground">Base rate</p>
                 </div>

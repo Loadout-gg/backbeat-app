@@ -11,6 +11,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 import { updateBooking, deleteBooking, type BookingWithArtist } from "@/lib/actions/bookings";
+import { formatArtistBaseRate } from "@/lib/artist-base-rate";
 
 interface EventBookingClientProps {
   booking: BookingWithArtist;
@@ -76,12 +77,6 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
       .join("")
       .toUpperCase()
       .slice(0, 2);
-  };
-
-  const formatCurrency = (amount: number | null, currency?: string | null) => {
-    if (amount == null) return "N/A";
-    const symbol = currency === "EUR" ? "\u20AC" : "$";
-    return `${symbol}${amount.toLocaleString()}`;
   };
 
   const formatBookingDate = (dateStr: string) => {
@@ -199,7 +194,7 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
               </p>
             </div>
           </div>
-          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,auto)] items-start gap-4 break-words xl:text-right">
+          <div className="grid min-w-0 grid-cols-[minmax(5rem,1fr)_minmax(0,auto)] items-start gap-4 break-words xl:text-right">
             <div>
               <p className="text-sm text-foreground">
                 {artist.location || "Location N/A"}
@@ -208,7 +203,7 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
             </div>
             <div>
               <p className="font-semibold text-lg text-foreground">
-                {formatCurrency(artist.fee, artist.currency)}
+                {formatArtistBaseRate(artist.fee, artist.currency)}
               </p>
               <p className="text-xs text-muted-foreground">Base rate</p>
             </div>
