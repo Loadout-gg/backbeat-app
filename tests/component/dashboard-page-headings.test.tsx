@@ -6,11 +6,11 @@ import { cleanup, render, screen, within } from "@testing-library/react"
 const server = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
   signOut: vi.fn(),
-  listArtists: vi.fn(),
+  listArtistDirectory: vi.fn(),
   pathname: "/dashboard/artists",
 }))
 vi.mock("@/lib/actions/workspace", () => ({ getCurrentUser: server.getCurrentUser, signOut: server.signOut }))
-vi.mock("@/lib/actions/artists", () => ({ listArtists: server.listArtists }))
+vi.mock("@/lib/actions/artist-directory", () => ({ listArtistDirectory: server.listArtistDirectory }))
 vi.mock("next/navigation", () => ({
   usePathname: () => server.pathname,
   redirect: (url: string) => { throw new Error(`redirect:${url}`) },
@@ -22,7 +22,7 @@ import SettingsPage from "@/app/dashboard/settings/page"
 
 beforeEach(() => {
   server.getCurrentUser.mockResolvedValue({ profile: { full_name: "Synthetic Operator", avatar_url: null } })
-  server.listArtists.mockResolvedValue([])
+  server.listArtistDirectory.mockResolvedValue([])
   server.pathname = "/dashboard/artists"
 })
 afterEach(() => { cleanup(); vi.clearAllMocks() })
@@ -37,7 +37,7 @@ function expectPageHeading(name: string) {
 
 it.each(["empty", "populated"])("Artists has one page-owned primary heading in the %s state", async (state) => {
   if (state === "populated") {
-    server.listArtists.mockResolvedValue([{
+    server.listArtistDirectory.mockResolvedValue([{
       id: "synthetic-artist", name: "Synthetic", surname: "Performer", stage_name: "Synthetic Act",
       genres: ["House"], location: "Rome", fee: 500, currency: "EUR",
     }])

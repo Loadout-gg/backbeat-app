@@ -33,7 +33,7 @@ spacing:
 
 Use the operator-confirmed Obra/shadcn foundation as an operational component language, not a new visual identity or a literal dashboard template. The supplied reference establishes white content, inset pale navigation, restrained depth and legible compact lists. The existing logo and neutral palette remain authorities.
 
-This record covers the bounded Agent workspace refinements: M3 shell/dashboard, followed by M4 heading corrections and presentation/accessibility alignment of the existing booking Performance editor. M4 does not authorize new booking capabilities, auth changes or the performer experience. Previously verified M3 geometry remains the shared foundation; editor-specific geometry must pass its own desktop/mobile checks.
+This record covers the bounded Agent workspace refinements: M3 shell/dashboard, M4 heading corrections and presentation/accessibility alignment of the existing booking Performance editor, and M5's operational Artists directory. These slices do not authorize new booking capabilities, auth changes or the performer experience. Previously verified M3 geometry remains the shared foundation; editor and directory surfaces must pass their own desktop/mobile checks.
 
 ## Colors
 
@@ -64,6 +64,7 @@ Use the existing radius vocabulary: controls use the control radius, navigation 
 - Empty states explain existing creation paths. Loading and unavailable states are honest; no static demo records are inserted.
 - The booking creation dialog remains the established implementation, with its supported fields and persistence behavior unchanged.
 - The existing booking editor uses a bounded desktop form, responsive summary/field groups and a wrapping Radix tab group. Preserve supported labels, unavailable controls and draft state across panels. Its supported Update booking action is primary; desktop actions stick to the viewport bottom while mobile actions remain in flow.
+- The Artists directory keeps identity, genres, location, availability and fee legible in a real paginated table. Search and ranges describe the complete checked directory snapshot; long cells wrap and any necessary horizontal scroll stays inside a named keyboard-accessible region. Add artist is primary, profile/Edit use existing routes, and unsupported export/delete/counts are explicit.
 
 ## Do's and Don'ts
 
