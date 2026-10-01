@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { createClient } from "@/lib/supabase/client"
 import { readPendingSignup, pendingSignupKey } from "@/lib/auth/pending-signup"
+import { nativeEmailFeedback } from "@/lib/auth/native-email-feedback"
 import SignupPage from "@/app/auth/signup/page"
 
 export default function SignupSuccessPage() {
@@ -55,7 +56,14 @@ function ConfirmationFlow() {
     setNotice("")
     try {
       const { error } = await createClient().auth.resend({ type: "signup", email })
-      if (error) { setError(error.status === 429 ? "Please wait before requesting another code, then try again." : "Could not resend the code. Please try again."); return }
+      if (error) {
+        setError(nativeEmailFeedback(error) ?? (
+          error.status === 429
+            ? "Please wait before requesting another code, then try again."
+            : "Could not resend the code. Please try again."
+        ))
+        return
+      }
       setNotice("A new code has been requested. Check your inbox.")
     } catch { setError("Could not resend the code. Check your connection and try again.") }
     finally { lock.current = false; setBusy(false) }

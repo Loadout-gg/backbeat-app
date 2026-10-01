@@ -150,3 +150,14 @@ it.each([undefined, "over_email_send_rate_limit", "over_request_rate_limit"])(
     expect(push).not.toHaveBeenCalled()
   },
 )
+
+it("keeps confirmation recoverable when the native sender rejects resend", async () => {
+  resend.mockResolvedValueOnce({ error: { code: "email_address_not_authorized", status: 403 } })
+  render(<ConfirmationPage />)
+  fireEvent.click(await screen.findByRole("button", { name: "Resend code" }))
+  expect((await screen.findByRole("alert")).textContent).toBe("Email delivery is limited to authorized test accounts during this internal test phase.")
+  expect(screen.queryByRole("status")).toBeNull()
+  expect((screen.getByRole("button", { name: "Resend code" }) as HTMLButtonElement).disabled).toBe(false)
+  expect(verifyOtp).not.toHaveBeenCalled()
+  expect(push).not.toHaveBeenCalled()
+})

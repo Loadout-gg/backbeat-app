@@ -171,3 +171,18 @@ it.each([undefined, "over_email_send_rate_limit", "over_request_rate_limit"])(
     expect(push).not.toHaveBeenCalled()
   },
 )
+
+it("explains the test-sender restriction without starting confirmation", async () => {
+  signUp.mockResolvedValueOnce({ error: { code: "email_address_not_authorized", status: 403 } })
+  render(<SignupPage />)
+  fill("Name", "Ada")
+  fill("Surname", "Synthetic")
+  fill("Email", "ada@example.test")
+  fill("Password", "12345678")
+  fill("Confirm Password", "12345678")
+  fireEvent.submit(screen.getByLabelText("Email").closest("form")!)
+  expect((await screen.findByRole("alert")).textContent).toBe("Email delivery is limited to authorized test accounts during this internal test phase.")
+  expect(sessionStorage.getItem("backbeat.pending-signup")).toBeNull()
+  expect(push).not.toHaveBeenCalled()
+  expect((screen.getByRole("button", { name: "Create account" }) as HTMLButtonElement).disabled).toBe(false)
+})

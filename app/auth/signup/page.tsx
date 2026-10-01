@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { useAuthClientReady } from "@/lib/auth/use-client-ready"
 import { readPendingSignup } from "@/lib/auth/pending-signup"
+import { nativeEmailFeedback } from "@/lib/auth/native-email-feedback"
 import { BackbeatLogoFull } from "@/components/backbeat-logo"
 
 export default function SignupPage() {
@@ -86,6 +87,11 @@ function SignupForm() {
       setRepeatPassword("")
       router.push("/auth/signup-success")
     } catch (error: unknown) {
+      const nativeMessage = nativeEmailFeedback(error)
+      if (nativeMessage) {
+        setError(nativeMessage)
+        return
+      }
       const failure = error as { code?: string; status?: number }
       setError(failure?.code === "user_already_exists" || failure?.code === "email_exists"
         ? "An account with this email already exists. Log in or use another email."
