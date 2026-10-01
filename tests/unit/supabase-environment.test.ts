@@ -40,6 +40,17 @@ it("preserves remote configuration without explicit development (characterizatio
   const { getSupabaseEnvironment } = await import("@/lib/supabase/environment")
   expect(getSupabaseEnvironment().url).toBe("https://example.supabase.co")
 })
+it("uses an explicitly configured hosted endpoint outside Development", async () => {
+  vi.stubEnv("BACKBEAT_ENV", "production")
+  vi.stubEnv("NEXT_PUBLIC_BACKBEAT_ENV", "production")
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co")
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "test-publishable-placeholder")
+  const { getSupabaseEnvironment } = await import("@/lib/supabase/environment")
+  expect(getSupabaseEnvironment()).toEqual({
+    url: "https://example.supabase.co",
+    key: "test-publishable-placeholder",
+  })
+})
 it("exposes server-only development selection to the browser build", async () => {
   vi.stubEnv("BACKBEAT_ENV", "development")
   vi.stubEnv("NEXT_PUBLIC_BACKBEAT_ENV", undefined)
