@@ -152,3 +152,22 @@ it("collects separate identity and sends derived metadata without trimming passw
   await waitFor(() => expect(signUp).toHaveBeenCalledWith(expect.objectContaining({ email: "ada@example.test", password: " eightxx ", options: expect.objectContaining({ data: { first_name: "Ada", last_name: "Lovelace", full_name: "Ada Lovelace" } }) })))
   expect(push).toHaveBeenCalledWith("/auth/signup-success")
 })
+
+it.each([undefined, "over_email_send_rate_limit", "over_request_rate_limit"])(
+  "preserves the complete signup 429 recovery guidance (%s)",
+  async code => {
+    signUp.mockResolvedValueOnce({ error: { status: 429, ...(code ? { code } : {}) } })
+    render(<SignupPage />)
+    fill("Name", "Ada")
+    fill("Surname", "Synthetic")
+    fill("Email", "ada@example.test")
+    fill("Password", "12345678")
+    fill("Confirm Password", "12345678")
+    fireEvent.submit(screen.getByLabelText("Email").closest("form")!)
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "Please wait before trying again. You can also resume email confirmation if you have already registered.",
+    )
+    expect(sessionStorage.getItem("backbeat.pending-signup")).toBeNull()
+    expect(push).not.toHaveBeenCalled()
+  },
+)

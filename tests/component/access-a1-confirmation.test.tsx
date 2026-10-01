@@ -134,3 +134,19 @@ it("verifies a six-digit email code before continuing and removes the pending dr
  await waitFor(() => expect(push).toHaveBeenCalledWith("/onboarding"))
  expect(sessionStorage.getItem("backbeat.pending-signup")).toBeNull()
 })
+
+it.each([undefined, "over_email_send_rate_limit", "over_request_rate_limit"])(
+  "preserves the complete resend 429 recovery guidance (%s)",
+  async code => {
+    resend.mockResolvedValueOnce({ error: { status: 429, ...(code ? { code } : {}) } })
+    render(<ConfirmationPage />)
+    fireEvent.click(await screen.findByRole("button", { name: "Resend code" }))
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "Please wait before requesting another code, then try again.",
+    )
+    expect(screen.queryByRole("status")).toBeNull()
+    expect((screen.getByRole("button", { name: "Resend code" }) as HTMLButtonElement).disabled).toBe(false)
+    expect(verifyOtp).not.toHaveBeenCalled()
+    expect(push).not.toHaveBeenCalled()
+  },
+)
