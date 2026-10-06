@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { BOOKING_FEE_CURRENCIES, parseBookingFee, formatBookingFeeInput } from "@/lib/booking-fee";
 import { createBookingSchema } from "@/lib/booking-validation";
 import { useRouter } from "next/navigation";
 import { X, Trash2, Plus, Clock } from "lucide-react";
@@ -36,6 +37,10 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
 
   // Form state - Performance tab
   const [bookingDate, setBookingDate] = useState(booking.date);
+  const [feeAmount, setFeeAmount] = useState(() => formatBookingFeeInput(booking.fee_amount_minor, booking.fee_currency));
+  const [feeCurrency, setFeeCurrency] = useState<string>(booking.fee_currency ?? "");
+  const [feeDirty, setFeeDirty] = useState(false);
+
   const [startTime, setStartTime] = useState(
     booking.start_time ? booking.start_time.slice(0, 5) : "10:30"
   );
@@ -101,17 +106,23 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
   };
 
   const handleUpdateBooking = async () => {
-if (isSaving) return;
-setSaveError(null);
-if (!createBookingSchema.shape.date.safeParse(bookingDate).success) {
-  setSaveError("Enter a valid booking date");
-  return;
-}
+    if (isSaving) return;
+    setSaveError(null);
+    if (!createBookingSchema.shape.date.safeParse(bookingDate).success) {
+      setSaveError("Enter a valid booking date");
+      return;
+    }
+    const fee = parseBookingFee(feeAmount, feeCurrency);
+    if (feeDirty && !fee.success) {
+      setSaveError(fee.error);
+      return;
+    }
     setIsSaving(true);
 
     try {
       const result = await updateBooking(booking.id, {
         ...(bookingDate !== booking.date ? { date: bookingDate } : {}),
+        ...(feeDirty && fee.success ? fee.data : {}),
         start_time: startTime,
         duration_minutes: durationMinutes || null,
         notes: notes || null,
@@ -125,6 +136,7 @@ if (!createBookingSchema.shape.date.safeParse(bookingDate).success) {
         setSaveError(result.error || "Unable to save booking. Please try again.");
         return;
       }
+      setFeeDirty(false);
       router.refresh();
     } catch {
       setSaveError("Unable to save booking. Please try again.");
@@ -222,20 +234,18 @@ if (!createBookingSchema.shape.date.safeParse(bookingDate).success) {
                     Performance date
                   </h3>
                   <div className="bg-muted/50 rounded-lg p-4">
-                    <>
-  <label htmlFor="booking-date" className="mb-1.5 block text-xs font-medium text-foreground">
-    Booking date
-  </label>
-  <Input
-    id="booking-date"
-    type="date"
-    required
-    value={bookingDate}
-    onChange={(event) => setBookingDate(event.target.value)}
-    disabled={isSaving}
-    className="h-9 min-w-0 text-sm"
-  />
-</>
+                    <label htmlFor="booking-date" className="mb-1.5 block text-xs font-medium text-foreground">
+                      Booking date
+                    </label>
+                    <Input
+                      id="booking-date"
+                      type="date"
+                      required
+                      value={bookingDate}
+                      onChange={(event) => setBookingDate(event.target.value)}
+                      disabled={isSaving}
+                      className="h-9 min-w-0 text-sm"
+                    />
                   </div>
                 </div>
                 <div>
@@ -592,7 +602,50 @@ if (!createBookingSchema.shape.date.safeParse(bookingDate).success) {
               </div>
             </div>
           </TabsContent>
-          {TABS.filter((tab) => tab !== "Performance").map((tab) => (
+          <TabsContent value="Financial" className="min-w-0 px-4 py-6 sm:px-6">
+            <div className="max-w-xl space-y-4">
+              <h2 className="text-base font-medium text-foreground">Booking fee</h2>
+              <p id="booking-fee-help" className="text-sm text-muted-foreground">
+                Recorded for this booking only. This does not change the artist&apos;s base rate, confirm the booking, or record a payment.
+                Clear both fields to remove the fee. Enter amounts without grouping separators; JPY uses whole numbers.
+              </p>
+              <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="min-w-0">
+                  <label htmlFor="booking-fee-amount" className="mb-1.5 block text-xs font-medium text-foreground">
+                    Booking fee amount
+                  </label>
+                  <Input
+                    id="booking-fee-amount"
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    value={feeAmount}
+                    onChange={(event) => { setFeeAmount(event.target.value); setFeeDirty(true); }}
+                    disabled={isSaving}
+                    aria-describedby="booking-fee-help"
+                    className="h-9 min-w-0 text-sm"
+                  />
+                </div>
+                <div className="min-w-0">
+                  <label htmlFor="booking-fee-currency" className="mb-1.5 block text-xs font-medium text-foreground">
+                    Booking fee currency
+                  </label>
+                  <select
+                    id="booking-fee-currency"
+                    value={feeCurrency}
+                    onChange={(event) => { setFeeCurrency(event.target.value); setFeeDirty(true); }}
+                    disabled={isSaving}
+                    aria-describedby="booking-fee-help"
+                    className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                  >
+                    <option value="">Not specified</option>
+                    {BOOKING_FEE_CURRENCIES.map((currency) => <option key={currency} value={currency}>{currency}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+          {TABS.filter((tab) => tab !== "Performance" && tab !== "Financial").map((tab) => (
             <TabsContent key={tab} value={tab.replaceAll(" ", "-")} className="min-w-0 px-4 py-16 text-center sm:px-6">
               <h2 className="text-lg font-medium text-foreground mb-2">{tab}</h2>
               <p className="text-muted-foreground">This section is coming soon.</p>

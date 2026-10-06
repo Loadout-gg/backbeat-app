@@ -7,6 +7,7 @@ vi.mock("@/lib/actions/bookings", () => ({ updateBooking: vi.fn(), deleteBooking
 import { EventBookingClient } from "@/app/dashboard/bookings/[id]/event-booking-client"
 import type { BookingWithArtist } from "@/lib/actions/bookings"
 const booking: BookingWithArtist = {
+  fee_amount_minor: null, fee_currency: null,
   id: "booking-a", workspace_id: "workspace-a", artist_id: "artist-a", date: "2026-10-12", start_time: "19:00:00",
   venue_name: null, venue_address: null, contact_name_main: null, contact_phone_main: null, contact_email_main: null,
   duration_minutes: 60, notes: "Original note", status: "in_progress", created_at: "", updated_at: "",
@@ -46,7 +47,7 @@ it("uses named keyboard tabs and retains Performance drafts across all panels", 
   performance.focus()
   fireEvent.keyDown(performance, { key: "ArrowRight" })
   await waitFor(() => expect(tabs.getByRole("tab", { name: "Financial", selected: true })).toBe(document.activeElement))
-  expect(screen.getByRole("tabpanel", { name: "Financial" }).textContent).toContain("This section is coming soon.")
+  expect(within(screen.getByRole("tabpanel", { name: "Financial" })).getByLabelText("Booking fee amount")).toBeTruthy()
   fireEvent.keyDown(document.activeElement!, { key: "End" })
   await waitFor(() => expect(tabs.getByRole("tab", { name: "Artist contacts", selected: true })).toBe(document.activeElement))
   fireEvent.keyDown(document.activeElement!, { key: "Home" })
@@ -57,7 +58,11 @@ it("uses named keyboard tabs and retains Performance drafts across all panels", 
   await waitFor(() => expect(tabs.getByRole("tab", { name: "Artist contacts", selected: true })).toBe(document.activeElement))
   for (const name of ["Financial", "Travel", "Accommodation", "Documents", "Artist contacts"]) {
     act(() => tabs.getByRole("tab", { name }).focus())
-    await waitFor(() => expect(screen.getByRole("tabpanel", { name }).textContent).toContain("This section is coming soon."))
+    await waitFor(() => {
+      const panel = screen.getByRole("tabpanel", { name })
+      if (name === "Financial") expect(within(panel).getByLabelText("Booking fee amount")).toBeTruthy()
+      else expect(panel.textContent).toContain("This section is coming soon.")
+    })
   }
 })
 it("associates exact supported time and note labels with editable controls", () => {

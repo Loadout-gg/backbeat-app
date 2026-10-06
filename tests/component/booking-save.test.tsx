@@ -8,6 +8,7 @@ vi.mock("@/lib/actions/bookings", () => ({ updateBooking, deleteBooking: vi.fn()
 import { EventBookingClient } from "@/app/dashboard/bookings/[id]/event-booking-client"
 import type { BookingWithArtist } from "@/lib/actions/bookings"
 const booking: BookingWithArtist = {
+  fee_amount_minor: null, fee_currency: null,
   id: "booking-a", workspace_id: "workspace-a", artist_id: "artist-a", date: "2026-10-12", start_time: "19:00:00",
   venue_name: null, venue_address: null, contact_name_main: null, contact_phone_main: null, contact_email_main: null,
   duration_minutes: 60, notes: "Original note", status: "in_progress", created_at: "", updated_at: "",
@@ -195,4 +196,60 @@ it.each(["returned", "thrown"])("keeps the date draft after %s save failure", as
   updateBooking.mockResolvedValueOnce({ success: true })
   fireEvent.click(screen.getByRole("button", { name: "Update booking" }))
   await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
+})
+
+async function financialPanel() {
+  const performance = screen.getByRole("tab", { name: "Performance" })
+  performance.focus()
+  fireEvent.keyDown(performance, { key: "ArrowRight" })
+  return screen.findByLabelText("Booking fee amount")
+}
+it("records a booking fee without changing the artist rate or the note", async () => {
+  updateBooking.mockResolvedValueOnce({ success: true })
+  render(<EventBookingClient booking={{ ...booking, artist: { ...booking.artist, fee: 1200, currency: "EUR" } }} />)
+  fireEvent.change(await financialPanel(), { target: { value: "1050.00" } })
+  fireEvent.change(screen.getByLabelText("Booking fee currency"), { target: { value: "EUR" } })
+  fireEvent.click(screen.getByRole("button", { name: "Update booking" }))
+  await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
+  const payload = updateBooking.mock.calls[0][1]
+  expect(payload).toMatchObject({ fee_amount_minor: 105000, fee_currency: "EUR", notes: "Original note" })
+  expect(payload).not.toHaveProperty("artist")
+  expect(payload).not.toHaveProperty("fee")
+  expect(payload).not.toHaveProperty("status")
+})
+it("initializes the stored fee and supports an explicit clear", async () => {
+  updateBooking.mockResolvedValueOnce({ success: true })
+  render(<EventBookingClient booking={{ ...booking, fee_amount_minor: 105000, fee_currency: "EUR" }} />)
+  const amount = await financialPanel() as HTMLInputElement
+  expect(amount.value).toBe("1050.00")
+  expect((screen.getByLabelText("Booking fee currency") as HTMLSelectElement).value).toBe("EUR")
+  fireEvent.change(amount, { target: { value: "" } })
+  fireEvent.change(screen.getByLabelText("Booking fee currency"), { target: { value: "" } })
+  fireEvent.click(screen.getByRole("button", { name: "Update booking" }))
+  await waitFor(() => expect(updateBooking).toHaveBeenCalledWith(booking.id, expect.objectContaining({ fee_amount_minor: null, fee_currency: null })))
+})
+it("preserves a financial draft across tabs and a failed save, then retries", async () => {
+  updateBooking.mockResolvedValueOnce({ success: false, error: "Save failed" })
+  render(<EventBookingClient booking={booking} />)
+  fireEvent.change(await financialPanel(), { target: { value: "0" } })
+  fireEvent.change(screen.getByLabelText("Booking fee currency"), { target: { value: "GBP" } })
+  fireEvent.keyDown(screen.getByRole("tab", { name: "Financial" }), { key: "ArrowRight" })
+  await screen.findByRole("tabpanel", { name: "Travel" })
+  fireEvent.keyDown(screen.getByRole("tab", { name: "Travel" }), { key: "ArrowLeft" })
+  expect((await screen.findByLabelText("Booking fee amount") as HTMLInputElement).value).toBe("0")
+  fireEvent.click(screen.getByRole("button", { name: "Update booking" }))
+  await screen.findByRole("alert")
+  expect((screen.getByLabelText("Booking fee amount") as HTMLInputElement).value).toBe("0")
+  expect(refresh).not.toHaveBeenCalled()
+  updateBooking.mockResolvedValueOnce({ success: true })
+  fireEvent.click(screen.getByRole("button", { name: "Update booking" }))
+  await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
+  expect(updateBooking).toHaveBeenLastCalledWith(booking.id, expect.objectContaining({ fee_amount_minor: 0, fee_currency: "GBP" }))
+})
+it("requires the currency and does not submit an invalid fee", async () => {
+  render(<EventBookingClient booking={booking} />)
+  fireEvent.change(await financialPanel(), { target: { value: "1050" } })
+  fireEvent.click(screen.getByRole("button", { name: "Update booking" }))
+  expect((await screen.findByRole("alert")).textContent).toContain("amount and currency")
+  expect(updateBooking).not.toHaveBeenCalled()
 })
