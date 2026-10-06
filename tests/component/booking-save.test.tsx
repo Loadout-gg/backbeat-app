@@ -34,7 +34,7 @@ it.each([
     }
   },
 )
-it("enables exactly the five approved fields with unique labels and an email input", () => {
+it("enables the date and five approved venue/contact fields with unique labels and an email input", () => {
   const { container } = render(<EventBookingClient booking={booking} />)
   const approved = Object.values(fieldLabels).map(label => screen.getByLabelText(label))
   for (const input of approved) {
@@ -46,7 +46,7 @@ it("enables exactly the five approved fields with unique labels and an email inp
   }
   expect(screen.getByLabelText("Email").getAttribute("type")).toBe("email")
   const enabled = Array.from(container.querySelectorAll("input:not([type=time])")).filter(input => !input.matches(":disabled"))
-  expect(enabled).toEqual(approved)
+  expect(enabled).toEqual([screen.getByLabelText("Booking date"), ...approved])
 })
 it.each(["edited", "blank"])("submits explicit %s venue and main contact strings", async (mode) => {
   updateBooking.mockResolvedValueOnce({ success: true })
@@ -159,4 +159,40 @@ it("recovers from a thrown save promise and retains user input", async () => {
   expect((screen.getByRole("button", { name: "Update booking" }) as HTMLButtonElement).disabled).toBe(false)
   expect(screen.getByDisplayValue("Keep this edit")).toBeTruthy()
   expect(refresh).not.toHaveBeenCalled()
+})
+
+it("edits a booking date without changing other supported values", async () => {
+  updateBooking.mockResolvedValueOnce({ success: true })
+  render(<EventBookingClient booking={booking} />)
+  const date = screen.getByLabelText("Booking date") as HTMLInputElement
+  expect(date.type).toBe("date")
+  expect(date.value).toBe(booking.date)
+  fireEvent.change(date, { target: { value: "2026-10-26" } })
+  fireEvent.click(screen.getByRole("button", { name: "Update booking" }))
+  await waitFor(() => expect(updateBooking).toHaveBeenCalledWith(booking.id, {
+    date: "2026-10-26", start_time: "19:00", duration_minutes: 60,
+    notes: "Original note", venue_name: "", venue_address: "",
+    contact_name_main: "", contact_phone_main: "", contact_email_main: "",
+  }))
+  expect(refresh).toHaveBeenCalledOnce()
+})
+it("rejects an empty date before calling the action", async () => {
+  render(<EventBookingClient booking={booking} />)
+  fireEvent.change(screen.getByLabelText("Booking date"), { target: { value: "" } })
+  fireEvent.click(screen.getByRole("button", { name: "Update booking" }))
+  expect((await screen.findByRole("alert")).textContent).toContain("valid booking date")
+  expect(updateBooking).not.toHaveBeenCalled()
+})
+it.each(["returned", "thrown"])("keeps the date draft after %s save failure", async failure => {
+  if (failure === "returned") updateBooking.mockResolvedValueOnce({ success: false, error: "Save failed" })
+  else updateBooking.mockRejectedValueOnce(new Error("offline"))
+  render(<EventBookingClient booking={booking} />)
+  fireEvent.change(screen.getByLabelText("Booking date"), { target: { value: "2026-10-26" } })
+  fireEvent.click(screen.getByRole("button", { name: "Update booking" }))
+  await screen.findByRole("alert")
+  expect((screen.getByLabelText("Booking date") as HTMLInputElement).value).toBe("2026-10-26")
+  expect(refresh).not.toHaveBeenCalled()
+  updateBooking.mockResolvedValueOnce({ success: true })
+  fireEvent.click(screen.getByRole("button", { name: "Update booking" }))
+  await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
 })

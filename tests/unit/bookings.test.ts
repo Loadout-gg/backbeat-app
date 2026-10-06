@@ -137,3 +137,13 @@ it.each([
   expect(db.from).not.toHaveBeenCalled()
   expect(db.auth.getUser).not.toHaveBeenCalled()
 })
+
+it("reschedules only the current-workspace booking and invalidates its views", async () => {
+  expect(await updateBooking(id, { date: "2026-10-26" })).toEqual({ success: true })
+  expect(query.update).toHaveBeenCalledWith({ date: "2026-10-26", updated_at: expect.any(String) })
+  expect(query.eq).toHaveBeenCalledWith("id", id)
+  expect(query.eq).toHaveBeenCalledWith("workspace_id", "selected-workspace")
+  for (const path of ["/dashboard", "/dashboard/bookings", `/dashboard/bookings/${id}`]) {
+    expect(revalidatePath).toHaveBeenCalledWith(path)
+  }
+})

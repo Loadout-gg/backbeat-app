@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createBookingSchema } from "@/lib/booking-validation";
 import { useRouter } from "next/navigation";
 import { X, Trash2, Plus, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Form state - Performance tab
+  const [bookingDate, setBookingDate] = useState(booking.date);
   const [startTime, setStartTime] = useState(
     booking.start_time ? booking.start_time.slice(0, 5) : "10:30"
   );
@@ -79,22 +81,6 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
       .slice(0, 2);
   };
 
-  const formatBookingDate = (dateStr: string) => {
-    const d = new Date(dateStr + "T00:00:00");
-    const options: Intl.DateTimeFormatOptions = {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      weekday: "long",
-    };
-    const formatted = d.toLocaleDateString("en-US", options);
-    const parts = formatted.split(", ");
-    if (parts.length === 3) {
-      return `${parts[1]}, ${parts[2]} (${parts[0]})`;
-    }
-    return formatted;
-  };
-
   const formatDuration = (mins: number) => {
     const h = Math.floor(mins / 60)
       .toString()
@@ -115,11 +101,17 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
   };
 
   const handleUpdateBooking = async () => {
+if (isSaving) return;
+setSaveError(null);
+if (!createBookingSchema.shape.date.safeParse(bookingDate).success) {
+  setSaveError("Enter a valid booking date");
+  return;
+}
     setIsSaving(true);
-    setSaveError(null);
 
     try {
       const result = await updateBooking(booking.id, {
+        ...(bookingDate !== booking.date ? { date: bookingDate } : {}),
         start_time: startTime,
         duration_minutes: durationMinutes || null,
         notes: notes || null,
@@ -230,9 +222,20 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
                     Performance date
                   </h3>
                   <div className="bg-muted/50 rounded-lg p-4">
-                    <p className="font-medium text-foreground">
-                      {formatBookingDate(booking.date)}
-                    </p>
+                    <>
+  <label htmlFor="booking-date" className="mb-1.5 block text-xs font-medium text-foreground">
+    Booking date
+  </label>
+  <Input
+    id="booking-date"
+    type="date"
+    required
+    value={bookingDate}
+    onChange={(event) => setBookingDate(event.target.value)}
+    disabled={isSaving}
+    className="h-9 min-w-0 text-sm"
+  />
+</>
                   </div>
                 </div>
                 <div>
