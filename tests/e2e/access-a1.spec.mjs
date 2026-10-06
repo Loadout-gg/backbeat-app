@@ -35,7 +35,7 @@ let input='';process.stdin.on('data',b=>input+=b);process.stdin.on('end',async()
     const r=await fetch(base+'/api/v1/search?query='+encodeURIComponent('to:'+q.email)+'&limit=100',{redirect:'error'});
     if(!r.ok)throw Error('read');const found=await r.json();
     const messages=found.messages||[];
-    if(found.total>messages.length)throw Error('incomplete');
+    if(!Number.isSafeInteger(found.messages_count)||found.messages_count!==messages.length)throw Error('incomplete');
     const ids=messages.map(m=>m.ID);
     if(q.op==='delete') {
       if(ids.length){const d=await fetch(base+'/api/v1/messages',{method:'DELETE',redirect:'error',headers:{'Content-Type':'application/json'},body:JSON.stringify({IDs:ids})});if(!d.ok)throw Error('delete');}
