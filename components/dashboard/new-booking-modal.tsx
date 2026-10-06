@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Clock, Calendar, CheckCircle2 } from "lucide-react";
+import { Search, Calendar, CheckCircle2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -181,7 +181,7 @@ export function NewBookingModal({
       ? "w-[calc(100vw-2rem)] max-w-6xl max-h-[calc(100vh-2rem)] overflow-hidden p-0"
       : step === "success"
         ? "max-w-2xl p-0"
-        : "max-w-5xl max-h-[90vh] overflow-hidden p-0";
+        : "w-[calc(100vw-2rem)] max-w-5xl sm:max-w-5xl max-h-[calc(100dvh-2rem)] overflow-y-auto p-0";
 
   return (
     <Dialog open={open} onOpenChange={step === "success" ? () => {} : onOpenChange}>
@@ -328,17 +328,18 @@ export function NewBookingModal({
               </div>
 
               {/* Form fields */}
-              <div className="grid grid-cols-2 gap-8">
+              <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-8">
                 {/* Left column */}
-                <div className="space-y-6">
+                <div className="min-w-0 space-y-6">
                   {/* Select date */}
                   <div>
                     <h4 className="text-base font-medium text-foreground mb-3">
-                      Select date
+                      <label htmlFor="new-booking-date">Select date</label>
                     </h4>
                     <div className="relative">
                       <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
+                        id="new-booking-date"
                         type="date"
                         value={date}
                         onChange={(e) => setDate(e.target.value)}
@@ -354,27 +355,27 @@ export function NewBookingModal({
                       Performance time
                     </h4>
                     <div className="border border-border rounded-lg p-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="text-sm text-muted-foreground mb-2 block">
+                      <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div className="min-w-0">
+                          <label htmlFor="new-booking-start-time" className="text-sm text-muted-foreground mb-2 block">
                             Start time
                           </label>
-                          <div className="relative">
-                            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input
-                              type="time"
-                              value={startTime}
-                              onChange={(e) => setStartTime(e.target.value)}
-                              className="pl-9"
-                            />
-                          </div>
+                          <Input
+                            id="new-booking-start-time"
+                            type="time"
+                            value={startTime}
+                            onChange={(e) => setStartTime(e.target.value)}
+                            className="min-w-0 w-full"
+                          />
                         </div>
-                        <div>
-                          <label className="text-sm text-muted-foreground mb-2 block">
+                        <div className="min-w-0">
+                          <label htmlFor="new-booking-duration" className="text-sm text-muted-foreground mb-2 block">
                             Duration
                           </label>
                           <Input
                             type="time"
+                            id="new-booking-duration"
+                            className="min-w-0 w-full"
                             value={duration}
                             onChange={(e) => setDuration(e.target.value)}
                             placeholder="00:00"
@@ -386,7 +387,7 @@ export function NewBookingModal({
                 </div>
 
                 {/* Right column - Notes */}
-                <div>
+                <div className="min-w-0">
                   <h4 className="text-base font-medium text-foreground mb-3">
                     Note
                   </h4>

@@ -46,3 +46,12 @@ it.each(["returned", "thrown"])("shows %s creation failure and recovers saving s
   expect((await screen.findByRole("alert")).textContent).toContain(failure === "returned" ? "Cannot create booking" : "Unable to save booking")
   expect((screen.getByRole("button", { name: "Save on calendar" }) as HTMLButtonElement).disabled).toBe(false)
 })
+
+it("labels booking creation date, time and duration for direct operation", () => {
+  render(<NewBookingModal open onOpenChange={vi.fn()} preselectedArtist={artist} />)
+  expect(screen.getByLabelText("Select date").getAttribute("type")).toBe("date")
+  expect(screen.getByLabelText("Start time").getAttribute("type")).toBe("time")
+  expect(screen.getByLabelText("Duration").getAttribute("type")).toBe("time")
+  expect(screen.getByRole("dialog").className).toContain("sm:max-w-5xl")
+  expect(screen.getByRole("dialog").className).toContain("overflow-y-auto")
+})
