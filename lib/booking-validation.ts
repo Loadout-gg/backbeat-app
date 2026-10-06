@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { bookingFeeShape, validateBookingFeePair } from "./booking-fee"
 import { BOOKING_STATUSES } from "./booking-status"
 
 export const bookingIdSchema = z.string().uuid("Invalid booking ID")
@@ -20,6 +21,7 @@ const optionalBookingText = (max: number, label: string) => z.string().trim()
   .transform(value => value === "" ? null : value)
 
 export const updateBookingSchema = z.object({
+  ...bookingFeeShape,
   venue_name: optionalBookingText(200, "Venue name"),
   venue_address: optionalBookingText(1000, "Venue address"),
   contact_name_main: optionalBookingText(200, "Contact name"),
@@ -30,4 +32,4 @@ export const updateBookingSchema = z.object({
   duration_minutes: duration.nullable().optional(),
   notes: z.string().nullable().optional(),
   status: bookingStatusSchema.optional(),
-})
+}).superRefine(validateBookingFeePair)
