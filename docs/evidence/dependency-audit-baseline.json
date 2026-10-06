@@ -1,0 +1,633 @@
+{
+  "advisories": {
+    "1112646": {
+      "findings": [
+        {
+          "version": "16.0.10",
+          "paths": [
+            ".>next",
+            ".>@vercel/analytics>next"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1112646,
+      "title": "Next.js HTTP request deserialization can lead to DoS when using insecure React Server Components",
+      "module_name": "next",
+      "vulnerable_versions": ">=16.0.0-beta.0 <16.0.11",
+      "patched_versions": ">=16.0.11",
+      "severity": "high",
+      "cwe": "CWE-400, CWE-502",
+      "github_advisory_id": "GHSA-h25m-26qc-wcjf",
+      "url": "https://github.com/advisories/GHSA-h25m-26qc-wcjf"
+    },
+    "1115806": {
+      "findings": [
+        {
+          "version": "4.17.23",
+          "paths": [
+            ".>recharts>lodash"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1115806,
+      "title": "lodash vulnerable to Code Injection via `_.template` imports key names",
+      "module_name": "lodash",
+      "vulnerable_versions": ">=4.0.0 <=4.17.23",
+      "patched_versions": ">=4.18.1",
+      "severity": "high",
+      "cwe": "CWE-94",
+      "github_advisory_id": "GHSA-r5fr-rjxr-66jc",
+      "url": "https://github.com/advisories/GHSA-r5fr-rjxr-66jc"
+    },
+    "1116375": {
+      "findings": [
+        {
+          "version": "16.0.10",
+          "paths": [
+            ".>next",
+            ".>@vercel/analytics>next"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1116375,
+      "title": "Next.js has a Denial of Service with Server Components",
+      "module_name": "next",
+      "vulnerable_versions": ">=16.0.0-beta.0 <16.2.3",
+      "patched_versions": ">=16.2.3",
+      "severity": "high",
+      "cwe": "CWE-770",
+      "github_advisory_id": "GHSA-q4gf-8mx6-v5v3",
+      "url": "https://github.com/advisories/GHSA-q4gf-8mx6-v5v3"
+    },
+    "1117930": {
+      "findings": [
+        {
+          "version": "16.0.10",
+          "paths": [
+            ".>next",
+            ".>@vercel/analytics>next"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1117930,
+      "title": "Next.js Vulnerable to Denial of Service with Server Components",
+      "module_name": "next",
+      "vulnerable_versions": ">=16.0.0 <16.2.5",
+      "patched_versions": ">=16.2.5",
+      "severity": "high",
+      "cwe": "CWE-770",
+      "github_advisory_id": "GHSA-8h8q-6873-q5fj",
+      "url": "https://github.com/advisories/GHSA-8h8q-6873-q5fj"
+    },
+    "1118938": {
+      "findings": [
+        {
+          "version": "16.0.10",
+          "paths": [
+            ".>next",
+            ".>@vercel/analytics>next"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1118938,
+      "title": "Next.js has a Middleware / Proxy bypass in App Router applications via segment-prefetch routes - Incomplete Fix Follow-Up",
+      "module_name": "next",
+      "vulnerable_versions": ">=16.0.0 <16.2.6",
+      "patched_versions": ">=16.2.6",
+      "severity": "high",
+      "cwe": "CWE-288",
+      "github_advisory_id": "GHSA-26hh-7cqf-hhc6",
+      "url": "https://github.com/advisories/GHSA-26hh-7cqf-hhc6"
+    },
+    "1118949": {
+      "findings": [
+        {
+          "version": "16.0.10",
+          "paths": [
+            ".>next",
+            ".>@vercel/analytics>next"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1118949,
+      "title": "Next.js vulnerable to Denial of Service via connection exhaustion in applications using Cache Components",
+      "module_name": "next",
+      "vulnerable_versions": ">=16.0.0 <16.2.5",
+      "patched_versions": ">=16.2.5",
+      "severity": "high",
+      "cwe": "CWE-770",
+      "github_advisory_id": "GHSA-mg66-mrh9-m8jx",
+      "url": "https://github.com/advisories/GHSA-mg66-mrh9-m8jx"
+    },
+    "1118953": {
+      "findings": [
+        {
+          "version": "16.0.10",
+          "paths": [
+            ".>next",
+            ".>@vercel/analytics>next"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1118953,
+      "title": "Next.js vulnerable to server-side request forgery in applications using WebSocket upgrades",
+      "module_name": "next",
+      "vulnerable_versions": ">=16.0.0 <16.2.5",
+      "patched_versions": ">=16.2.5",
+      "severity": "high",
+      "cwe": "CWE-918",
+      "github_advisory_id": "GHSA-c4j6-fc7j-m34r",
+      "url": "https://github.com/advisories/GHSA-c4j6-fc7j-m34r"
+    },
+    "1118955": {
+      "findings": [
+        {
+          "version": "16.0.10",
+          "paths": [
+            ".>next",
+            ".>@vercel/analytics>next"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1118955,
+      "title": "Next.js has a Middleware / Proxy bypass through dynamic route parameter injection",
+      "module_name": "next",
+      "vulnerable_versions": ">=16.0.0 <16.2.5",
+      "patched_versions": ">=16.2.5",
+      "severity": "high",
+      "cwe": "CWE-288",
+      "github_advisory_id": "GHSA-492v-c6pp-mqqv",
+      "url": "https://github.com/advisories/GHSA-492v-c6pp-mqqv"
+    },
+    "1118959": {
+      "findings": [
+        {
+          "version": "16.0.10",
+          "paths": [
+            ".>next",
+            ".>@vercel/analytics>next"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1118959,
+      "title": "Next.js has a Middleware / Proxy bypass in App Router applications via segment-prefetch routes",
+      "module_name": "next",
+      "vulnerable_versions": ">=16.0.0 <16.2.5",
+      "patched_versions": ">=16.2.5",
+      "severity": "high",
+      "cwe": "CWE-288",
+      "github_advisory_id": "GHSA-267c-6grr-h53f",
+      "url": "https://github.com/advisories/GHSA-267c-6grr-h53f"
+    },
+    "1118961": {
+      "findings": [
+        {
+          "version": "16.0.10",
+          "paths": [
+            ".>next",
+            ".>@vercel/analytics>next"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1118961,
+      "title": "Next.js has a Middleware / Proxy bypass in Pages Router applications using i18n",
+      "module_name": "next",
+      "vulnerable_versions": ">=16.0.0 <16.2.5",
+      "patched_versions": ">=16.2.5",
+      "severity": "high",
+      "cwe": "CWE-863",
+      "github_advisory_id": "GHSA-36qx-fr4f-26g5",
+      "url": "https://github.com/advisories/GHSA-36qx-fr4f-26g5"
+    },
+    "1123259": {
+      "findings": [
+        {
+          "version": "8.19.0",
+          "paths": [
+            ".>@supabase/supabase-js>@supabase/realtime-js>ws",
+            ".>@supabase/ssr>@supabase/supabase-js>@supabase/realtime-js>ws"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1123259,
+      "title": "ws: Memory exhaustion DoS from tiny fragments and data chunks",
+      "module_name": "ws",
+      "vulnerable_versions": ">=8.0.0 <8.21.0",
+      "patched_versions": ">=8.21.0",
+      "severity": "high",
+      "cwe": "CWE-400, CWE-770, CWE-1050",
+      "github_advisory_id": "GHSA-96hv-2xvq-fx4p",
+      "url": "https://github.com/advisories/GHSA-96hv-2xvq-fx4p"
+    },
+    "1124066": {
+      "findings": [
+        {
+          "version": "0.34.5",
+          "paths": [
+            ".>next>sharp",
+            ".>@vercel/analytics>next>sharp"
+          ],
+          "dev": false,
+          "optional": true,
+          "bundled": false
+        }
+      ],
+      "id": 1124066,
+      "title": "sharp inherited vulnerabilities in libvips: CVE-2026-33327, CVE-2026-33328, CVE-2026-35590, CVE-2026-35591",
+      "module_name": "sharp",
+      "vulnerable_versions": "<0.35.0",
+      "patched_versions": ">=0.35.0",
+      "severity": "high",
+      "cwe": "CWE-1395",
+      "github_advisory_id": "GHSA-f88m-g3jw-g9cj",
+      "url": "https://github.com/advisories/GHSA-f88m-g3jw-g9cj"
+    },
+    "1124170": {
+      "findings": [
+        {
+          "version": "16.0.10",
+          "paths": [
+            ".>next",
+            ".>@vercel/analytics>next"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1124170,
+      "title": "Next.js: Middleware / Proxy bypass in App Router applications using Turbopack and single locale",
+      "module_name": "next",
+      "vulnerable_versions": ">=16.0.0 <16.2.11",
+      "patched_versions": ">=16.2.11",
+      "severity": "high",
+      "cwe": "CWE-285",
+      "github_advisory_id": "GHSA-6gpp-xcg3-4w24",
+      "url": "https://github.com/advisories/GHSA-6gpp-xcg3-4w24"
+    },
+    "1124171": {
+      "findings": [
+        {
+          "version": "16.0.10",
+          "paths": [
+            ".>next",
+            ".>@vercel/analytics>next"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1124171,
+      "title": "Next.js: Denial of Service in App Router using Server Actions",
+      "module_name": "next",
+      "vulnerable_versions": ">=16.0.0 <16.2.11",
+      "patched_versions": ">=16.2.11",
+      "severity": "high",
+      "cwe": "CWE-834",
+      "github_advisory_id": "GHSA-m99w-x7hq-7vfj",
+      "url": "https://github.com/advisories/GHSA-m99w-x7hq-7vfj"
+    },
+    "1124184": {
+      "findings": [
+        {
+          "version": "16.0.10",
+          "paths": [
+            ".>next",
+            ".>@vercel/analytics>next"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1124184,
+      "title": "Next.js: Server-Side Request Forgery in Server Actions on custom servers",
+      "module_name": "next",
+      "vulnerable_versions": ">=16.0.0 <16.2.11",
+      "patched_versions": ">=16.2.11",
+      "severity": "high",
+      "cwe": "CWE-918",
+      "github_advisory_id": "GHSA-89xv-2m56-2m9x",
+      "url": "https://github.com/advisories/GHSA-89xv-2m56-2m9x"
+    },
+    "1124192": {
+      "findings": [
+        {
+          "version": "16.0.10",
+          "paths": [
+            ".>next",
+            ".>@vercel/analytics>next"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1124192,
+      "title": "Next.js: Server-Side Request Forgery in rewrites via attacker-controlled destination hostname",
+      "module_name": "next",
+      "vulnerable_versions": ">=16.0.0 <16.2.11",
+      "patched_versions": ">=16.2.11",
+      "severity": "high",
+      "cwe": "CWE-918",
+      "github_advisory_id": "GHSA-p9j2-gv94-2wf4",
+      "url": "https://github.com/advisories/GHSA-p9j2-gv94-2wf4"
+    },
+    "1124252": {
+      "findings": [
+        {
+          "version": "8.4.31",
+          "paths": [
+            ".>next>postcss",
+            ".>@vercel/analytics>next>postcss"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        },
+        {
+          "version": "8.5.6",
+          "paths": [
+            ".>autoprefixer>postcss"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1124252,
+      "title": "PostCSS: Arbitrary file read and information disclosure via attacker-controlled sourceMappingURL in CSS comments",
+      "module_name": "postcss",
+      "vulnerable_versions": "<=8.5.11",
+      "patched_versions": ">=8.5.12",
+      "severity": "high",
+      "cwe": "CWE-22, CWE-200",
+      "github_advisory_id": "GHSA-6g55-p6wh-862q",
+      "url": "https://github.com/advisories/GHSA-6g55-p6wh-862q"
+    },
+    "1138811": {
+      "findings": [
+        {
+          "version": "3.3.11",
+          "paths": [
+            ".>next>postcss>nanoid",
+            ".>@vercel/analytics>next>postcss>nanoid",
+            ".>autoprefixer>postcss>nanoid"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1138811,
+      "title": "nanoid: non-secure generators can loop indefinitely with negative size",
+      "module_name": "nanoid",
+      "vulnerable_versions": "<3.3.16",
+      "patched_versions": ">=3.3.16",
+      "severity": "high",
+      "cwe": "CWE-835",
+      "github_advisory_id": "GHSA-28wg-ghj8-5hjv",
+      "url": "https://github.com/advisories/GHSA-28wg-ghj8-5hjv"
+    },
+    "1139427": {
+      "findings": [
+        {
+          "version": "3.3.11",
+          "paths": [
+            ".>next>postcss>nanoid",
+            ".>@vercel/analytics>next>postcss>nanoid",
+            ".>autoprefixer>postcss>nanoid"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1139427,
+      "title": "nanoid: custom generators can loop indefinitely when size is zero",
+      "module_name": "nanoid",
+      "vulnerable_versions": "<3.3.18",
+      "patched_versions": ">=3.3.18",
+      "severity": "high",
+      "cwe": "CWE-835",
+      "github_advisory_id": "GHSA-2v37-7h3g-55p8",
+      "url": "https://github.com/advisories/GHSA-2v37-7h3g-55p8"
+    },
+    "1139510": {
+      "findings": [
+        {
+          "version": "8.4.31",
+          "paths": [
+            ".>next>postcss",
+            ".>@vercel/analytics>next>postcss"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        },
+        {
+          "version": "8.5.6",
+          "paths": [
+            ".>autoprefixer>postcss"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1139510,
+      "title": "PostCSS: Path Traversal in Previous Source Map Auto-Loading (sourceMappingURL) leads to Arbitrary .map File Disclosure",
+      "module_name": "postcss",
+      "vulnerable_versions": "<=8.5.17",
+      "patched_versions": ">=8.5.18",
+      "severity": "high",
+      "cwe": "CWE-22",
+      "github_advisory_id": "GHSA-r28c-9q8g-f849",
+      "url": "https://github.com/advisories/GHSA-r28c-9q8g-f849"
+    },
+    "1153171": {
+      "findings": [
+        {
+          "version": "4.28.1",
+          "paths": [
+            ".>autoprefixer>browserslist"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1153171,
+      "title": "Browserslist: Unbounded memory growth (no cache eviction) via distinct query results, leading to eventual OOM",
+      "module_name": "browserslist",
+      "vulnerable_versions": "<=4.28.6",
+      "patched_versions": ">=4.28.7",
+      "severity": "high",
+      "cwe": "CWE-770",
+      "github_advisory_id": "GHSA-c83g-rgw3-j3cx",
+      "url": "https://github.com/advisories/GHSA-c83g-rgw3-j3cx"
+    },
+    "1153172": {
+      "findings": [
+        {
+          "version": "4.28.1",
+          "paths": [
+            ".>autoprefixer>browserslist"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1153172,
+      "title": "Browserslist: Uncaught crash / prototype write via untrusted browserslist-stats.json custom stats (normalizeStats)",
+      "module_name": "browserslist",
+      "vulnerable_versions": "<=4.28.6",
+      "patched_versions": ">=4.28.7",
+      "severity": "high",
+      "cwe": "CWE-248, CWE-1321",
+      "github_advisory_id": "GHSA-73wf-gq98-2v4g",
+      "url": "https://github.com/advisories/GHSA-73wf-gq98-2v4g"
+    },
+    "1153189": {
+      "findings": [
+        {
+          "version": "3.3.11",
+          "paths": [
+            ".>next>postcss>nanoid",
+            ".>@vercel/analytics>next>postcss>nanoid",
+            ".>autoprefixer>postcss>nanoid"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1153189,
+      "title": "nanoid: Integer Overflow or Wraparound",
+      "module_name": "nanoid",
+      "vulnerable_versions": "<3.3.12",
+      "patched_versions": ">=3.3.12",
+      "severity": "high",
+      "cwe": "CWE-190",
+      "github_advisory_id": "GHSA-xwg4-73v4-xw9w",
+      "url": "https://github.com/advisories/GHSA-xwg4-73v4-xw9w"
+    },
+    "1193676": {
+      "findings": [
+        {
+          "version": "16.0.10",
+          "paths": [
+            ".>next",
+            ".>@vercel/analytics>next"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1193676,
+      "title": "Next.js: Unauthenticated Remote Code Execution on windows-hosted servers",
+      "module_name": "next",
+      "vulnerable_versions": ">=16.0.0 <16.3.3",
+      "patched_versions": ">=16.3.3",
+      "severity": "critical",
+      "cwe": "CWE-22",
+      "github_advisory_id": "GHSA-p293-qw3h-jr36",
+      "url": "https://github.com/advisories/GHSA-p293-qw3h-jr36"
+    },
+    "1193725": {
+      "findings": [
+        {
+          "version": "0.34.5",
+          "paths": [
+            ".>next>sharp",
+            ".>@vercel/analytics>next>sharp"
+          ],
+          "dev": false,
+          "optional": true,
+          "bundled": false
+        }
+      ],
+      "id": 1193725,
+      "title": "sharp: Vulnerabilities in libheif: GHSA-g89c-p67h-r497 and GHSA-2jg2-4ch7-h545",
+      "module_name": "sharp",
+      "vulnerable_versions": "<0.35.4",
+      "patched_versions": ">=0.35.4",
+      "severity": "high",
+      "cwe": "CWE-122",
+      "github_advisory_id": "GHSA-rgj7-g3m4-5g8c",
+      "url": "https://github.com/advisories/GHSA-rgj7-g3m4-5g8c"
+    },
+    "1193732": {
+      "findings": [
+        {
+          "version": "16.0.10",
+          "paths": [
+            ".>next",
+            ".>@vercel/analytics>next"
+          ],
+          "dev": false,
+          "optional": false,
+          "bundled": false
+        }
+      ],
+      "id": 1193732,
+      "title": "Next.js: Unauthenticated Remote Code Execution in Image Optimization API when AVIF files are used",
+      "module_name": "next",
+      "vulnerable_versions": ">=16.0.0 <16.3.3",
+      "patched_versions": ">=16.3.3",
+      "severity": "critical",
+      "cwe": "CWE-1395",
+      "github_advisory_id": "GHSA-2xp9-vwfh-vxw4",
+      "url": "https://github.com/advisories/GHSA-2xp9-vwfh-vxw4"
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 3,
+      "moderate": 20,
+      "high": 24,
+      "critical": 2
+    },
+    "dependencies": 174,
+    "devDependencies": 0,
+    "optionalDependencies": 39,
+    "totalDependencies": 213
+  }
+}

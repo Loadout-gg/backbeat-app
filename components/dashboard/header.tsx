@@ -1,6 +1,7 @@
 "use client"
 
-import { Bell, ChevronDown, LogOut, X } from "lucide-react"
+import type { ReactNode } from "react"
+import { ChevronDown, LogOut } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -16,51 +17,45 @@ interface HeaderProps {
   title: string
   userName?: string
   avatarUrl?: string | null
+  navigation?: ReactNode
 }
 
-export function Header({ title, userName = "User", avatarUrl }: HeaderProps) {
-  const initials = userName
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2)
+export function Header({ title, userName = "User", avatarUrl, navigation }: HeaderProps) {
+  const displayName = userName.trim().replace(/\s+/g, " ") || "User"
+  const initials = displayName.split(" ").map((name) => name[0]).join("").toUpperCase().slice(0, 2)
 
   const handleSignOut = async () => {
     await signOut()
   }
 
   return (
-    <header className="flex h-14 items-center justify-between border-b bg-background px-8">
-      <h1 className="text-lg font-medium">{title}</h1>
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" className="relative h-8 w-8">
-          <Bell className="h-4 w-4" />
-          <span className="sr-only">Notifications</span>
-        </Button>
-        <Button variant="ghost" size="icon" className="relative h-8 w-8">
-          <X className="h-4 w-4" />
-          <span className="sr-only">Close</span>
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="flex items-center gap-2 px-2 h-8">
-              <span className="text-sm">{userName}</span>
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem asChild>
-              <a href="/dashboard/settings">Settings</a>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
-              <LogOut className="mr-2 h-4 w-4" />
-              Sign out
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+    <header className="flex min-h-16 min-w-0 items-center justify-between gap-3 bg-background">
+      <div className="flex min-w-0 items-center gap-2">
+        {navigation}
+        <p className="truncate text-lg font-medium sm:text-xl">{title}</p>
       </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" aria-label={`Account menu for ${displayName}`} className="h-11 min-w-11 shrink-0 gap-2 px-2">
+            <Avatar>
+              <AvatarImage src={avatarUrl || undefined} alt="" className="object-cover" />
+              <AvatarFallback className="text-xs font-medium">{initials}</AvatarFallback>
+            </Avatar>
+            <span className="hidden max-w-40 truncate text-sm sm:block">{displayName}</span>
+            <ChevronDown aria-hidden="true" className="hidden size-4 text-muted-foreground sm:block" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuItem asChild>
+            <a href="/dashboard/settings">Settings</a>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
+            <LogOut aria-hidden="true" className="mr-2 size-4" />
+            Sign out
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </header>
   )
 }

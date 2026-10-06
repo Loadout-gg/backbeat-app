@@ -1,0 +1,5 @@
+# Keep dependency lifecycle scripts disabled in this local recovery branch.
+# Unknown packages still require an explicit decision; nothing is allowlisted.
+allowBuilds:
+  sharp: false
+  unrs-resolver: false

@@ -1,0 +1,38 @@
+
+Running 1 test using 1 worker
+
+  ✘  1 tests/e2e/core-booking.spec.mjs:7:1 › local operator completes onboarding, artist and booking persistence, and recovers from save failure (12.6s)
+
+
+  1) tests/e2e/core-booking.spec.mjs:7:1 › local operator completes onboarding, artist and booking persistence, and recovers from save failure › real UI login and workspace onboarding
+
+    Error: expect(page).toHaveURL(expected) failed
+
+    Expected: "http://127.0.0.1:3101/onboarding"
+    Received: "http://127.0.0.1:3101/auth/login"
+    Timeout:  10000ms
+
+    Call log:
+      - Expect "toHaveURL" with timeout 10000ms
+        24 × locator resolved to <html lang="en">…</html>
+           - unexpected value "http://127.0.0.1:3101/auth/login"
+
+
+      61 |       catch { throw new Error('Synthetic password field interaction failed (details redacted)') }
+      62 |       await page.getByRole('button', { name: 'Login', exact: true }).click()
+    > 63 |       await expect(page).toHaveURL(`${APP}/onboarding`)
+         |                          ^
+      64 |       await page.getByLabel('Full Name', { exact: true }).fill('Backbeat Synthetic Operator')
+      65 |       await page.getByRole('button', { name: 'Continue', exact: true }).click()
+      66 |       await page.getByLabel('Workspace Name', { exact: true }).fill(tag)
+        at /Users/derek/Documents/Loadout/Backbeat/backbeat-app/tests/e2e/core-booking.spec.mjs:63:26
+        at /Users/derek/Documents/Loadout/Backbeat/backbeat-app/tests/e2e/core-booking.spec.mjs:57:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/browser/core-booking-local-operato-ed220--recovers-from-save-failure/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/browser/core-booking-local-operato-ed220--recovers-from-save-failure/error-context.md
+
+  1 failed
+    tests/e2e/core-booking.spec.mjs:7:1 › local operator completes onboarding, artist and booking persistence, and recovers from save failure

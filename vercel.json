@@ -1,0 +1,5 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "node --version && npm exec --yes --package=pnpm@12.3.4 -- pnpm install --frozen-lockfile --ignore-scripts --config.engine-strict=true",
+  "buildCommand": "npm exec --yes --package=pnpm@12.3.4 -- pnpm run build"
+}

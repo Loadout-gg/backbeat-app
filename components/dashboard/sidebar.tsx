@@ -7,68 +7,39 @@ import { cn } from "@/lib/utils"
 import { LayoutDashboard, Users, Settings } from "lucide-react"
 
 const navItems = [
-  {
-    label: "Dashboard",
-    href: "/dashboard",
-    icon: LayoutDashboard,
-  },
-  {
-    label: "Artists",
-    href: "/dashboard/artists",
-    icon: Users,
-  },
-  {
-    label: "Settings",
-    href: "/dashboard/settings",
-    icon: Settings,
-  },
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Artists", href: "/dashboard/artists", icon: Users },
+  { label: "Settings", href: "/dashboard/settings", icon: Settings },
 ]
 
-export function Sidebar() {
+export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname()
 
   return (
-    <aside className="flex h-screen w-56 flex-col border-r bg-background">
-      <div className="flex h-16 items-center border-b px-6">
+    <aside className="flex h-full min-h-0 flex-col">
+      <div className="flex h-16 shrink-0 items-center px-4">
         <BackbeatLogoFull />
       </div>
-      <nav className="flex-1 p-4">
-        <div className="space-y-1">
-          {navItems.slice(0, 2).map((item) => {
-            const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href))
-            return (
+      <nav aria-label="Main navigation" className="flex-1 rounded-xl bg-muted p-3">
+        {navItems.map((item) => {
+          const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`))
+          return (
+            <div key={item.href} className={item.label === "Settings" ? "mt-4 border-t pt-4" : "mb-1"}>
               <Link
-                key={item.href}
                 href={item.href}
+                onClick={onNavigate}
+                aria-current={isActive ? "page" : undefined}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                  isActive ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  "flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                  isActive ? "bg-background font-medium text-foreground shadow-sm" : "text-foreground hover:bg-background/70",
                 )}
               >
-                <item.icon className="h-4 w-4" />
+                <item.icon aria-hidden="true" className="size-4 shrink-0" />
                 {item.label}
               </Link>
-            )
-          })}
-        </div>
-        <div className="mt-6 space-y-1">
-          {navItems.slice(2).map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href)
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                  isActive ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
-              >
-                <item.icon className="h-4 w-4" />
-                {item.label}
-              </Link>
-            )
-          })}
-        </div>
+            </div>
+          )
+        })}
       </nav>
     </aside>
   )

@@ -2,6 +2,9 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { getCurrentWorkspaceId } from "./workspace";
+import type { BookingStatus } from "@/lib/booking-status";
+import { createBookingSchema, updateBookingSchema, bookingStatusSchema, bookingIdSchema } from "@/lib/booking-validation";
 
 export interface Booking {
   id: string;
@@ -11,7 +14,12 @@ export interface Booking {
   start_time: string;
   duration_minutes: number | null;
   notes: string | null;
-  status: "in_progress" | "confirmed" | "cancelled" | "completed";
+  venue_name: string | null;
+  venue_address: string | null;
+  contact_name_main: string | null;
+  contact_phone_main: string | null;
+  contact_email_main: string | null;
+  status: BookingStatus;
   created_at: string;
   updated_at: string;
   artist?: {
@@ -39,24 +47,23 @@ export interface BookingWithArtist extends Booking {
   };
 }
 
-export async function getBookings(): Promise<Booking[]> {
+export async function getBookings(options: { artistId?: string; failOnError?: boolean } = {}): Promise<Booking[]> {
+  if (options.artistId !== undefined && !createBookingSchema.shape.artistId.safeParse(options.artistId).success) {
+    throw new Error("Invalid artist ID");
+  }
   const supabase = await createClient();
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return [];
+  if (!user) {
+    if (options.failOnError) throw new Error("Not authenticated");
+    return [];
+  }
 
-  // Get user's workspace
-  const { data: membership } = await supabase
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .single();
+  const workspaceId = await getCurrentWorkspaceId();
 
-  if (!membership) return [];
-
-  const { data: bookings, error } = await supabase
+  let query = supabase
     .from("bookings")
     .select(
       `
@@ -64,11 +71,14 @@ export async function getBookings(): Promise<Booking[]> {
       artist:artists(id, stage_name, name, surname, location, fee, currency, profile_image_url)
     `
     )
-    .eq("workspace_id", membership.workspace_id)
-    .order("date", { ascending: true });
+    .eq("workspace_id", workspaceId);
+
+  if (options.artistId !== undefined) query = query.eq("artist_id", options.artistId);
+  const { data: bookings, error } = await query.order("date", { ascending: true });
 
   if (error) {
     console.error("Error fetching bookings:", error);
+    if (options.failOnError) throw new Error("Unable to load bookings. Please try again.");
     return [];
   }
 
@@ -82,6 +92,8 @@ export async function createBooking(formData: {
   durationMinutes: number;
   notes?: string;
 }): Promise<{ success: boolean; error?: string; booking?: Booking }> {
+  const validation = createBookingSchema.safeParse(formData);
+  if (!validation.success) return { success: false, error: validation.error.issues[0].message };
   const supabase = await createClient();
 
   const {
@@ -91,21 +103,12 @@ export async function createBooking(formData: {
     return { success: false, error: "Not authenticated" };
   }
 
-  // Get user's workspace
-  const { data: membership } = await supabase
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .single();
-
-  if (!membership) {
-    return { success: false, error: "No workspace found" };
-  }
+  const workspaceId = await getCurrentWorkspaceId();
 
   const { data: booking, error } = await supabase
     .from("bookings")
     .insert({
-      workspace_id: membership.workspace_id,
+      workspace_id: workspaceId,
       artist_id: formData.artistId,
       date: formData.date,
       start_time: formData.startTime,
@@ -127,6 +130,7 @@ export async function createBooking(formData: {
   }
 
   revalidatePath("/dashboard");
+  revalidatePath("/dashboard/bookings");
   revalidatePath("/dashboard/artists");
 
   return { success: true, booking };
@@ -134,8 +138,11 @@ export async function createBooking(formData: {
 
 export async function updateBookingStatus(
   bookingId: string,
-  status: "pending" | "confirmed" | "cancelled"
+  status: BookingStatus
 ): Promise<{ success: boolean; error?: string }> {
+  if (!bookingIdSchema.safeParse(bookingId).success) return { success: false, error: "Invalid booking ID" };
+  const validation = bookingStatusSchema.safeParse(status);
+  if (!validation.success) return { success: false, error: "Invalid booking status" };
   const supabase = await createClient();
 
   const {
@@ -145,17 +152,24 @@ export async function updateBookingStatus(
     return { success: false, error: "Not authenticated" };
   }
 
-  const { error } = await supabase
+  const workspaceId = await getCurrentWorkspaceId();
+
+  const { data: changedBooking, error } = await supabase
     .from("bookings")
     .update({ status, updated_at: new Date().toISOString() })
-    .eq("id", bookingId);
+    .eq("id", bookingId)
+    .eq("workspace_id", workspaceId)
+    .select("id")
+    .single();
 
   if (error) {
     console.error("Error updating booking:", error);
     return { success: false, error: error.message };
   }
+  if (!changedBooking) return { success: false, error: "Booking not found" };
 
   revalidatePath("/dashboard");
+  revalidatePath("/dashboard/bookings");
   revalidatePath("/dashboard/artists");
 
   return { success: true };
@@ -164,6 +178,7 @@ export async function updateBookingStatus(
 export async function deleteBooking(
   bookingId: string
 ): Promise<{ success: boolean; error?: string }> {
+  if (!bookingIdSchema.safeParse(bookingId).success) return { success: false, error: "Invalid booking ID" };
   const supabase = await createClient();
 
   const {
@@ -173,17 +188,24 @@ export async function deleteBooking(
     return { success: false, error: "Not authenticated" };
   }
 
-  const { error } = await supabase
+  const workspaceId = await getCurrentWorkspaceId();
+
+  const { data: changedBooking, error } = await supabase
     .from("bookings")
     .delete()
-    .eq("id", bookingId);
+    .eq("id", bookingId)
+    .eq("workspace_id", workspaceId)
+    .select("id")
+    .single();
 
   if (error) {
     console.error("Error deleting booking:", error);
     return { success: false, error: error.message };
   }
+  if (!changedBooking) return { success: false, error: "Booking not found" };
 
   revalidatePath("/dashboard");
+  revalidatePath("/dashboard/bookings");
   revalidatePath("/dashboard/artists");
 
   return { success: true };
@@ -199,14 +221,7 @@ export async function getBooking(
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  // Get user's workspace
-  const { data: membership } = await supabase
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .single();
-
-  if (!membership) return null;
+  const workspaceId = await getCurrentWorkspaceId();
 
   const { data: booking, error } = await supabase
     .from("bookings")
@@ -217,7 +232,7 @@ export async function getBooking(
     `
     )
     .eq("id", bookingId)
-    .eq("workspace_id", membership.workspace_id)
+    .eq("workspace_id", workspaceId)
     .single();
 
   if (error || !booking) {
@@ -235,22 +250,25 @@ export async function updateBooking(
     start_time?: string;
     duration_minutes?: number | null;
     notes?: string | null;
-    status?: "in_progress" | "confirmed" | "cancelled" | "completed";
-    venue_name?: string;
-    venue_address?: string;
+    status?: BookingStatus;
+    venue_name?: string | null;
+    venue_address?: string | null;
     event_type?: string;
     expected_audience?: string;
     driver_name?: string;
     driver_phone?: string;
     driver_distance?: string;
-    contact_name_main?: string;
-    contact_phone_main?: string;
-    contact_email_main?: string;
+    contact_name_main?: string | null;
+    contact_phone_main?: string | null;
+    contact_email_main?: string | null;
     contact_name_secondary?: string;
     contact_phone_secondary?: string;
     contact_email_secondary?: string;
   }
 ): Promise<{ success: boolean; error?: string }> {
+  if (!bookingIdSchema.safeParse(bookingId).success) return { success: false, error: "Invalid booking ID" };
+  const validation = updateBookingSchema.safeParse(patch);
+  if (!validation.success) return { success: false, error: validation.error.issues[0].message };
   const supabase = await createClient();
 
   const {
@@ -260,41 +278,34 @@ export async function updateBooking(
     return { success: false, error: "Not authenticated" };
   }
 
-  // Get user's workspace
-  const { data: membership } = await supabase
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .single();
-
-  if (!membership) {
-    return { success: false, error: "No workspace found" };
-  }
+  const workspaceId = await getCurrentWorkspaceId();
 
   // Only update fields that are in the bookings table schema
   const dbPatch: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
   };
 
-  if (patch.date !== undefined) dbPatch.date = patch.date;
-  if (patch.start_time !== undefined) dbPatch.start_time = patch.start_time;
-  if (patch.duration_minutes !== undefined)
-    dbPatch.duration_minutes = patch.duration_minutes;
-  if (patch.notes !== undefined) dbPatch.notes = patch.notes;
-  if (patch.status !== undefined) dbPatch.status = patch.status;
+  // The schema is the write allowlist and carries normalized M2 values.
+  for (const [field, value] of Object.entries(validation.data)) {
+    if (value !== undefined) dbPatch[field] = value;
+  }
 
-  const { error } = await supabase
+  const { data: changedBooking, error } = await supabase
     .from("bookings")
     .update(dbPatch)
     .eq("id", bookingId)
-    .eq("workspace_id", membership.workspace_id);
+    .eq("workspace_id", workspaceId)
+    .select("id")
+    .single();
 
   if (error) {
     console.error("Error updating booking:", error);
     return { success: false, error: error.message };
   }
+  if (!changedBooking) return { success: false, error: "Booking not found" };
 
   revalidatePath("/dashboard");
+  revalidatePath("/dashboard/bookings");
   revalidatePath("/dashboard/artists");
   revalidatePath(`/dashboard/bookings/${bookingId}`);
 

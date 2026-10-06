@@ -1,0 +1,32 @@
+[
+  {
+    "command": "pnpm install --frozen-lockfile --ignore-scripts",
+    "exit_code": 0,
+    "output": "\u2713 Lockfile passes supply-chain policies (verified 48m ago)\nLockfile is up to date, resolution step is skipped\nDone in 95ms using pnpm v12.3.4\n\n"
+  },
+  {
+    "command": "pnpm test",
+    "exit_code": 0,
+    "output": "\n\u001b[1m\u001b[30m\u001b[46m RUN \u001b[49m\u001b[39m\u001b[22m \u001b[36mv4.1.11 \u001b[39m\u001b[90m/Users/derek/Documents/Loadout/Backbeat/backbeat-app\u001b[39m\n\n \u001b[32m\u2713\u001b[39m tests/unit/workspace.test.ts \u001b[2m(\u001b[22m\u001b[2m3 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 4\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m\u2713\u001b[39m tests/unit/artists.test.ts \u001b[2m(\u001b[22m\u001b[2m5 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 7\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m\u2713\u001b[39m tests/unit/local-analytics.test.ts \u001b[2m(\u001b[22m\u001b[2m2 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 6\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m\u2713\u001b[39m tests/unit/bookings.test.ts \u001b[2m(\u001b[22m\u001b[2m30 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 10\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m\u2713\u001b[39m tests/unit/supabase-environment.test.ts \u001b[2m(\u001b[22m\u001b[2m10 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 75\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m\u2713\u001b[39m tests/component/booking-create.test.tsx \u001b[2m(\u001b[22m\u001b[2m3 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[32m 210\u001b[2mms\u001b[22m\u001b[39m\n \u001b[32m\u2713\u001b[39m tests/component/booking-save.test.tsx \u001b[2m(\u001b[22m\u001b[2m8 tests\u001b[22m\u001b[2m)\u001b[22m\u001b[33m 486\u001b[2mms\u001b[22m\u001b[39m\n\n\u001b[2m Test Files \u001b[22m \u001b[1m\u001b[32m7 passed\u001b[39m\u001b[22m\u001b[90m (7)\u001b[39m\n\u001b[2m      Tests \u001b[22m \u001b[1m\u001b[32m61 passed\u001b[39m\u001b[22m\u001b[90m (61)\u001b[39m\n\u001b[2m   Start at \u001b[22m 01:30:19\n\u001b[2m   Duration \u001b[22m 1.67s\u001b[2m (transform 371ms, setup 0ms, import 989ms, tests 798ms, environment 2.19s)\u001b[22m\n\n\n$ vitest run\n(node:8141) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.\n(Use `node --trace-deprecation ...` to show where the warning was created)\n"
+  },
+  {
+    "command": "pnpm run test:runtime",
+    "exit_code": 0,
+    "output": "\u2714 launcher refuses to start Next without an isolated environment (43.715209ms)\n\u2714 accepts only the explicit isolated development configuration (1.52875ms)\n\u2714 forwards traffic to the designated upstream and releases its sockets (12.159583ms)\n\u2139 tests 3\n\u2139 suites 0\n\u2139 pass 3\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 110.753875\n\n$ node --test tests/runtime/*.test.cjs\n"
+  },
+  {
+    "command": "pnpm exec tsc --noEmit --incremental false --pretty false",
+    "exit_code": 0,
+    "output": "\n"
+  },
+  {
+    "command": "pnpm run lint",
+    "exit_code": 0,
+    "output": "\n$ eslint . --max-warnings=0\n"
+  },
+  {
+    "command": "git diff --check",
+    "exit_code": 0,
+    "output": "\n"
+  }
+]

@@ -1,0 +1,39 @@
+
+Running 1 test using 1 worker
+
+  ✘  1 tests/e2e/core-booking.spec.mjs:7:1 › local operator completes onboarding, artist and booking persistence, and recovers from save failure (11.4s)
+
+
+  1) tests/e2e/core-booking.spec.mjs:7:1 › local operator completes onboarding, artist and booking persistence, and recovers from save failure › booking creation, update after reload and visible failed-save recovery
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('alert')
+    Expected: visible
+    Error: strict mode violation: getByRole('alert') resolved to 2 elements:
+        1) <p role="alert" class="mb-4 text-sm text-destructive">Unable to save booking. Please try again.</p> aka getByText('Unable to save booking.')
+        2) <div role="alert" aria-live="assertive" id="__next-route-announcer__"></div> aka locator('[id="__next-route-announcer__"]')
+
+    Call log:
+      - Expect "toBeVisible" getByRole('alert') with timeout 10000ms
+      - waiting for getByRole('alert')
+
+
+      144 |       await notes.fill(`${tag} should not persist`)
+      145 |       await page.getByRole('button', { name: 'Update booking', exact: true }).click()
+    > 146 |       await expect(page.getByRole('alert')).toBeVisible()
+          |                                             ^
+      147 |       await expect(page.getByRole('button', { name: 'Update booking', exact: true })).toBeEnabled()
+      148 |       expect(failed).toBe(true)
+      149 |       expect((await request(`/rest/v1/bookings?id=eq.${bookingId}`))[0].notes).toBe(`${tag} persisted update`)
+        at /Users/derek/Documents/Loadout/Backbeat/backbeat-app/tests/e2e/core-booking.spec.mjs:146:45
+        at /Users/derek/Documents/Loadout/Backbeat/backbeat-app/tests/e2e/core-booking.spec.mjs:115:5
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/browser/core-booking-local-operato-ed220--recovers-from-save-failure/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/browser/core-booking-local-operato-ed220--recovers-from-save-failure/error-context.md
+
+  1 failed
+    tests/e2e/core-booking.spec.mjs:7:1 › local operator completes onboarding, artist and booking persistence, and recovers from save failure

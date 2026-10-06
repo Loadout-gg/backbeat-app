@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-29T23:56:18.508594+02:00",
+  "title": "Design System: Backbeat Agent",
+  "extensions": {
+    "shadows": [
+      {
+        "name": "row",
+        "value": "0 1px 2px 0 rgb(0 0 0 / 0.05)",
+        "purpose": "Existing shadow-xs for white work rows."
+      },
+      {
+        "name": "selected-navigation",
+        "value": "0 1px 3px 0 rgb(0 0 0 / 0.05)",
+        "purpose": "Existing shadow-sm for selected navigation."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-change",
+        "value": "150ms",
+        "purpose": "Existing color-state transitions; no entrance choreography."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary action",
+      "kind": "button",
+      "description": "Existing primary action treatment.",
+      "html": "<button class=\"ds-primary\">New Booking</button>",
+      "css": ".ds-primary{background:oklch(0.205 0 0);color:oklch(0.985 0 0);border:0;border-radius:calc(.625rem - 2px);padding:10px 16px;font:500 14px system-ui;min-height:40px}.ds-primary:hover{opacity:.9}.ds-primary:focus-visible{outline:2px solid oklch(.145 0 0);outline-offset:3px}"
+    },
+    {
+      "name": "Secondary action",
+      "kind": "button",
+      "description": "Existing outlined supported action.",
+      "html": "<button class=\"ds-secondary\">Continue setup</button>",
+      "css": ".ds-secondary{background:white;color:oklch(.145 0 0);border:1px solid oklch(.922 0 0);border-radius:calc(.625rem - 2px);padding:10px 12px;font:500 14px system-ui;min-height:40px}.ds-secondary:hover{background:oklch(.97 0 0)}.ds-secondary:focus-visible{outline:2px solid oklch(.145 0 0);outline-offset:3px}"
+    },
+    {
+      "name": "Selected navigation",
+      "kind": "nav",
+      "description": "Semantic current route in an inset pale rail.",
+      "html": "<nav class=\"ds-nav\"><a href=\"#\" aria-current=\"page\">Dashboard</a></nav>",
+      "css": ".ds-nav{background:oklch(.97 0 0);padding:12px;border-radius:calc(.625rem + 4px)}.ds-nav a{display:block;background:white;color:oklch(.145 0 0);padding:12px;border-radius:.625rem;text-decoration:none;font:500 14px system-ui;box-shadow:0 1px 3px rgb(0 0 0/.05)}.ds-nav a:focus-visible{outline:2px solid oklch(.145 0 0);outline-offset:2px}"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "description": "Preserved shadcn input vocabulary; no form behavior change.",
+      "html": "<label class=\"ds-field\">Venue name<input placeholder=\"Venue name\"></label>",
+      "css": ".ds-field{display:grid;gap:6px;font:500 14px system-ui;color:oklch(.145 0 0)}.ds-field input{padding:8px 12px;border:1px solid oklch(.922 0 0);border-radius:calc(.625rem - 2px);font:400 14px system-ui;background:white;color:inherit}.ds-field input::placeholder{color:oklch(.556 0 0)}.ds-field input:focus-visible{outline:2px solid oklch(.145 0 0);outline-offset:2px}"
+    },
+    {
+      "name": "Work row",
+      "kind": "card",
+      "description": "Compact row with a distinct date and real record metadata.",
+      "html": "<article class=\"ds-row\"><div class=\"ds-date\">JAN<br><strong>18</strong></div><div><strong>Example artist</strong><p>Example venue</p></div></article>",
+      "css": ".ds-row{display:flex;align-items:center;gap:12px;padding:12px;background:white;border-radius:calc(.625rem + 4px);box-shadow:0 1px 2px rgb(0 0 0/.05);font:400 14px system-ui;color:oklch(.145 0 0)}.ds-date{padding-right:12px;border-right:1px solid oklch(.922 0 0);text-align:center;font-size:12px}.ds-date strong{font-size:18px}.ds-row p{margin:4px 0 0;font-size:12px;color:oklch(.556 0 0)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Backbeat agency workspace",
+    "overview": "Refine the operator-confirmed Obra/shadcn foundation. Preserve the neutral palette, existing logo and real behavior; improve hierarchy, density, accessibility and responsive composition.",
+    "keyCharacteristics": [
+      "Inset neutral navigation",
+      "Compact supported metrics",
+      "Real records and creation actions",
+      "Distinct mobile navigation"
+    ],
+    "rules": [
+      {
+        "name": "Truthful controls",
+        "body": "Do not present an unimplemented action as operational.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "Preserve real data and M2 semantics.",
+      "Verify narrow layouts and keyboard flow."
+    ],
+    "donts": [
+      "Do not invent a business metric or event duration.",
+      "Do not treat the Agent dashboard as performer mobile."
+    ]
+  }
+}

@@ -43,7 +43,8 @@ export default function RootLayout({
     <html lang="en">
       <body className="font-sans antialiased">
         {children}
-        <Analytics />
+        {process.env.BACKBEAT_ENV !== "development" &&
+          process.env.NEXT_PUBLIC_BACKBEAT_ENV !== "development" && <Analytics />}
       </body>
     </html>
   )

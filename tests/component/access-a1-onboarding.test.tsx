@@ -1,0 +1,77 @@
+// @vitest-environment jsdom
+// Mocked server action boundary: not database bootstrap evidence.
+import React from "react"
+import { beforeEach, afterEach, expect, it, vi } from "vitest"
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
+const { getCurrentUser, updateProfile, createWorkspace, push } = vi.hoisted(() => ({ getCurrentUser: vi.fn(), updateProfile: vi.fn(), createWorkspace: vi.fn(), push: vi.fn() }))
+vi.mock("@/lib/actions/workspace", () => ({ getCurrentUser, updateProfile, createWorkspace }))
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push, replace: push }) }))
+import OnboardingPage from "@/app/onboarding/page"
+beforeEach(() => {
+ getCurrentUser.mockReset(); updateProfile.mockReset(); createWorkspace.mockReset()
+ getCurrentUser.mockResolvedValue({ user: { id: "mock-user" }, profile: { first_name: "Ada", last_name: "Lovelace", full_name: "Ada Lovelace" }, onboardingStatus: { completed: false }, workspace: null })
+ createWorkspace.mockResolvedValue({ success: true, workspaceId: "mock-workspace" })
+})
+afterEach(cleanup)
+it("does not mistake a missing persisted profile for a legacy identity", async () => {
+ getCurrentUser.mockResolvedValue({ user: { id: "current" }, profile: null, onboardingStatus: null })
+ render(<OnboardingPage />)
+ expect((await screen.findByRole("alert")).textContent).toContain("load your profile")
+ expect(screen.queryByLabelText("Full Name")).toBeNull()
+})
+it("returns completed users to their dashboard without creating a workspace", async () => {
+ getCurrentUser.mockResolvedValue({ user: { id: "existing" }, profile: {}, onboardingStatus: { completed: true }, workspace: { id: "existing-workspace" } })
+ render(<OnboardingPage />)
+ await waitFor(() => expect(push).toHaveBeenCalledWith("/dashboard"))
+ expect(screen.queryByLabelText("Full Name")).toBeNull()
+ expect(createWorkspace).not.toHaveBeenCalled()
+})
+it("redirects unauthenticated users without exposing setup", async () => {
+ getCurrentUser.mockResolvedValue(null)
+ render(<OnboardingPage />)
+ await waitFor(() => expect(push).toHaveBeenCalledWith("/auth/login"))
+ expect(screen.queryByLabelText("Full Name")).toBeNull()
+ expect(createWorkspace).not.toHaveBeenCalled()
+})
+it("keeps workspace draft recoverable after bootstrap failure and prevents duplicate submissions", async () => {
+ createWorkspace.mockRejectedValueOnce(new Error("Could not create workspace"))
+ render(<OnboardingPage />)
+ const input = await screen.findByLabelText("Workspace Name")
+ fireEvent.change(input, { target: { value: "Ada Agency" } })
+ fireEvent.click(screen.getByRole("button", { name: "Create workspace" }))
+ expect((await screen.findByRole("alert")).textContent).toContain("Could not create workspace")
+ expect((input as HTMLInputElement).value).toBe("Ada Agency")
+ createWorkspace.mockReturnValue(new Promise(() => {}))
+ fireEvent.submit(input.closest("form")!); fireEvent.submit(input.closest("form")!)
+ expect(createWorkspace).toHaveBeenCalledTimes(2)
+})
+it("offers profile-load retry without exposing either setup step on failure", async () => {
+ getCurrentUser.mockRejectedValueOnce(new Error("offline"))
+ render(<OnboardingPage />)
+ expect((await screen.findByRole("alert")).textContent).toContain("load your profile")
+ expect(screen.queryByLabelText("Full Name")).toBeNull()
+ expect(screen.queryByLabelText("Workspace Name")).toBeNull()
+ fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+ await screen.findByLabelText("Workspace Name")
+})
+it("retains legacy Full Name compatibility without guessing separated identity", async () => {
+ getCurrentUser.mockResolvedValue({ user: { id: "legacy" }, profile: { full_name: "Existing Legacy Name" }, onboardingStatus: { completed: false } })
+ render(<OnboardingPage />)
+ const input = await screen.findByLabelText("Full Name")
+ expect((input as HTMLInputElement).value).toBe("Existing Legacy Name")
+ fireEvent.change(input, { target: { value: "Updated Legacy Name" } })
+ fireEvent.click(screen.getByRole("button", { name: "Continue" }))
+ await screen.findByLabelText("Workspace Name")
+ expect(updateProfile).toHaveBeenCalledWith("Updated Legacy Name")
+})
+it("waits for persisted identity and skips duplicate Full Name for named users", async () => {
+ render(<OnboardingPage />)
+ expect(screen.queryByLabelText("Full Name")).toBeNull()
+ expect(screen.getByRole("status").textContent).toContain("Loading")
+ const input = await screen.findByLabelText("Workspace Name")
+ fireEvent.change(input, { target: { value: "Ada Agency" } })
+ fireEvent.click(screen.getByRole("button", { name: "Create workspace" }))
+ await waitFor(() => expect(createWorkspace).toHaveBeenCalledWith("Ada Agency"))
+ expect(updateProfile).not.toHaveBeenCalled()
+ await waitFor(() => expect(push).toHaveBeenCalledWith("/dashboard"))
+})

@@ -1,0 +1,39 @@
+minimumLimaVersion: "2.2.0"
+vmType: vz
+arch: aarch64
+images:
+  - location: https://cloud-images.ubuntu.com/releases/noble/release-20260705/ubuntu-24.04-server-cloudimg-arm64.img
+    arch: aarch64
+    digest: sha256:7df0201546f75b8bcc1044594c806c35749421ad3c9bc1be2a3ab806cfae39cc
+cpus: 2
+memory: 4GiB
+disk: 30GiB
+mounts: []
+ssh:
+  localPort: 53169
+  loadDotSSHPubKeys: false
+  forwardAgent: false
+containerd:
+  system: false
+  user: false
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -euo pipefail
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update
+      apt-get install -y ca-certificates curl git rsync docker.io docker-compose-v2 docker-buildx
+      usermod -aG docker derek
+      systemctl enable --now docker
+probes:
+  - mode: readiness
+    description: Development Docker daemon ready
+    script: |
+      #!/bin/bash
+      set -euo pipefail
+      sudo -n docker info >/dev/null
+portForwards:
+  - guestPortRange: [1, 65535]
+    hostIP: "127.0.0.1"
+    ignore: true
