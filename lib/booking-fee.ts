@@ -27,7 +27,8 @@ export type BookingFeePair = {
   fee_amount_minor: number | null
   fee_currency: BookingFeeCurrency | null
 }
-type FeeResult = { success: true; data: BookingFeePair } | { success: false; error: string }
+export type BookingFeeError = { field: "amount" | "currency"; error: string }
+type FeeResult = { success: true; data: BookingFeePair } | ({ success: false } & BookingFeeError)
 
 export function parseBookingFee(amount: string, currency: string): FeeResult {
   const text = amount.trim()
@@ -36,20 +37,23 @@ export function parseBookingFee(amount: string, currency: string): FeeResult {
   }
   const parsedCurrency = currencySchema.safeParse(currency)
   if (!parsedCurrency.success || text === "") {
-    return { success: false, error: "Enter both booking fee amount and currency, or clear both" }
+    return { success: false, field: text === "" ? "amount" : "currency", error: "Enter both booking fee amount and currency, or clear both" }
+  }
+  if (text.startsWith("-")) {
+    return { success: false, field: "amount", error: "Booking fee must be zero or greater" }
   }
   const code = parsedCurrency.data
   const digits = fractionDigits[code]
   const pattern = digits === 0 ? /^\d{1,12}$/ : /^\d{1,10}(?:[.,]\d{1,2})?$/
   if (!pattern.test(text)) {
-    return { success: false, error: digits === 0
+    return { success: false, field: "amount", error: digits === 0
       ? "Enter a whole-number JPY fee without separators"
       : "Enter a booking fee with at most two decimals and no grouping separators" }
   }
   const [whole, fraction = ""] = text.replace(",", ".").split(".")
   const minor = Number(whole) * 10 ** digits + (digits === 0 ? 0 : Number(fraction.padEnd(digits, "0")))
   if (!Number.isSafeInteger(minor) || minor > MAX_BOOKING_FEE_MINOR) {
-    return { success: false, error: "Booking fee is too large" }
+    return { success: false, field: "amount", error: "Booking fee is too large" }
   }
   return { success: true, data: { fee_amount_minor: minor, fee_currency: code } }
 }

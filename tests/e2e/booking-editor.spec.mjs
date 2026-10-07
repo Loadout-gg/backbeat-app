@@ -144,18 +144,18 @@ test('Booking editor preserves saved data, accessible tabs and usable narrow lay
       const bookingLink = panel.locator(`a[href="/dashboard/bookings/${booking.id}"]`)
       await expect(bookingLink).toHaveCount(1)
       const calendar = panel.locator('[data-slot="calendar"]')
-      for (let month = 0; month < 12 && !(await calendar.locator('button[data-day="1/19/2027"]').count()); month++) {
+      for (let month = 0; month < 12 && !(await calendar.locator('[data-day="2027-01-19"]').count()); month++) {
         await calendar.getByRole('button', { name: /next month/i }).click()
       }
-      await expect(calendar.locator('button[data-day="1/19/2027"]')).toHaveAttribute('data-selected-single', 'true')
-      await expect(calendar.locator('button[data-day="1/18/2027"]')).toBeVisible()
-      await expect(calendar.locator('button[data-day="1/18/2027"]')).not.toHaveAttribute('data-selected-single', 'true')
+      await expect(calendar.locator('[data-day="2027-01-19"]')).toHaveAttribute('data-booked', 'true')
+      await expect(calendar.locator('[data-day="2027-01-18"]')).toBeVisible()
+      await expect(calendar.locator('[data-day="2027-01-18"]')).not.toHaveAttribute('data-booked', 'true')
       expect(await request(`/rest/v1/bookings?artist_id=eq.${artist.id}&select=id,date`)).toEqual([{ id: booking.id, date: '2027-01-19' }])
       await calendar.scrollIntoViewIfNeeded()
       await page.screenshot({ animations: 'disabled', path: testInfo.outputPath('calendar-moved-date.png') })
       await bookingLink.click()
       await expect(page).toHaveURL(`${APP}/dashboard/bookings/${booking.id}`)
-      measurements.push({ label: 'reschedule-calendar', oldDateSelected: false, newDateSelected: true, bookingCount: 1 })
+      measurements.push({ label: 'reschedule-calendar', oldDateBooked: false, newDateBooked: true, bookingCount: 1 })
     })
 
     await test.step('mobile phone-only save preserves the complete unrelated record', async () => {

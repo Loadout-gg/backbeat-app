@@ -1,14 +1,14 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, type ComponentProps } from "react"
 import { useSearchParams, useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { parseISO } from "date-fns"
+import { Day, labelGridcell } from "react-day-picker"
 import type { Booking } from "@/lib/actions/bookings"
 import type { EventWithRelations } from "@/lib/actions/events"
 import {
   ChevronRight,
-  ChevronLeft,
   Edit,
   MessageSquare,
   Plus,
@@ -123,6 +123,10 @@ function isValidTab(tab: string | null): tab is TabValue {
   return tab !== null && VALID_TABS.includes(tab as TabValue)
 }
 
+function ArtistCalendarDay({ modifiers, ...props }: ComponentProps<typeof Day>) {
+  return <Day {...props} modifiers={modifiers} data-booked={modifiers.booked || undefined} />
+}
+
 interface ArtistProfileClientProps {
   artist: Artist
   bookings: Booking[]
@@ -207,29 +211,8 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
   ].sort((a, b) => a.date.getTime() - b.date.getTime() || a.time.localeCompare(b.time))
   const hasCalendarItems = calendarEvents.length > 0
 
-  // Navigate calendar months
-  const handlePreviousMonth = () => {
-    setCalendarMonth((prev) => {
-      const newDate = new Date(prev)
-      newDate.setMonth(newDate.getMonth() - 1)
-      return newDate
-    })
-  }
-
-  const handleNextMonth = () => {
-    setCalendarMonth((prev) => {
-      const newDate = new Date(prev)
-      newDate.setMonth(newDate.getMonth() + 1)
-      return newDate
-    })
-  }
-
-  const formatMonthYear = (date: Date) => {
-    return date.toLocaleDateString("en-US", { month: "long", year: "numeric" })
-  }
-
   return (
-    <div className="space-y-6 p-6">
+    <div className="min-w-0 space-y-6 p-4 sm:p-6 [overflow-wrap:anywhere]">
       {/* Updated Toast */}
       {showUpdatedToast && (
         <div className="fixed top-4 right-4 z-50 bg-black text-white px-4 py-3 rounded-lg shadow-lg animate-in fade-in slide-in-from-top-2">
@@ -247,17 +230,17 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
       </div>
 
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center justify-center w-16 h-16 rounded-full bg-muted text-2xl font-semibold">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex min-w-0 flex-1 items-center gap-4">
+          <div className="flex shrink-0 items-center justify-center w-16 h-16 rounded-full bg-muted text-2xl font-semibold">
             {displayName.charAt(0).toUpperCase()}
           </div>
-          <div>
+          <div className="min-w-0">
             <h1 className="text-2xl font-semibold">{displayName}</h1>
             {realName && <p className="text-muted-foreground">{realName}</p>}
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 xl:shrink-0">
           <Button variant="outline" asChild>
             <Link href={`/dashboard/artists/${artist.id}/edit`}>
               <Edit className="mr-2 h-4 w-4" />
@@ -279,16 +262,16 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Contact Information Card */}
         <Card>
-          <CardContent className="p-6">
+          <CardContent className="p-4 sm:p-6">
             <h3 className="text-lg font-semibold mb-4">Contact Information</h3>
-            <div className="grid grid-cols-2 gap-y-4 gap-x-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-8">
               <div>
                 <p className="text-sm text-muted-foreground">Contact name</p>
                 <p className="font-medium">
                   {contactName || realName || displayName}
                 </p>
               </div>
-              <div />
+              <div className="hidden sm:block" />
               <div>
                 <p className="text-sm text-muted-foreground">Email</p>
                 {artist.email ? (
@@ -330,14 +313,14 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                   Social media & Website
                 </p>
                 {socialLinks.length > 0 ? (
-                  <div className="flex items-center gap-2 mt-1">
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
                     {socialLinks.map((link, idx) => (
                       <a
                         key={idx}
                         href={ensureScheme(link.url)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center justify-center w-7 h-7 border rounded text-xs font-medium hover:bg-muted"
+                        className="flex shrink-0 items-center justify-center w-7 h-7 border rounded text-xs font-medium hover:bg-muted"
                         title={link.type}
                       >
                         {getSocialIcon(link.type)}
@@ -354,9 +337,9 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
 
         {/* Pricing Card */}
         <Card className="bg-[#f9fafb]">
-          <CardContent className="p-6">
+          <CardContent className="p-4 sm:p-6">
             <h3 className="text-lg font-semibold mb-4">Pricing</h3>
-            <div className="grid grid-cols-2 gap-y-4 gap-x-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-8">
               <div>
                 <p className="text-sm text-muted-foreground">Base rate</p>
                 {artist.fee !== null && artist.fee !== undefined ? (
@@ -378,7 +361,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                 </p>
               </div>
               {artist.pricing_notes && (
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <p className="text-sm text-muted-foreground">
                     Additional info
                   </p>
@@ -392,34 +375,34 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
 
       {/* Tabs Section */}
       <Card>
-        <CardContent className="p-6">
+        <CardContent className="p-4 sm:p-6">
           <Tabs
             value={currentTab}
             onValueChange={handleTabChange}
             className="w-full"
           >
-            <TabsList className="w-full justify-start border-b rounded-none h-auto p-0 bg-transparent">
+            <TabsList className="w-full flex-wrap justify-start border-b rounded-none h-auto p-0 bg-transparent">
               <TabsTrigger
                 value="overview"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent px-4 py-2"
+                className="h-auto flex-none rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent px-3 sm:px-4 py-2"
               >
                 Overview
               </TabsTrigger>
               <TabsTrigger
                 value="calendar"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent px-4 py-2"
+                className="h-auto flex-none rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent px-3 sm:px-4 py-2"
               >
                 Calendar
               </TabsTrigger>
               <TabsTrigger
                 value="documents"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent px-4 py-2"
+                className="h-auto flex-none rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent px-3 sm:px-4 py-2"
               >
                 Documents
               </TabsTrigger>
               <TabsTrigger
                 value="special"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent px-4 py-2"
+                className="h-auto flex-none rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent px-3 sm:px-4 py-2"
               >
                 Special requirements
               </TabsTrigger>
@@ -515,8 +498,8 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
             <TabsContent value="calendar" className="mt-6">
               <div className="flex flex-col lg:flex-row gap-6">
                 {/* Events List Section */}
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-4">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                     <h3 className="text-xl font-semibold">
                       Active Bookings & Events
                     </h3>
@@ -533,10 +516,10 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                       {calendarEvents.map((event) => (
                         <div
                           key={event.id}
-                          className="flex items-center justify-between p-4 border rounded-lg"
+                          className="flex flex-wrap items-center justify-between gap-3 p-4 border rounded-lg"
                         >
-                          <div className="flex items-center gap-4">
-                            <div className="flex flex-col items-center justify-center w-12 h-12 bg-muted rounded text-center">
+                          <div className="flex min-w-0 items-center gap-4">
+                            <div className="flex shrink-0 flex-col items-center justify-center w-12 h-12 bg-muted rounded text-center">
                               <span className="text-xs font-medium uppercase text-muted-foreground">
                                 {event.date.toLocaleDateString("en-US", {
                                   month: "short",
@@ -546,7 +529,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                                 {event.date.getDate()}
                               </span>
                             </div>
-                            <div>
+                            <div className="min-w-0">
                               <p className="font-medium">
                                 {event.href ? <Link href={event.href} className="hover:underline">{event.title}</Link> : event.title}
                               </p>
@@ -576,35 +559,31 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                 </div>
 
                 {/* Calendar Widget */}
-                <div className="lg:w-80">
-                  <div className="border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={handlePreviousMonth}
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                      <span className="font-medium">
-                        {formatMonthYear(calendarMonth)}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={handleNextMonth}
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </div>
+                <div className="min-w-0 lg:w-80 lg:shrink-0">
+                  <div className="border rounded-lg p-2 sm:p-4">
                     <Calendar
-                      mode="multiple"
                       today={today}
-                      selected={calendarEvents.map((event) => event.date)}
+                      modifiers={{ booked: calendarEvents.map((event) => event.date) }}
+                      modifiersClassNames={{ booked: "bg-primary text-primary-foreground font-semibold" }}
+                      labels={{
+                        labelPrevious: () => "Previous month",
+                        labelNext: () => "Next month",
+                        labelGridcell: (date, modifiers, options, dateLib) =>
+                          `${labelGridcell(date, modifiers, options, dateLib)}${modifiers?.booked ? ", active booking or event" : ""}`,
+                      }}
+                      components={{ Day: ArtistCalendarDay }}
                       month={calendarMonth}
                       onMonthChange={setCalendarMonth}
-                      className="rounded-md"
+                      className="w-full rounded-md p-0"
+                      classNames={{ day: "flex flex-1 min-w-0 h-(--cell-size) items-center justify-center rounded-md p-0 text-center" }}
                     />
+                    <div className="mt-3 flex items-center gap-2 text-sm">
+                      <span aria-hidden="true" className="h-3 w-3 shrink-0 rounded-sm border border-foreground bg-primary" />
+                      <span>Active booking or event</span>
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Calendar is read-only. All upcoming entries are listed.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -612,7 +591,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
 
             {/* Documents Tab */}
             <TabsContent value="documents" className="mt-6">
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
                 <h3 className="text-xl font-semibold">Documents</h3>
                 <Button variant="outline" disabled title="Coming soon">
                   <Upload className="mr-2 h-4 w-4" />
@@ -625,13 +604,13 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                   {documents.map((doc, idx) => (
                     <div
                       key={idx}
-                      className="flex items-center justify-between p-4 border rounded-lg"
+                      className="flex flex-wrap items-center justify-between gap-3 p-4 border rounded-lg"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center justify-center w-10 h-10 bg-muted rounded">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex shrink-0 items-center justify-center w-10 h-10 bg-muted rounded">
                           <FileText className="h-5 w-5 text-muted-foreground" />
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <p className="font-medium">{doc.name}</p>
                           <p className="text-sm text-muted-foreground">
                             Document
@@ -731,31 +710,9 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
       />
 
       {/* Footer */}
-      <footer className="flex items-center justify-center gap-6 pt-8 text-sm text-muted-foreground border-t">
-        <Link
-          href="/terms"
-          className="hover:text-foreground transition-colors"
-        >
-          Terms
-        </Link>
-        <Link
-          href="/privacy"
-          className="hover:text-foreground transition-colors"
-        >
-          Privacy
-        </Link>
-        <Link href="/help" className="hover:text-foreground transition-colors">
-          Help
-        </Link>
-        <Link
-          href="/contact"
-          className="hover:text-foreground transition-colors"
-        >
-          Contact
-        </Link>
-        <span className="ml-auto text-xs">
-          © 2025 Backbeat. All rights reserved.
-        </span>
+      <footer className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-muted/60 px-4 py-4 text-xs text-muted-foreground">
+        <span>© 2025 Backbeat. All rights reserved.</span>
+        <span>Terms, Privacy, Help and Contact are currently unavailable.</span>
       </footer>
     </div>
   )
