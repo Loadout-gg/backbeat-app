@@ -21,6 +21,7 @@ The active implementation is Next.js, React, Tailwind and shadcn-style component
 ## Capabilities and Constraints
 
 - Existing local flows include account/workspace setup, artist create/edit, and booking create/edit/delete.
+- Existing bookings support date changes and an optional per-booking fee; the fee is independent of the artist rate and does not confirm or record payment.
 - Local M2 supports optional booking venue name/address and primary-contact name/phone/email, including explicit clears, validation and failure/retry behavior.
 - Workspace isolation, record IDs, supported field semantics and honest unavailable states must survive presentation changes.
 - Booking conversion, extended event details, travel, accommodation, documents, invitations/recovery and performer mobile are separate incomplete capabilities. AI is explicitly work in progress.

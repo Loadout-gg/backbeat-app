@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, chromium } from '@playwright/test'
 import { createServerClient } from '@supabase/ssr'
 import { randomBytes, randomUUID } from 'node:crypto'
 
@@ -15,7 +15,7 @@ test('artist base-rate denomination survives profile, booking creation and saved
   const email = `${tag}@backbeat.test`
   const password = `${randomBytes(32).toString('base64url')}aA1!`
   let userId, jwt, workspaceId
-  const measurements = [], errors = [], cleanupFailures = [], blocked = new Set()
+  const measurements = [], layoutMeasurements = [], errors = [], cleanupFailures = [], blocked = new Set()
   const redact = text => [anon, service, password, jwt].filter(Boolean).reduce((s, value) => s.split(value).join('[REDACTED]'), String(text))
   async function response(path, { method = 'GET', body, admin = false, token = jwt || anon } = {}) {
     if (!path.startsWith('/') || path.startsWith('//')) throw new Error('Invalid fixed local path')
@@ -93,6 +93,81 @@ test('artist base-rate denomination survives profile, booking creation and saved
       await expect(page.getByRole('dialog').getByText('$400', { exact: true })).toHaveCount(0)
       await page.screenshot({ animations: 'disabled', path: testInfo.outputPath('02-ui-modal-gbp.png') })
       const modal = page.getByRole('dialog')
+      const originalViewport = page.viewportSize()
+      for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }, { width: 320, height: 800 }]) {
+        await page.setViewportSize(viewport)
+        const dialog = page.getByRole('dialog')
+        await dialog.getByLabel('Select date', { exact: true }).fill('2030-01-02')
+        // Resize can precede completion of native dialog layout/animations.
+        // Finish the finite transitions before measuring the settled surface.
+        await dialog.evaluate(async () => {
+          await Promise.all(document.getAnimations().filter(a => Number.isFinite(a.effect?.getComputedTiming().endTime)).map(a => a.finished.catch(() => {})))
+          await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+        })
+        for (const [label, value] of [['Start time', '21:30'], ['Duration', '01:30']]) {
+          const control = dialog.getByLabel(label, { exact: true })
+          await control.fill(value)
+          await expect(control).toHaveValue(value)
+          await control.scrollIntoViewIfNeeded()
+          const geometry = await control.evaluate(el => {
+            const r = el.getBoundingClientRect()
+            return { left: r.left, right: r.right, width: r.width, client: el.clientWidth, scroll: el.scrollWidth }
+          })
+          expect(geometry.left).toBeGreaterThanOrEqual(0)
+          expect(geometry.right).toBeLessThanOrEqual(viewport.width)
+          expect(geometry.width).toBeGreaterThanOrEqual(170)
+          expect(geometry.scroll).toBeLessThanOrEqual(geometry.client + 1)
+        }
+        await dialog.getByRole('button', { name: 'Save on calendar', exact: true }).scrollIntoViewIfNeeded()
+        await expect(dialog.getByRole('button', { name: 'Save on calendar', exact: true })).toBeVisible()
+        await page.screenshot({ animations: 'disabled', path: testInfo.outputPath(`time-modal-${viewport.width}x${viewport.height}.png`) })
+        await dialog.getByLabel('Start time', { exact: true }).scrollIntoViewIfNeeded()
+        await page.screenshot({ animations: 'disabled', path: testInfo.outputPath(`time-controls-${viewport.width}x${viewport.height}.png`) })
+        layoutMeasurements.push({ label: 'time-modal', ...viewport, start: '21:30', duration: '01:30', saveReachable: true })
+      }
+      await test.step('native Chrome 200 percent zoom retains readable time controls', async () => {
+        // Empty userDataDir creates a disposable profile. Only trusted settings
+        // use that profile; the synthetic session stays in memory/incognito.
+        const owner = await chromium.launchPersistentContext('', { channel: 'chrome', headless: true })
+        let zoomContext
+        try {
+          const settings = await owner.newPage()
+          await settings.goto('chrome://settings/appearance')
+          await settings.evaluate(() => new Promise(resolve => chrome.settingsPrivate.setDefaultZoom(2, resolve)))
+          const zoom = await settings.evaluate(() => new Promise(resolve => chrome.settingsPrivate.getDefaultZoom(resolve)))
+          expect(zoom).toBe(2)
+          zoomContext = await owner.browser().newContext({ storageState: await page.context().storageState(), viewport: { width: 1440, height: 900 }, locale: 'en-US', timezoneId: 'Europe/Rome' })
+          await zoomContext.route('**/*', async route => {
+            const url = new URL(route.request().url())
+            if (url.protocol.startsWith('http') && ![APP, API].includes(url.origin)) { blocked.add(url.origin); await route.abort(); return }
+            if (!['GET', 'HEAD', 'OPTIONS'].includes(route.request().method())) await guard()
+            await route.continue()
+          })
+          const zoomPage = await zoomContext.newPage()
+          zoomPage.on('pageerror', e => errors.push(redact(e.message)))
+          await zoomPage.goto(`${APP}/dashboard/artists/${uiArtist.id}`)
+          await zoomPage.getByRole('button', { name: 'New Booking', exact: true }).click()
+          const dialog = zoomPage.getByRole('dialog')
+          await dialog.getByLabel('Select date', { exact: true }).fill('2030-01-02')
+          const display = await zoomPage.evaluate(() => ({ width: innerWidth, height: innerHeight, dpr: devicePixelRatio }))
+          expect(display).toEqual({ width: 720, height: 450, dpr: 2 })
+          for (const [label, value] of [['Start time', '21:30'], ['Duration', '01:30']]) {
+            const control = dialog.getByLabel(label, { exact: true })
+            await control.fill(value)
+            await expect(control).toHaveValue(value)
+            await control.scrollIntoViewIfNeeded()
+            await zoomPage.screenshot({ animations: 'disabled', path: testInfo.outputPath(`time-zoom200-${label.replaceAll(' ', '-')}.png`) })
+          }
+          await dialog.getByRole('button', { name: 'Save on calendar', exact: true }).scrollIntoViewIfNeeded()
+          await expect(dialog.getByRole('button', { name: 'Save on calendar', exact: true })).toBeVisible()
+          await zoomPage.screenshot({ animations: 'disabled', path: testInfo.outputPath('time-zoom200-save.png') })
+          layoutMeasurements.push({ label: 'time-native-chrome-zoom', zoom, ...display, saveReachable: true })
+        } finally {
+          if (zoomContext) await zoomContext.close()
+          await owner.close()
+        }
+      })
+      if (originalViewport) await page.setViewportSize(originalViewport)
       await modal.locator('input[type=date]').fill('2030-01-02')
       await modal.locator('input[type=time]').nth(0).fill('20:30')
       await modal.locator('input[type=time]').nth(1).fill('01:30')
@@ -103,10 +178,12 @@ test('artist base-rate denomination survives profile, booking creation and saved
       await page.reload()
       await expect(page.getByRole('main').getByText('£400', { exact: true })).toBeVisible()
       await page.getByRole('tab', { name: 'Financial', exact: true }).click()
-      await expect(page.getByRole('tabpanel', { name: 'Financial' })).toHaveText(/This section is coming soon/)
+      const financial = page.getByRole('tabpanel', { name: 'Financial', exact: true })
+      await expect(financial.getByLabel('Booking fee amount', { exact: true })).toHaveValue('')
+      await expect(financial.getByLabel('Booking fee currency', { exact: true })).toHaveValue('')
       await page.screenshot({ animations: 'disabled', path: testInfo.outputPath('03-ui-saved-booking-gbp.png') })
       expect(await readArtists()).toEqual([uiArtist])
-      measurements.push({ label: 'ui-created-GBP', currencyStored: uiArtist.currency, fee: uiArtist.fee, profile: true, modal: true, savedBooking: true, artistUnchanged: true, financialStillUnavailable: true })
+      measurements.push({ label: 'ui-created-GBP', currencyStored: uiArtist.currency, fee: uiArtist.fee, profile: true, modal: true, savedBooking: true, artistUnchanged: true, bookingFeeInitiallyUnset: true })
     })
 
     const cases = [
@@ -183,7 +260,7 @@ test('artist base-rate denomination survives profile, booking creation and saved
         expect((await response(`/auth/v1/admin/users/${userId}`, { admin: true })).status).toBe(404)
       } catch { cleanupFailures.push('Auth cleanup failed') }
     }
-    const diagnostic = redact(JSON.stringify({ tag, userId, workspaceId, measurements, errors, blockedOrigins: [...blocked], cleanupFailures }, null, 2))
+    const diagnostic = redact(JSON.stringify({ tag, userId, workspaceId, measurements, layoutMeasurements, errors, blockedOrigins: [...blocked], cleanupFailures }, null, 2))
     await testInfo.attach('safe-currency-diagnostics', { body: diagnostic, contentType: 'application/json' }).catch(() => {})
     expect(cleanupFailures).toEqual([])
   }

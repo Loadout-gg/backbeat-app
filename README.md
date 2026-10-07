@@ -154,3 +154,15 @@ The bootstrap adds the missing local schema, a read-only synthetic-development m
 Venue and primary contact persistence are implemented in M2; lineup, driver and secondary contact persistence remain unavailable. Financial/travel/accommodation/document features and legal/help pages are not completed by this tranche. Shared staging, source publication and production changes need a separate decision.
 
 See [`docs/milestone-1.md`](docs/milestone-1.md) and `docs/evidence/` for measured baseline, current verification and residual risks. `pnpm audit` is currently nonclean; the advisory report is not a production clearance.
+
+## Booking fee migration (004)
+
+Existing bookings expose a date-only Booking date control in Performance and an optional Booking fee amount/currency in Financial. One explicit Update booking action saves both. The amount is independent of the artist rate and is not an offer acceptance, confirmation, invoice or payment. Other unavailable capabilities remain unavailable.
+
+Release **schema first**: rehearse and apply `migrations/004_booking_fee.sql` to the independently verified target before deploying the new UI. Prefix the migration with `SET backbeat.booking_fee_target = 'development';` for the marked synthetic Development database. Hosted application requires separate approval, exact project verification, and the prefix `SET backbeat.booking_fee_target = 'hosted:jttrznlbbjyufzyqmzzs';`. The setting is an accidental-target guard, not identity or authorization evidence. Do not rerun migrations 001–003 or the historical clean-start migration.
+
+Storage is nullable `fee_amount_minor bigint` plus `fee_currency text`. Supported ISO currencies are EUR/USD/GBP (two fraction digits) and JPY (zero). The technical maximum is 999999999999 minor units. Both fields omitted means unchanged, both null means clear, and zero is a real fee. A partial pair is rejected. Existing/new bookings remain unset until explicitly edited; never backfill from artist rates or notes. No currency conversion or rounding is performed.
+
+Verify immediate old-field/count/RLS/policy/grant/trigger preservation and real-user workspace isolation. For rollback, restore the compatible previous application while retaining the additive nullable columns and any recorded fees. Dropping columns or deleting fee data is not an authorized rollback.
+
+The repository's `CI` workflow defines a secret-free `Quality` job for pull requests, pushes to `main`, and manual dispatch: frozen dependency install, typecheck, lint, unit/component tests, runtime tests, and a build using noncredential placeholders. It has read-only repository permissions and does not deploy or run database/browser fixtures. Workflow source alone does not enforce merge protection: the separately approved GitHub gate must require its actual current-head check. Isolated Development HTTP/Auth/Chrome results and independent review remain explicit release evidence.

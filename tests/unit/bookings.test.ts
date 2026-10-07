@@ -137,3 +137,39 @@ it.each([
   expect(db.from).not.toHaveBeenCalled()
   expect(db.auth.getUser).not.toHaveBeenCalled()
 })
+
+it("reschedules only the current-workspace booking and invalidates its views", async () => {
+  expect(await updateBooking(id, { date: "2026-10-26" })).toEqual({ success: true })
+  expect(query.update).toHaveBeenCalledWith({ date: "2026-10-26", updated_at: expect.any(String) })
+  expect(query.eq).toHaveBeenCalledWith("id", id)
+  expect(query.eq).toHaveBeenCalledWith("workspace_id", "selected-workspace")
+  for (const path of ["/dashboard", "/dashboard/bookings", `/dashboard/bookings/${id}`]) {
+    expect(revalidatePath).toHaveBeenCalledWith(path)
+  }
+})
+
+it.each([
+  { fee_amount_minor: 105000, fee_currency: "EUR" },
+  { fee_amount_minor: 0, fee_currency: "GBP" },
+  { fee_amount_minor: null, fee_currency: null },
+])("persists only the scoped booking fee pair %j", async patch => {
+  expect(await updateBooking(id, patch)).toEqual({ success: true })
+  expect(query.update).toHaveBeenCalledWith({ ...patch, updated_at: expect.any(String) })
+  expect(db.from).toHaveBeenCalledWith("bookings")
+  expect(db.from).not.toHaveBeenCalledWith("artists")
+  expect(query.eq).toHaveBeenCalledWith("workspace_id", "selected-workspace")
+  expect(query.eq).toHaveBeenCalledWith("id", id)
+})
+it("leaves fee columns out of unrelated patches", async () => {
+  await updateBooking(id, { notes: "Changed" })
+  expect(query.update.mock.calls[0][0]).not.toHaveProperty("fee_amount_minor")
+  expect(query.update.mock.calls[0][0]).not.toHaveProperty("fee_currency")
+})
+it.each([
+  { fee_amount_minor: 100 }, { fee_currency: "EUR" },
+  { fee_amount_minor: -1, fee_currency: "EUR" },
+])("rejects malformed fee patch before authentication/backend access: %j", async patch => {
+  expect((await updateBooking(id, patch)).success).toBe(false)
+  expect(db.auth.getUser).not.toHaveBeenCalled()
+  expect(db.from).not.toHaveBeenCalled()
+})

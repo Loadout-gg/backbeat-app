@@ -17,7 +17,7 @@ const columns = {
   artists: 'id,workspace_id,name,email,phone,notes,stage_name,surname,location,travel_fee,pricing_notes,overview,dj_equipment,sound_system,allergies,special_diet,special_needs,genres,fee,currency,social_links,documents,profile_image_url,created_at,updated_at',
   promoters: 'id,workspace_id,name,company_name,email,phone,notes,created_at',
   events: 'id,workspace_id,title,date,location,status,artist_id,promoter_id,public_token,created_at',
-  bookings: 'id,workspace_id,artist_id,date,start_time,duration_minutes,notes,status,created_at,updated_at,venue_name,venue_address,contact_name_main,contact_phone_main,contact_email_main',
+  bookings: 'id,workspace_id,artist_id,date,start_time,duration_minutes,notes,status,created_at,updated_at,venue_name,venue_address,contact_name_main,contact_phone_main,contact_email_main,fee_amount_minor,fee_currency',
 };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -222,6 +222,37 @@ test('Backbeat M1: isolated development schema and user-JWT RLS', async (t) => {
     }
     assert.deepEqual((await rows(a, 'bookings', query))[0], before);
   });
+  await t.test('booking fee is atomic, bounded and workspace-isolated', async () => {
+    const query = `id=eq.${a.booking.id}`
+    const old = (await rows(a, 'bookings', query))[0]
+    const artistBefore = await rows(a, 'artists', `id=eq.${a.artist.id}`)
+    ok(await rest(a, 'bookings', 'PATCH', { fee_amount_minor: 105000, fee_currency: 'EUR' }, query), 'save fee')
+    const saved = (await rows(a, 'bookings', query))[0]
+    assert.equal(saved.fee_amount_minor, 105000)
+    assert.equal(saved.fee_currency, 'EUR')
+    const oldFields = row => Object.fromEntries(Object.entries(row).filter(([key]) => !['fee_amount_minor', 'fee_currency', 'updated_at'].includes(key)))
+    assert.deepEqual(oldFields(saved), oldFields(old))
+    assert.deepEqual(await rows(a, 'artists', `id=eq.${a.artist.id}`), artistBefore)
+    assert.deepEqual(await rows(b, 'bookings', `${query}&select=id,fee_amount_minor,fee_currency`), [])
+    untouched(await rest(b, 'bookings', 'PATCH', { fee_amount_minor: 1, fee_currency: 'USD' }, query), 'foreign fee update')
+    assert.deepEqual((await rows(a, 'bookings', query))[0], saved)
+    for (const patch of [
+      { fee_amount_minor: -1, fee_currency: 'EUR' },
+      { fee_amount_minor: 1000000000000, fee_currency: 'EUR' },
+      { fee_amount_minor: 1, fee_currency: 'XYZ' },
+      { fee_amount_minor: null, fee_currency: 'EUR' },
+      { fee_amount_minor: 1, fee_currency: null },
+    ]) denied(await rest(a, 'bookings', 'PATCH', patch, query), 'invalid fee pair', '23514')
+    assert.deepEqual((await rows(a, 'bookings', query))[0], saved)
+    ok(await rest(a, 'bookings', 'PATCH', { fee_amount_minor: 0, fee_currency: 'JPY' }, query), 'zero fee')
+    assert.equal((await rows(a, 'bookings', query))[0].fee_amount_minor, 0)
+    ok(await rest(a, 'bookings', 'PATCH', { fee_amount_minor: null, fee_currency: null }, query), 'clear fee')
+    const cleared = (await rows(a, 'bookings', query))[0]
+    assert.equal(cleared.fee_amount_minor, null)
+    assert.equal(cleared.fee_currency, null)
+    assert.deepEqual(oldFields(cleared), oldFields(old))
+    assert.deepEqual(await rows(a, 'artists', `id=eq.${a.artist.id}`), artistBefore)
+  })
   await t.test('creator cannot be forged; foreign self-join and membership tampering fail', async () => {
     const forgedId = randomUUID();
     // Track even a forbidden insert, so a vulnerable implementation leaves no orphan.

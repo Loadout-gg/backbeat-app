@@ -97,6 +97,7 @@ it("shows persisted booking venue and address without substituting an artist cit
   expect(screen.getByRole("link", { name: "Continue setup" }).getAttribute("href")).toBe("/dashboard/bookings/synthetic-booking")
 })
 const booking = (overrides: Partial<Booking> = {}): Booking => ({
+  fee_amount_minor: null, fee_currency: null,
   id: "synthetic-booking", workspace_id: "synthetic-workspace", artist_id: "synthetic-artist",
   date: "2030-01-02", start_time: "09:45", duration_minutes: null, notes: null,
   venue_name: null, venue_address: null, contact_name_main: null, contact_phone_main: null,

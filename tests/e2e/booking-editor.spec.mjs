@@ -85,7 +85,7 @@ test('Booking editor preserves saved data, accessible tabs and usable narrow lay
     const artistName = 'Synthetic Artist With A Deliberately Long Stage Name For Booking Layout Verification'
     const [artist] = await mutate('/rest/v1/artists', { method: 'POST', body: {
       workspace_id: workspaceId, name: 'Synthetic', surname: 'Performer', stage_name: artistName,
-      location: 'Synthetic North Harbour District, Test City', fee: 0, currency: 'EUR',
+      location: 'Synthetic North Harbour District, Test City', fee: 1200, currency: 'EUR',
     } })
     const fields = [
       ['venue_name', 'Venue name', 'Synthetic Harbour Performance Hall'],
@@ -103,6 +103,83 @@ test('Booking editor preserves saved data, accessible tabs and usable narrow lay
     await expect(page).toHaveURL(`${APP}/dashboard/bookings/${booking.id}`)
     await expect(page.getByRole('heading', { level: 1, name: 'Event Booking', exact: true })).toBeVisible()
     for (const [,label,value] of fields) await expect(page.getByLabel(label, { exact: true })).toHaveValue(value)
+
+    const beforeEdit = (await request(`/rest/v1/bookings?id=eq.${booking.id}`))[0]
+    const artistBeforeEdit = await request(`/rest/v1/artists?id=eq.${artist.id}`)
+    await page.getByLabel('Booking date', { exact: true }).fill('2027-01-19')
+    await page.getByRole('tab', { name: 'Financial', exact: true }).click()
+    await page.getByLabel('Booking fee amount', { exact: true }).fill('1050.00')
+    await page.getByLabel('Booking fee currency', { exact: true }).selectOption('EUR')
+    await page.getByRole('tab', { name: 'Travel', exact: true }).click()
+    await page.getByRole('tab', { name: 'Financial', exact: true }).click()
+    await expect(page.getByLabel('Booking fee amount', { exact: true })).toHaveValue('1050.00')
+    await page.getByRole('button', { name: 'Update booking', exact: true }).click()
+    await expect.poll(async () => {
+      const row = (await request(`/rest/v1/bookings?id=eq.${booking.id}`))[0]
+      return [row.date, row.fee_amount_minor, row.fee_currency]
+    }).toEqual(['2027-01-19', 105000, 'EUR'])
+    const afterEdit = (await request(`/rest/v1/bookings?id=eq.${booking.id}`))[0]
+    const unchanged = row => Object.fromEntries(Object.entries(row).filter(([key]) => !['date', 'fee_amount_minor', 'fee_currency', 'updated_at'].includes(key)))
+    expect(unchanged(afterEdit)).toEqual(unchanged(beforeEdit))
+    expect(await request(`/rest/v1/artists?id=eq.${artist.id}`)).toEqual(artistBeforeEdit)
+    await page.reload()
+    await expect(page.getByLabel('Booking date', { exact: true })).toHaveValue('2027-01-19')
+    await page.getByRole('tab', { name: 'Financial', exact: true }).click()
+    await expect(page.getByLabel('Booking fee amount', { exact: true })).toHaveValue('1050.00')
+    await expect(page.getByLabel('Booking fee currency', { exact: true })).toHaveValue('EUR')
+    await page.screenshot({ animations: 'disabled', path: testInfo.outputPath('financial-fee-persisted.png') })
+    await page.goto(`${APP}/dashboard/bookings`)
+    const listLink = page.locator(`main a[href="/dashboard/bookings/${booking.id}"]`)
+    await expect(listLink).toHaveCount(1)
+    await listLink.click()
+    await expect(page).toHaveURL(`${APP}/dashboard/bookings/${booking.id}`)
+    await expect(page.getByLabel('Booking date', { exact: true })).toHaveValue('2027-01-19')
+    await page.getByRole('tab', { name: 'Financial', exact: true }).click()
+    await expect(page.getByLabel('Booking fee amount', { exact: true })).toHaveValue('1050.00')
+    await page.getByRole('tab', { name: 'Performance', exact: true }).click()
+
+    await test.step('calendar moves the booking without a duplicate on the original date', async () => {
+      await page.goto(`${APP}/dashboard/artists/${artist.id}?tab=calendar`)
+      const panel = page.getByRole('tabpanel', { name: 'Calendar', exact: true })
+      const bookingLink = panel.locator(`a[href="/dashboard/bookings/${booking.id}"]`)
+      await expect(bookingLink).toHaveCount(1)
+      const calendar = panel.locator('[data-slot="calendar"]')
+      for (let month = 0; month < 12 && !(await calendar.locator('button[data-day="1/19/2027"]').count()); month++) {
+        await calendar.getByRole('button', { name: /next month/i }).click()
+      }
+      await expect(calendar.locator('button[data-day="1/19/2027"]')).toHaveAttribute('data-selected-single', 'true')
+      await expect(calendar.locator('button[data-day="1/18/2027"]')).toBeVisible()
+      await expect(calendar.locator('button[data-day="1/18/2027"]')).not.toHaveAttribute('data-selected-single', 'true')
+      expect(await request(`/rest/v1/bookings?artist_id=eq.${artist.id}&select=id,date`)).toEqual([{ id: booking.id, date: '2027-01-19' }])
+      await calendar.scrollIntoViewIfNeeded()
+      await page.screenshot({ animations: 'disabled', path: testInfo.outputPath('calendar-moved-date.png') })
+      await bookingLink.click()
+      await expect(page).toHaveURL(`${APP}/dashboard/bookings/${booking.id}`)
+      measurements.push({ label: 'reschedule-calendar', oldDateSelected: false, newDateSelected: true, bookingCount: 1 })
+    })
+
+    await test.step('mobile phone-only save preserves the complete unrelated record', async () => {
+      await page.setViewportSize({ width: 390, height: 844 })
+      const [beforePhone] = await request(`/rest/v1/bookings?id=eq.${booking.id}`)
+      await page.getByLabel('Phone number', { exact: true }).fill('+39 0600000044')
+      await page.getByRole('tab', { name: 'Travel', exact: true }).click()
+      await page.getByRole('tab', { name: 'Performance', exact: true }).click()
+      await expect(page.getByLabel('Phone number', { exact: true })).toHaveValue('+39 0600000044')
+      await page.getByRole('button', { name: 'Update booking', exact: true }).click()
+      await expect.poll(async () => (await request(`/rest/v1/bookings?id=eq.${booking.id}`))[0].contact_phone_main).toBe('+39 0600000044')
+      await expect(page.getByRole('button', { name: 'Update booking', exact: true })).toBeEnabled()
+      const [afterPhone] = await request(`/rest/v1/bookings?id=eq.${booking.id}`)
+      const changedKeys = Object.keys(beforePhone).filter(key => JSON.stringify(beforePhone[key]) !== JSON.stringify(afterPhone[key])).sort()
+      expect(changedKeys).toEqual(['contact_phone_main', 'updated_at'])
+      expect(await request(`/rest/v1/artists?id=eq.${artist.id}`)).toEqual(artistBeforeEdit)
+      await page.reload()
+      await expect(page.getByLabel('Phone number', { exact: true })).toHaveValue('+39 0600000044')
+      await expect(page.getByLabel('Booking date', { exact: true })).toHaveValue('2027-01-19')
+      await expect(page.getByLabel('Note', { exact: true })).toHaveValue('Synthetic saved booking note')
+      await page.getByLabel('Phone number', { exact: true }).scrollIntoViewIfNeeded()
+      await page.screenshot({ animations: 'disabled', path: testInfo.outputPath('mobile-phone-only.png') })
+      measurements.push({ label: 'mobile-phone-only', changedKeys, preservedDate: afterPhone.date, preservedFeeMinor: afterPhone.fee_amount_minor, preservedCurrency: afterPhone.fee_currency })
+    })
 
     await test.step('all supported inputs fit the editor at the fixed viewport matrix', async () => {
       const layouts = []
@@ -215,11 +292,11 @@ test('Booking editor preserves saved data, accessible tabs and usable narrow lay
     })
 
     await test.step('desktop keyboard focus is never obscured by the sticky action bar', async () => {
-      const expected = ['booking-start-time', 'booking-duration', 'venue-name', 'venue-address', 'contact-name-main', 'contact-phone-main', 'contact-email-main', 'booking-note']
+      const expected = ['booking-date', 'booking-start-time', 'booking-duration', 'venue-name', 'venue-address', 'contact-name-main', 'contact-phone-main', 'contact-email-main', 'booking-note']
       const seen = new Set()
       await page.setViewportSize({ width: 1440, height: 960 })
       await page.evaluate(() => window.scrollTo(0, 0))
-      await page.getByLabel('Start time', { exact: true }).focus()
+      await page.getByLabel('Booking date', { exact: true }).focus()
       for (let step = 0; step < 48 && seen.size < expected.length; step++) {
         const focused = await page.evaluate(() => {
           const el = document.activeElement
@@ -280,8 +357,8 @@ test('Booking editor preserves saved data, accessible tabs and usable narrow lay
       await page.setViewportSize({ width: 320, height: 800 })
     })
 
-    await test.step('real page headings, zero fee and supported labels stay available', async () => {
-      await expect(page.getByText('€0', { exact: true })).toBeVisible()
+    await test.step('real page headings, artist base rate and supported labels stay available', async () => {
+      await expect(page.getByText('€1,200', { exact: true })).toBeVisible()
       await expect(page.getByLabel('Start time', { exact: true })).toHaveValue('21:15')
       await expect(page.getByLabel('Duration', { exact: true })).toHaveValue('01:30')
       await expect(page.getByLabel('Note', { exact: true })).toHaveValue('Synthetic saved booking note')
@@ -298,7 +375,7 @@ test('Booking editor preserves saved data, accessible tabs and usable narrow lay
       await performance.focus()
       await page.keyboard.press('ArrowRight')
       await expect(tablist.getByRole('tab', { name: 'Financial', exact: true })).toHaveAttribute('aria-selected', 'true')
-      await expect(page.getByRole('tabpanel', { name: 'Financial', exact: true })).toContainText('This section is coming soon.')
+      await expect(page.getByRole('tabpanel', { name: 'Financial', exact: true }).getByLabel('Booking fee amount', { exact: true })).toHaveValue('1050.00')
       await page.keyboard.press('End')
       await expect(tablist.getByRole('tab', { name: 'Artist contacts', exact: true })).toHaveAttribute('aria-selected', 'true')
       await page.keyboard.press('Home')
@@ -334,6 +411,9 @@ test('Booking editor preserves saved data, accessible tabs and usable narrow lay
       await expect(page.getByRole('button', { name: 'Update booking', exact: true })).toBeEnabled()
       await page.reload()
       for (const [,label] of fields) await expect(page.getByLabel(label, { exact: true })).toHaveValue('')
+      const [feeAfterContactClears] = await request(`/rest/v1/bookings?id=eq.${booking.id}`)
+      expect(feeAfterContactClears).toMatchObject({ date: '2027-01-19', fee_amount_minor: 105000, fee_currency: 'EUR' })
+      expect(await request(`/rest/v1/artists?id=eq.${artist.id}`)).toEqual(artistBeforeEdit)
       await page.getByRole('button', { name: 'Delete', exact: true }).click()
       await expect(page.getByRole('button', { name: 'Yes, delete', exact: true })).toBeVisible()
       await page.getByRole('button', { name: 'Cancel', exact: true }).click()

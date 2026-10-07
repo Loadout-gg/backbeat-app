@@ -3,10 +3,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { getCurrentWorkspaceId } from "./workspace";
+import type { BookingFeeCurrency } from "@/lib/booking-fee";
 import type { BookingStatus } from "@/lib/booking-status";
 import { createBookingSchema, updateBookingSchema, bookingStatusSchema, bookingIdSchema } from "@/lib/booking-validation";
 
 export interface Booking {
+  fee_amount_minor: number | null;
+  fee_currency: BookingFeeCurrency | null;
   id: string;
   workspace_id: string;
   artist_id: string;
@@ -246,6 +249,8 @@ export async function getBooking(
 export async function updateBooking(
   bookingId: string,
   patch: {
+    fee_amount_minor?: number | null;
+    fee_currency?: string | null;
     date?: string;
     start_time?: string;
     duration_minutes?: number | null;
