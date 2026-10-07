@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { BOOKING_FEE_CURRENCIES, parseBookingFee, formatBookingFeeInput } from "@/lib/booking-fee";
+import { useRef, useState } from "react";
+import { BOOKING_FEE_CURRENCIES, parseBookingFee, formatBookingFeeInput, type BookingFeeError } from "@/lib/booking-fee";
 import { createBookingSchema } from "@/lib/booking-validation";
 import { useRouter } from "next/navigation";
 import { X, Trash2, Plus, Clock } from "lucide-react";
@@ -31,7 +31,13 @@ const TABS = [
 export function EventBookingClient({ booking }: EventBookingClientProps) {
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
+  const saveInFlight = useRef(false);
+  const draftRevision = useRef(0);
+  const [isSaved, setIsSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [feeError, setFeeError] = useState<BookingFeeError | null>(null);
+  const [activeTab, setActiveTab] = useState("Performance");
+  const feeFocusTarget = useRef<BookingFeeError["field"] | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -77,6 +83,14 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
 
   const artist = booking.artist;
 
+  // Consume submit-only focus intent when Radix mounts the field, even from another tab.
+  const focusFeeError = (field: BookingFeeError["field"], element: HTMLElement | null) => {
+    if (element && feeFocusTarget.current === field) {
+      feeFocusTarget.current = null;
+      element.focus();
+    }
+  };
+
   const getInitials = (name: string) => {
     return name
       .split(" ")
@@ -106,17 +120,23 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
   };
 
   const handleUpdateBooking = async () => {
-    if (isSaving) return;
+    if (saveInFlight.current) return;
+    setIsSaved(false);
     setSaveError(null);
+    setFeeError(null);
     if (!createBookingSchema.shape.date.safeParse(bookingDate).success) {
       setSaveError("Enter a valid booking date");
       return;
     }
     const fee = parseBookingFee(feeAmount, feeCurrency);
     if (feeDirty && !fee.success) {
-      setSaveError(fee.error);
+      feeFocusTarget.current = fee.field;
+      setFeeError(fee);
+      setActiveTab("Financial");
       return;
     }
+    saveInFlight.current = true;
+    const submittedRevision = draftRevision.current;
     setIsSaving(true);
 
     try {
@@ -137,10 +157,12 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
         return;
       }
       setFeeDirty(false);
+      setIsSaved(draftRevision.current === submittedRevision);
       router.refresh();
     } catch {
       setSaveError("Unable to save booking. Please try again.");
     } finally {
+      saveInFlight.current = false;
       setIsSaving(false);
     }
   };
@@ -159,7 +181,7 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
     : artist.name || "";
 
   return (
-    <div className="w-full min-w-0 max-w-5xl mx-auto">
+    <div className="w-full min-w-0 max-w-5xl mx-auto" onChangeCapture={() => { draftRevision.current += 1; setIsSaved(false); }}>
       {saveError && <p role="alert" className="mb-4 text-sm text-destructive">{saveError}</p>}
       {/* Card container */}
       <div className="min-w-0 bg-card border border-border rounded-xl shadow-sm">
@@ -214,7 +236,7 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
           </div>
         </div>
 
-        <Tabs defaultValue="Performance" className="gap-0 min-w-0">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-0 min-w-0">
           <div className="px-4 py-3 sm:px-6 border-b border-border">
             <TabsList aria-label="Booking sections" className="grid h-auto w-full grid-cols-2 gap-1 bg-transparent p-0 sm:grid-cols-3 xl:flex xl:justify-start">
               {TABS.map((tab) => (
@@ -616,15 +638,20 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
                   </label>
                   <Input
                     id="booking-fee-amount"
+                    ref={(element) => focusFeeError("amount", element)}
                     type="text"
                     inputMode="decimal"
                     autoComplete="off"
                     value={feeAmount}
-                    onChange={(event) => { setFeeAmount(event.target.value); setFeeDirty(true); }}
+                    onChange={(event) => { setFeeAmount(event.target.value); setFeeDirty(true); setFeeError(null); }}
                     disabled={isSaving}
-                    aria-describedby="booking-fee-help"
+                    aria-invalid={feeError?.field === "amount"}
+                    aria-describedby={feeError?.field === "amount" ? "booking-fee-help booking-fee-amount-error" : "booking-fee-help"}
                     className="h-9 min-w-0 text-sm"
                   />
+                  {feeError?.field === "amount" && (
+                    <p id="booking-fee-amount-error" role="alert" className="mt-1.5 text-sm text-destructive">{feeError.error}</p>
+                  )}
                 </div>
                 <div className="min-w-0">
                   <label htmlFor="booking-fee-currency" className="mb-1.5 block text-xs font-medium text-foreground">
@@ -632,15 +659,20 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
                   </label>
                   <select
                     id="booking-fee-currency"
+                    ref={(element) => focusFeeError("currency", element)}
                     value={feeCurrency}
-                    onChange={(event) => { setFeeCurrency(event.target.value); setFeeDirty(true); }}
+                    onChange={(event) => { setFeeCurrency(event.target.value); setFeeDirty(true); setFeeError(null); }}
                     disabled={isSaving}
-                    aria-describedby="booking-fee-help"
-                    className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                    aria-invalid={feeError?.field === "currency"}
+                    aria-describedby={feeError?.field === "currency" ? "booking-fee-help booking-fee-currency-error" : "booking-fee-help"}
+                    className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 aria-invalid:border-destructive"
                   >
                     <option value="">Not specified</option>
                     {BOOKING_FEE_CURRENCIES.map((currency) => <option key={currency} value={currency}>{currency}</option>)}
                   </select>
+                  {feeError?.field === "currency" && (
+                    <p id="booking-fee-currency-error" role="alert" className="mt-1.5 text-sm text-destructive">{feeError.error}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -688,10 +720,14 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
             )}
           </div>
           <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <p role="status" aria-live="polite" aria-atomic="true" className="text-sm text-foreground">
+              {isSaved ? "Booking saved." : ""}
+            </p>
             <Button
               variant="default"
               onClick={handleUpdateBooking}
-              disabled={isSaving}
+              aria-disabled={isSaving}
+              className="aria-disabled:cursor-wait aria-disabled:opacity-50"
             >
               {isSaving ? "Saving..." : "Update booking"}
             </Button>

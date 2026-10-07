@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
-import { act, cleanup, render, screen } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { renderToString } from "react-dom/server"
 import { hydrateRoot } from "react-dom/client"
 import ArtistPage from "@/app/dashboard/artists/[id]/page"
@@ -84,14 +84,29 @@ it("retains the genuine empty state after successful empty reads", async () => {
   expect(screen.getByText("No upcoming bookings or events for this artist.")).toBeTruthy()
   expect(screen.queryByRole("alert")).toBeNull()
 })
-it("marks persisted local calendar days rather than selecting today without an entry", async () => {
+it("keeps persisted occupancy separate from selection when occupied and empty dates are clicked", async () => {
   mocks.getBookings.mockResolvedValue([{ ...booking, date: "2026-09-30" }])
-  mocks.listEvents.mockResolvedValue([])
+  mocks.listEvents.mockResolvedValue([{ ...event, date: "2026-09-30" }])
   const { container } = render(await ArtistPage({ params: Promise.resolve({ id: artist.id }) }))
-  const selectedDays = Array.from(container.querySelectorAll('[data-selected-single="true"]'))
-  expect(selectedDays.map(day => day.getAttribute("data-day"))).toEqual([new Date(2026, 8, 30).toLocaleDateString()])
+  const occupiedDays = () => Array.from(container.querySelectorAll('[data-booked="true"]'))
+  expect(occupiedDays().map(day => day.getAttribute("data-day"))).toEqual(["2026-09-30"])
+  const occupied = screen.getByRole("gridcell", { name: /September 30.*active booking or event/i })
+  const empty = screen.getByRole("gridcell", { name: /September 29/ })
+  const markerClass = occupied.className
+  expect(screen.getByText("Active booking or event", { exact: true })).toBeTruthy()
+  expect(screen.getByText(/Calendar is read-only/)).toBeTruthy()
+  // There is no implemented date-selection/filter action on this all-upcoming view.
+  expect(within(screen.getByRole("grid")).queryByRole("button")).toBeNull()
+  for (const day of [empty, occupied, occupied]) {
+    fireEvent.click(day)
+    expect(occupiedDays().map(cell => cell.getAttribute("data-day"))).toEqual(["2026-09-30"])
+    expect(occupied.className).toBe(markerClass)
+    expect(empty.getAttribute("data-booked")).toBeNull()
+    expect(screen.getByRole("grid").querySelector('[aria-selected="true"], [data-selected-single="true"]')).toBeNull()
+  }
   const bookingRow = screen.getByRole("link", { name: /DJ Alice/ }).closest("div.flex.items-center.justify-between")
   expect(bookingRow?.textContent).toContain("Sep30")
+  expect(screen.getByText("Autumn show")).toBeTruthy()
 })
 it("reads scoped persisted calendar data and renders a booking link and event without a fabricated detail route", async () => {
   render(await ArtistPage({ params: Promise.resolve({ id: artist.id }) }))
@@ -134,6 +149,33 @@ it("hydrates a UTC server response in Los Angeles across Rome midnight without c
     await act(async () => { root?.unmount() })
     container.remove()
   }
+})
+it("provides one named month-navigation pair and one live month label without end-of-month rollover", async () => {
+  vi.setSystemTime(new Date(2027, 0, 31, 15))
+  mocks.getBookings.mockResolvedValue([{ ...booking, date: "2027-01-31" }])
+  mocks.listEvents.mockResolvedValue([])
+  render(await ArtistPage({ params: Promise.resolve({ id: artist.id }) }))
+  const panel = screen.getByRole("tabpanel", { name: "Calendar" })
+  expect(within(panel).getAllByText("January 2027")).toHaveLength(1)
+  expect(within(panel).getAllByRole("button")).toHaveLength(2)
+  expect(within(panel).getByRole("button", { name: "Previous month" })).toBeTruthy()
+  fireEvent.click(within(panel).getByRole("button", { name: "Next month" }))
+  expect(within(panel).getAllByText("February 2027")).toHaveLength(1)
+  expect(within(panel).getByRole("status").textContent).toBe("February 2027")
+  fireEvent.click(within(panel).getByRole("button", { name: "Previous month" }))
+  expect(within(panel).getAllByText("January 2027")).toHaveLength(1)
+  expect(within(panel).getByRole("gridcell", { name: /January 31.*active booking or event/i }).getAttribute("data-booked")).toBe("true")
+})
+it("retains keyboard focus on the single calendar navigation control after changing month", async () => {
+  render(await ArtistPage({ params: Promise.resolve({ id: artist.id }) }))
+  const next = screen.getByRole("button", { name: "Next month" })
+  next.focus()
+  fireEvent.click(next)
+  expect(document.activeElement).toBe(screen.getByRole("button", { name: "Next month" }))
+  const previous = screen.getByRole("button", { name: "Previous month" })
+  previous.focus()
+  fireEvent.click(previous)
+  expect(document.activeElement).toBe(screen.getByRole("button", { name: "Previous month" }))
 })
 it("uses UTC when no calendar timezone is configured (boundary characterization)", async () => {
   vi.stubEnv("BACKBEAT_CALENDAR_TIME_ZONE", undefined)

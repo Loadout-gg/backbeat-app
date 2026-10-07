@@ -3,6 +3,11 @@ import { parseBookingFee, formatBookingFeeInput, MAX_BOOKING_FEE_MINOR } from "@
 import { updateBookingSchema } from "@/lib/booking-validation"
 
 describe("booking fee draft", () => {
+  it.each(["EUR", "USD", "GBP", "JPY"])("identifies a negative %s fee as an amount error", currency => {
+    expect(parseBookingFee("-10", currency)).toEqual({
+      success: false, field: "amount", error: "Booking fee must be zero or greater",
+    })
+  })
   it.each([
     ["1050", "EUR", 105000], ["1050.00", "EUR", 105000],
     [" 1050,50 ", "GBP", 105050], ["0", "USD", 0],
@@ -12,6 +17,12 @@ describe("booking fee draft", () => {
     expect(parseBookingFee(String(text), String(currency))).toEqual({
       success: true, data: { fee_amount_minor: minor, fee_currency: currency },
     })
+  })
+  it.each([
+    ["", "EUR", "amount"], ["1050", "", "currency"], ["1050", "CHF", "currency"],
+    ["1.001", "EUR", "amount"], ["1.00", "JPY", "amount"],
+  ])("targets the field requiring correction for %s %s", (amount, currency, field) => {
+    expect(parseBookingFee(amount, currency)).toMatchObject({ success: false, field })
   })
   it("clears only an entirely blank pair", () => {
     expect(parseBookingFee("  ", "")).toEqual({ success: true, data: { fee_amount_minor: null, fee_currency: null } })
