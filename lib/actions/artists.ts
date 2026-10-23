@@ -3,12 +3,20 @@
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentWorkspaceId } from "./workspace"
 import { revalidatePath } from "next/cache"
-import { z } from "zod"
+import {
+  createArtistSchema,
+  updateArtistSchema,
+  withArtistContact,
+  type CreateArtistInput,
+  type UpdateArtistInput,
+  type SocialLink,
+} from "@/lib/artist-validation"
 
-export type SocialLink = {
-  type: string
-  url: string
-}
+export type {
+  CreateArtistInput,
+  UpdateArtistInput,
+  SocialLink,
+} from "@/lib/artist-validation"
 
 export type Artist = {
   id: string
@@ -42,33 +50,6 @@ export type Artist = {
   profile_image_url: string | null
 }
 
-export type CreateArtistInput = {
-  // General info (Step 1)
-  stage_name: string
-  name?: string
-  surname?: string
-  location?: string
-  contact_name?: string
-  phone?: string
-  email?: string
-  fee?: number
-  currency?: string
-  travel_fee?: string
-  pricing_notes?: string
-  social_links?: SocialLink[]
-  // Artist overview (Step 2)
-  overview?: string
-  genres?: string[]
-  dj_equipment?: string
-  sound_system?: string
-  // Documents (Step 3) - stored as metadata only for now
-  documents?: { name: string; url: string }[]
-  // Special requirements (Step 4)
-  allergies?: string
-  special_diet?: string
-  special_needs?: string
-  notes?: string
-}
 
 export async function listArtists(): Promise<Artist[]> {
   const supabase = await createClient()
@@ -133,6 +114,12 @@ export async function getArtist(id: string): Promise<Artist | null> {
 export async function createArtist(
   input: CreateArtistInput,
 ): Promise<{ success: boolean; artistId?: string; error?: string }> {
+  const validated = createArtistSchema.safeParse(input)
+  if (!validated.success) {
+    return { success: false, error: validated.error.issues[0].message }
+  }
+  input = validated.data
+
   const supabase = await createClient()
   const workspaceId = await getCurrentWorkspaceId()
 
@@ -147,10 +134,10 @@ export async function createArtist(
       // Contact info - use contact_name for notes if provided
       email: input.email || null,
       phone: input.phone || null,
-      notes: input.contact_name ? `Contact: ${input.contact_name}` : input.notes || null,
+      notes: withArtistContact(input.notes, input.contact_name),
       // Pricing
-      fee: input.fee || null,
-      currency: input.currency || "USD",
+      fee: input.fee ?? null,
+      currency: input.currency === undefined ? "USD" : input.currency,
       travel_fee: input.travel_fee || null,
       pricing_notes: input.pricing_notes || null,
       social_links: input.social_links || [],
@@ -179,19 +166,19 @@ export async function createArtist(
   return { success: true, artistId: data.id }
 }
 
-export type UpdateArtistInput = Omit<Partial<CreateArtistInput>, "fee"> & { fee?: number | null }
 
 export async function updateArtist(
   id: string,
   input: UpdateArtistInput,
 ): Promise<{ success: boolean; error?: string }> {
-  const validated = z.object({
-    stage_name: z.string().trim().min(1, "Stage name is required").optional(),
-    email: z.string().trim().refine(value => value === "" || z.string().email().safeParse(value).success, "Enter a valid email address").optional(),
-    fee: z.number().finite().nonnegative("Base rate must be zero or positive").nullable().optional(),
-  }).safeParse(input)
-  if (!validated.success) return { success: false, error: validated.error.issues[0].message }
-  input = { ...input, ...validated.data }
+  if (typeof id !== "string" || !id.trim()) {
+    return { success: false, error: "Artist is required" }
+  }
+  const validated = updateArtistSchema.safeParse(input)
+  if (!validated.success) {
+    return { success: false, error: validated.error.issues[0].message }
+  }
+  input = validated.data
   const supabase = await createClient()
   const workspaceId = await getCurrentWorkspaceId()
 
@@ -218,13 +205,12 @@ export async function updateArtist(
   if (input.location !== undefined) updateData.location = input.location || null
   if (input.email !== undefined) updateData.email = input.email || null
   if (input.phone !== undefined) updateData.phone = input.phone || null
-  if (input.contact_name !== undefined) {
-    const notes: string = existing.notes ?? ""
-    const body = notes.startsWith("Contact: ") ? notes.split("\n").slice(1).join("\n") : notes
-    updateData.notes = [input.contact_name ? `Contact: ${input.contact_name}` : "", body].filter(Boolean).join("\n") || null
+  if (input.notes !== undefined || input.contact_name !== undefined) {
+    const notes = input.notes !== undefined ? input.notes : existing.notes
+    updateData.notes = withArtistContact(notes, input.contact_name)
   }
   if (input.fee !== undefined) updateData.fee = input.fee
-  if (input.currency !== undefined) updateData.currency = input.currency || "USD"
+  if (input.currency !== undefined) updateData.currency = input.currency
   if (input.travel_fee !== undefined) updateData.travel_fee = input.travel_fee || null
   if (input.pricing_notes !== undefined) updateData.pricing_notes = input.pricing_notes || null
   if (input.social_links !== undefined) updateData.social_links = input.social_links || []

@@ -46,7 +46,7 @@ it("submits an explicit empty email when the existing email is cleared in the ed
   await waitFor(() => expect(updateArtist).toHaveBeenCalledOnce())
   expect(updateArtist).toHaveBeenCalledWith("artist-a", expect.objectContaining({
     email: "", stage_name: "DJ Moon", name: "Luna", phone: "",
-    location: "", fee: null, social_links: [],
+    location: "", fee: null,
   }))
   expect(await screen.findByText("Synthetic save denied")).toBeTruthy()
   expect((screen.getByRole("button", { name: "Save and Complete" }) as HTMLButtonElement).disabled).toBe(false)

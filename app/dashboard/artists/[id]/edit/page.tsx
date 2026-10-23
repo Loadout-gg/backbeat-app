@@ -10,7 +10,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { getArtist, updateArtist, type Artist, type SocialLink, type UpdateArtistInput } from "@/lib/actions/artists"
+import { getArtist, updateArtist, type SocialLink, type UpdateArtistInput } from "@/lib/actions/artists"
+import { parseSocialLinks, parseDocuments } from "@/lib/artist-validation"
 
 const STEPS = [
   { number: 1, label: "General info" },
@@ -74,6 +75,7 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
   const [formData, setFormData] = useState<FormData | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isFetching, setIsFetching] = useState(true)
+  const [socialLinksDirty, setSocialLinksDirty] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showSuccess, setShowSuccess] = useState(false)
   const [newLinkType, setNewLinkType] = useState("")
@@ -84,6 +86,7 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
     async function loadArtist() {
       const { id } = await params
       setArtistId(id)
+      setSocialLinksDirty(false)
       const artist = await getArtist(id)
       
       if (!artist) {
@@ -96,16 +99,7 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
         ? artist.notes.replace("Contact: ", "").split("\n")[0]
         : ""
 
-      // Parse social links safely
-      let socialLinks: SocialLink[] = []
-      if (Array.isArray(artist.social_links)) {
-        socialLinks = artist.social_links
-      } else if (typeof artist.social_links === "string") {
-        try {
-          const parsed = JSON.parse(artist.social_links)
-          if (Array.isArray(parsed)) socialLinks = parsed
-        } catch {}
-      }
+      const socialLinks = parseSocialLinks(artist.social_links)
 
       setFormData({
         stage_name: artist.stage_name || artist.name || "",
@@ -124,7 +118,7 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
         genres: artist.genres || [],
         dj_equipment: artist.dj_equipment || "",
         sound_system: artist.sound_system || "",
-        documents: artist.documents || [],
+        documents: parseDocuments(artist.documents),
         allergies: artist.allergies || "",
         special_diet: artist.special_diet || "",
         special_needs: artist.special_needs || "",
@@ -152,6 +146,7 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
 
   const addSocialLink = () => {
     if (newLinkType && newLinkUrl && formData) {
+      setSocialLinksDirty(true)
       setFormData((prev) => prev ? {
         ...prev,
         social_links: [...prev.social_links, { type: newLinkType, url: newLinkUrl }],
@@ -162,6 +157,7 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
   }
 
   const removeSocialLink = (index: number) => {
+    setSocialLinksDirty(true)
     setFormData((prev) => prev ? {
       ...prev,
       social_links: prev.social_links.filter((_, i) => i !== index),
@@ -204,12 +200,12 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
       currency: formData.currency || undefined,
       travel_fee: formData.travel_fee || undefined,
       pricing_notes: formData.pricing_notes,
-      social_links: formData.social_links,
+      ...(socialLinksDirty ? { social_links: formData.social_links } : {}),
       overview: formData.overview,
       genres: formData.genres,
       dj_equipment: formData.dj_equipment,
       sound_system: formData.sound_system,
-      documents: formData.documents.length > 0 ? formData.documents : undefined,
+      // Document editing is disabled. Never persist a filtered read projection here.
       allergies: formData.allergies,
       special_diet: formData.special_diet,
       special_needs: formData.special_needs,
