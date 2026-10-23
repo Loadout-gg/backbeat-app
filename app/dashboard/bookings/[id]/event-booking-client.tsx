@@ -82,6 +82,7 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
   const [contactEmailSecondary, setContactEmailSecondary] = useState("");
 
   const artist = booking.artist;
+  const artistDisplayName = artist.stage_name || artist.name || "Unknown";
 
   // Consume submit-only focus intent when Radix mounts the field, even from another tab.
   const focusFeeError = (field: BookingFeeError["field"], element: HTMLElement | null) => {
@@ -205,15 +206,15 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
             <Avatar className="h-14 w-14 shrink-0">
               <AvatarImage
                 src={artist.profile_image_url || undefined}
-                alt={artist.stage_name}
+                alt={artistDisplayName}
               />
               <AvatarFallback className="bg-muted text-foreground">
-                {getInitials(artist.stage_name)}
+                {getInitials(artistDisplayName)}
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0 break-words">
               <h2 className="font-semibold text-lg text-foreground">
-                {artist.stage_name}
+                {artistDisplayName}
               </h2>
               <p className="text-sm text-muted-foreground">
                 {realName || "Name unknown"}

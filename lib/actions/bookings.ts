@@ -27,7 +27,7 @@ export interface Booking {
   updated_at: string;
   artist?: {
     id: string;
-    stage_name: string;
+    stage_name: string | null;
     name: string | null;
     surname: string | null;
     location: string | null;
@@ -40,7 +40,7 @@ export interface Booking {
 export interface BookingWithArtist extends Booking {
   artist: {
     id: string;
-    stage_name: string;
+    stage_name: string | null;
     name: string | null;
     surname: string | null;
     location: string | null;
