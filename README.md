@@ -29,7 +29,7 @@ Sign up with a synthetic email through the local app, or use the automatic test 
 
 ## Local quality gates
 
-Prerequisites: Node **22.23.2**, pnpm **12.3.4**; Google Chrome installed for browser tests.
+Prerequisites: Node **22.23.4**, pnpm **12.3.4**; Google Chrome installed for browser tests.
 
 ```sh
 node --version
@@ -82,7 +82,7 @@ env = {key: os.environ[key] for key in ['HOME', 'PATH', 'TMPDIR'] if key in os.e
 env.update(CI='1', BACKBEAT_TEST_URL='http://127.0.0.1:55322',
     BACKBEAT_TEST_ANON_KEY=keys['ANON_KEY'],
     BACKBEAT_TEST_SERVICE_ROLE_KEY=keys['SERVICE_ROLE_KEY'])
-assert subprocess.check_output(['node', '--version'], env=env, text=True).strip() == 'v22.23.2'
+assert subprocess.check_output(['node', '--version'], env=env, text=True).strip() == 'v22.23.4'
 for script in ['test:integration', 'test:e2e']:
     subprocess.run(['pnpm', 'run', script], env=env, check=True, timeout=180)
 PY
