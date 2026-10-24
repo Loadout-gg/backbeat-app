@@ -1,17 +1,17 @@
 // @vitest-environment jsdom
 import React from "react"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 
-const { createArtist, createEvent, listArtists, listPromoters, router } = vi.hoisted(() => ({
+const { createArtist, createEvent, getArtists, listPromoters, router } = vi.hoisted(() => ({
   createArtist: vi.fn(),
   createEvent: vi.fn(),
-  listArtists: vi.fn(),
+  getArtists: vi.fn(),
   listPromoters: vi.fn(),
   router: { push: vi.fn() },
 }))
 vi.mock("next/navigation", () => ({ useRouter: () => router }))
-vi.mock("@/lib/actions/artists", () => ({ createArtist, listArtists }))
+vi.mock("@/lib/actions/artists", () => ({ createArtist, getArtists }))
 vi.mock("@/lib/actions/events", () => ({ createEvent, listPromoters }))
 
 import NewArtistPage from "@/app/dashboard/artists/new/page"
@@ -20,7 +20,7 @@ import NewEventPage from "@/app/dashboard/events/new/page"
 beforeEach(() => {
   createArtist.mockReset()
   createEvent.mockReset()
-  listArtists.mockReset().mockResolvedValue([])
+  getArtists.mockReset().mockResolvedValue([])
   listPromoters.mockReset().mockResolvedValue([])
   router.push.mockReset()
 })
@@ -88,7 +88,10 @@ it.each(["returned", "thrown"])(
     createEvent.mockResolvedValueOnce({ success: true, eventId: "saved-event" })
 
     render(<NewEventPage />)
-    await waitFor(() => expect(listArtists).toHaveBeenCalledOnce())
+    await waitFor(() => {
+      expect((screen.getByRole("button", { name: "Create event" }) as HTMLButtonElement).disabled).toBe(false)
+    })
+    expect(getArtists).toHaveBeenCalledOnce()
     const title = screen.getByLabelText("Title *") as HTMLInputElement
     const date = screen.getByLabelText("Date *") as HTMLInputElement
     const location = screen.getByLabelText("Location") as HTMLInputElement
@@ -124,3 +127,54 @@ it.each(["returned", "thrown"])(
     expect(screen.queryByRole("alert")).toBeNull()
   },
 )
+
+it.each(["artists", "promoters"] as const)("S15: event %s option failure is visible, retryable and retains native draft", async failed => {
+  const reader = failed === "artists" ? getArtists : listPromoters
+  reader.mockRejectedValueOnce(new Error("PRIVATE_OPTION_FAILURE"))
+  render(<NewEventPage />)
+  const title = screen.getByLabelText("Title *") as HTMLInputElement
+  const date = screen.getByLabelText("Date *") as HTMLInputElement
+  fireEvent.change(title, { target: { value: "Retained event" } })
+  fireEvent.change(date, { target: { value: "2030-01-02" } })
+  expect((await screen.findByRole("alert")).textContent).toBe("Unable to load event options. Please try again.")
+  expect(screen.queryByText(/PRIVATE_OPTION_FAILURE/)).toBeNull()
+  const submit = screen.getByRole("button", { name: "Create event" }) as HTMLButtonElement
+  expect(submit.disabled).toBe(true)
+  fireEvent.click(submit)
+  expect(createEvent).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole("button", { name: "Retry loading options" }))
+  await waitFor(() => expect(submit.disabled).toBe(false))
+  expect(screen.queryByRole("alert")).toBeNull()
+  expect(title.value).toBe("Retained event")
+  expect(date.value).toBe("2030-01-02")
+  expect(getArtists).toHaveBeenCalledTimes(2)
+  expect(listPromoters).toHaveBeenCalledTimes(2)
+})
+
+
+it.each(["artists", "promoters"] as const)("S15: waits for pending %s options before accepting an event", async pending => {
+  let finish!: (rows: unknown[]) => void
+  const reader = pending === "artists" ? getArtists : listPromoters
+  reader.mockReturnValueOnce(new Promise<unknown[]>(resolve => { finish = resolve }))
+  createEvent.mockResolvedValueOnce({ success: true, eventId: "saved-event" })
+  render(<NewEventPage />)
+  const title = screen.getByLabelText("Title *") as HTMLInputElement
+  const date = screen.getByLabelText("Date *") as HTMLInputElement
+  fireEvent.change(title, { target: { value: "Retained while loading" } })
+  fireEvent.change(date, { target: { value: "2030-01-02" } })
+  const submit = screen.getByRole("button", { name: "Create event" }) as HTMLButtonElement
+  expect(submit.disabled).toBe(true)
+  fireEvent.submit(title.closest("form")!)
+  expect(createEvent).not.toHaveBeenCalled()
+  await act(async () => { finish([]) })
+  await waitFor(() => expect(submit.disabled).toBe(false))
+  expect(screen.queryByRole("alert")).toBeNull()
+  expect(title.value).toBe("Retained while loading")
+  expect(date.value).toBe("2030-01-02")
+  fireEvent.click(submit)
+  await waitFor(() => expect(router.push).toHaveBeenCalledExactlyOnceWith("/dashboard/events"))
+  expect(createEvent).toHaveBeenCalledExactlyOnceWith({
+    title: "Retained while loading", date: "2030-01-02", location: undefined,
+    status: "in_progress", artist_id: undefined, promoter_id: undefined,
+  })
+})

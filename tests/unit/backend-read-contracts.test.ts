@@ -25,7 +25,7 @@ import {
   listEventsInProgress,
   listPromoters,
 } from "@/lib/actions/events"
-import { listArtists } from "@/lib/actions/artists"
+import { listArtists, getArtists } from "@/lib/actions/artists"
 import { getDashboardStats } from "@/lib/actions/dashboard"
 
 const WORKSPACE = "11111111-1111-4111-8111-111111111111"
@@ -465,7 +465,7 @@ const readers = [
     run: () => listPromoters(),
     order: "name.asc,id.asc",
     status: null,
-    columns: "*",
+    columns: "id,name,company_name",
   },
   {
     name: "artists",
@@ -647,4 +647,40 @@ it("preserves artist normalization including a zero fee", async () => {
       profile_image_url: null,
     }),
   ])
+})
+
+
+describe("S15 selector privacy", () => {
+  it("projects only booking-picker fields from every artist page", async () => {
+    const rows = Array.from({ length: 205 }, (_, i) => ({
+      ...makeRow("artists", i),
+      email: "private@example.test", phone: "PRIVATE_PHONE", notes: "PRIVATE_NOTES",
+      allergies: "PRIVATE_HEALTH", special_diet: "PRIVATE_DIET", special_needs: "PRIVATE_NEEDS",
+      documents: [{ name: "Private rider", url: "/private" }], overview: "PRIVATE_OVERVIEW",
+    }))
+    serveRows(rows, 73)
+    const result = await getArtists()
+    expect(result.map(row => row.id)).toEqual(rows.map(row => row.id))
+    const keys = ["id", "name", "surname", "stage_name", "real_name", "location", "genre", "genres", "base_rate", "currency", "profile_image_url"].sort()
+    for (const row of result) expect(Object.keys(row).sort()).toEqual(keys)
+    expect(result[0]).toEqual({
+      id: rows[0].id, name: "Same name", surname: null, stage_name: "Same name",
+      real_name: "Same name", location: null, genre: null, genres: [],
+      base_rate: 0, currency: "EUR", profile_image_url: null,
+    })
+    expect(JSON.stringify(result)).not.toContain("PRIVATE_")
+    for (const request of requests) {
+      expect(request.url.searchParams.get("select")).toBe("id,name,surname,stage_name,genres,location,fee,currency,profile_image_url")
+      expect(request.url.searchParams.get("workspace_id")).toBe(`eq.${WORKSPACE}`)
+      expect(request.url.searchParams.get("order")).toBe("name.asc,id.asc")
+      expect(request.headers.get("prefer")).toContain("count=exact")
+    }
+  })
+  it("projects only event-picker fields from promoter rows", async () => {
+    const row = { ...makeRow("promoters", 0), company_name: "Agency", email: "private@example.test", notes: "PRIVATE_NOTES", phone: "PRIVATE_PHONE" }
+    serveRows([row], 1)
+    expect(await listPromoters()).toEqual([{ id: row.id, name: "Same name", company_name: "Agency" }])
+    expect(requests[0].url.searchParams.get("select")).toBe("id,name,company_name")
+    expect(requests[0].url.searchParams.get("workspace_id")).toBe(`eq.${WORKSPACE}`)
+  })
 })

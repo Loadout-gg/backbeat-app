@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { getArtists, type Artist } from "@/lib/actions/artists";
+import { getArtists, type ArtistOption } from "@/lib/actions/artists";
 import { createBooking, type Booking } from "@/lib/actions/bookings";
 import { formatArtistBaseRate } from "@/lib/artist-base-rate";
 
@@ -22,7 +22,7 @@ type ModalStep = "select-artist" | "booking-details" | "success";
 interface NewBookingModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  preselectedArtist?: Artist | null;
+  preselectedArtist?: ArtistOption | null;
 }
 
 export function NewBookingModal({
@@ -34,11 +34,11 @@ export function NewBookingModal({
   const [step, setStep] = useState<ModalStep>(
     preselectedArtist ? "booking-details" : "select-artist"
   );
-  const [artists, setArtists] = useState<Artist[]>([]);
+  const [artists, setArtists] = useState<ArtistOption[]>([]);
   const [artistsError, setArtistsError] = useState<string | null>(null);
   const [rosterAttempt, setRosterAttempt] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
-  const [draftArtist, setSelectedArtist] = useState<Artist | null>(
+  const [draftArtist, setSelectedArtist] = useState<ArtistOption | null>(
     preselectedArtist || null
   );
   const [isLoading, setIsLoading] = useState(false);
@@ -48,7 +48,7 @@ export function NewBookingModal({
     session: number;
     request: number;
     booking: Booking;
-    artist: Artist;
+    artist: ArtistOption;
   } | null>(null);
 
   // Success renders the artist submitted with that booking, not refreshed props.
@@ -186,7 +186,7 @@ export function NewBookingModal({
     onOpenChange(nextOpen);
   };
 
-  const handleSelectArtist = (artist: Artist) => {
+  const handleSelectArtist = (artist: ArtistOption) => {
     if (!lifecycle.current.open) return;
     invalidateSession();
     setIsLoading(false);

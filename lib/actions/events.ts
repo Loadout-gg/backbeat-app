@@ -165,25 +165,23 @@ export async function createEvent(input: {
   return { success: true, eventId: data.id }
 }
 
-export async function listPromoters(): Promise<Promoter[]> {
+export type PromoterOption = Pick<Promoter, "id" | "name" | "company_name">
+
+// The sole production caller is the event selector; never send contacts/notes.
+export async function listPromoters(): Promise<PromoterOption[]> {
   const supabase = await createClient()
   const workspaceId = await getCurrentWorkspaceId()
-
-  return readCompleteCollection<Promoter>(async (from, to) => {
+  const rows = await readCompleteCollection<PromoterOption>(async (from, to) => {
     const { data, error, count } = await supabase
       .from("promoters")
-      .select("*", { count: "exact" })
+      .select("id,name,company_name", { count: "exact" })
       .eq("workspace_id", workspaceId)
       .order("name", { ascending: true })
       .order("id", { ascending: true })
       .range(from, to)
-
-    return {
-      data: data as unknown as Promoter[] | null,
-      error,
-      count,
-    }
-  }, "Promoters")
+    return { data: data as PromoterOption[] | null, error, count }
+  }, "Promoter options")
+  return rows.map(row => ({ id: row.id, name: row.name, company_name: row.company_name }))
 }
 
 export async function createPromoter(input: {

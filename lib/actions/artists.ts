@@ -88,9 +88,51 @@ export async function listArtists(): Promise<Artist[]> {
   }))
 }
 
-// Alias for backwards compatibility and clearer naming
-export async function getArtists(): Promise<Artist[]> {
-  return listArtists()
+// Minimal booking/event selector DTO; the full profile reader remains separate.
+export type ArtistOption = Pick<Artist,
+  "id" | "name" | "surname" | "stage_name" | "real_name" | "location" |
+  "genre" | "genres" | "base_rate" | "currency" | "profile_image_url"
+>
+
+type ArtistOptionRow = {
+  id: string
+  name: string | null
+  surname: string | null
+  stage_name: string | null
+  genres: string[] | null
+  location: string | null
+  fee: number | null
+  currency: string | null
+  profile_image_url: string | null
+}
+
+export async function getArtists(): Promise<ArtistOption[]> {
+  const supabase = await createClient()
+  const workspaceId = await getCurrentWorkspaceId()
+  const rows = await readCompleteCollection<ArtistOptionRow>(async (from, to) => {
+    const { data, error, count } = await supabase
+      .from("artists")
+      .select("id,name,surname,stage_name,genres,location,fee,currency,profile_image_url", { count: "exact" })
+      .eq("workspace_id", workspaceId)
+      .order("name", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to)
+    return { data: data as ArtistOptionRow[] | null, error, count }
+  }, "Artist options")
+
+  return rows.map(row => ({
+    id: row.id,
+    name: row.name ?? "",
+    surname: row.surname,
+    stage_name: row.stage_name || row.name || "Unknown",
+    real_name: row.surname ? `${row.name || ""} ${row.surname}`.trim() : row.name,
+    location: row.location,
+    genre: row.genres?.[0] ?? null,
+    genres: row.genres ?? [],
+    base_rate: row.fee,
+    currency: row.currency,
+    profile_image_url: row.profile_image_url,
+  }))
 }
 
 export async function getArtist(id: string): Promise<Artist | null> {
