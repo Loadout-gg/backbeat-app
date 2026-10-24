@@ -43,19 +43,26 @@ export default function NewEventPage() {
     const date = formData.get("date") as string
     const location = formData.get("location") as string
 
-    const result = await createEvent({
-      title,
-      date,
-      location: location || undefined,
-      status: selectedStatus as "in_progress" | "confirmed" | "cancelled",
-      artist_id: selectedArtist === "none" ? undefined : selectedArtist,
-      promoter_id: selectedPromoter === "none" ? undefined : selectedPromoter,
-    })
+    try {
+      const result = await createEvent({
+        title,
+        date,
+        location: location || undefined,
+        status: selectedStatus as "in_progress" | "confirmed" | "cancelled",
+        artist_id: selectedArtist === "none" ? undefined : selectedArtist,
+        promoter_id: selectedPromoter === "none" ? undefined : selectedPromoter,
+      })
 
-    if (result.success) {
-      router.push("/dashboard/events")
-    } else {
-      setError(result.error || "Failed to create event")
+      if (result.success) {
+        router.push("/dashboard/events")
+      } else {
+        setError(result.error || "Failed to create event")
+      }
+    } catch {
+      setError(
+        "Unable to confirm whether the event was created. Check the event list before retrying."
+      )
+    } finally {
       setIsLoading(false)
     }
   }
@@ -82,7 +89,7 @@ export default function NewEventPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="p-3 text-sm text-red-500 bg-red-50 border border-red-200 rounded-md">{error}</div>
+              <div role="alert" className="p-3 text-sm text-red-500 bg-red-50 border border-red-200 rounded-md">{error}</div>
             )}
 
             <div className="space-y-2">
