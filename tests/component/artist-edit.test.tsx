@@ -97,3 +97,77 @@ it.each(["returned", "thrown"])("shows an accessible %s save error, retains the 
   expect(await screen.findByRole("dialog")).toBeTruthy()
   expect(updateArtist.mock.calls[1][1].name).toBe("Retained draft")
 })
+
+it.each([null, "", "   ", "$", "USD", "CHF", "credits"])(
+  "BB-07: omits untouched currency %j from an unrelated edit",
+  async (currency) => {
+    getArtist.mockResolvedValueOnce({
+      id: "artist-a",
+      stage_name: "Synthetic Stage",
+      name: "Synthetic Artist",
+      fee: 400,
+      currency,
+    })
+    updateArtist.mockResolvedValueOnce({ success: false, error: "Synthetic stop" })
+
+    render(<EditArtistPage params={Promise.resolve({ id: "artist-a" })} />)
+    fireEvent.change(await screen.findByRole("textbox", { name: "Name" }), {
+      target: { value: "Changed name only" },
+    })
+    for (let step = 1; step < 4; step++) {
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }))
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Save and Complete" }))
+
+    await waitFor(() => expect(updateArtist).toHaveBeenCalledOnce())
+    const payload = updateArtist.mock.calls[0][1]
+    expect(payload.name).toBe("Changed name only")
+    expect(payload.fee).toBe(400)
+    expect(Object.prototype.hasOwnProperty.call(payload, "currency")).toBe(false)
+  },
+)
+
+it.each([null, "credits"])(
+  "BB-07: submits an explicit supported currency choice over %j",
+  async (currency) => {
+    const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollIntoView")
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: vi.fn(),
+    })
+
+    try {
+      getArtist.mockResolvedValueOnce({
+        id: "artist-a",
+        stage_name: "Synthetic Stage",
+        name: "Synthetic Artist",
+        fee: 400,
+        currency,
+      })
+      updateArtist.mockResolvedValueOnce({ success: false, error: "Synthetic stop" })
+
+      render(<EditArtistPage params={Promise.resolve({ id: "artist-a" })} />)
+      await screen.findByRole("textbox", { name: "Stage name" })
+      const control = screen.getByRole("combobox", { name: "Artist currency" })
+      expect(control.textContent).toContain(currency ?? "Currency unavailable")
+
+      fireEvent.keyDown(control, { key: "Enter" })
+      fireEvent.click(await screen.findByRole("option", { name: /^€$/ }))
+
+      for (let step = 1; step < 4; step++) {
+        fireEvent.click(screen.getByRole("button", { name: "Continue" }))
+      }
+      fireEvent.click(screen.getByRole("button", { name: "Save and Complete" }))
+      await waitFor(() => expect(updateArtist).toHaveBeenCalledOnce())
+      expect(updateArtist.mock.calls[0][1]).toEqual(
+        expect.objectContaining({ currency: "€", fee: 400 }),
+      )
+    } finally {
+      if (original) {
+        Object.defineProperty(HTMLElement.prototype, "scrollIntoView", original)
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView")
+      }
+    }
+  },
+)

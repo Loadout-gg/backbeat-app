@@ -80,6 +80,7 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
   const [showSuccess, setShowSuccess] = useState(false)
   const [newLinkType, setNewLinkType] = useState("")
   const [newLinkUrl, setNewLinkUrl] = useState("")
+  const [currencyDirty, setCurrencyDirty] = useState(false)
 
   // Load artist data
   useEffect(() => {
@@ -110,7 +111,7 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
         phone: artist.phone || "",
         email: artist.email || "",
         fee: artist.fee?.toString() || "",
-        currency: artist.currency || "$",
+        currency: artist.currency ?? "",
         travel_fee: artist.travel_fee || "",
         pricing_notes: artist.pricing_notes || "",
         social_links: socialLinks,
@@ -123,6 +124,7 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
         special_diet: artist.special_diet || "",
         special_needs: artist.special_needs || "",
       })
+      setCurrencyDirty(false)
       setIsFetching(false)
     }
     loadArtist()
@@ -197,7 +199,7 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
       phone: formData.phone,
       email: formData.email,
       fee: formData.fee.trim() ? Number(formData.fee) : null,
-      currency: formData.currency || undefined,
+      ...(currencyDirty ? { currency: formData.currency } : {}),
       travel_fee: formData.travel_fee || undefined,
       pricing_notes: formData.pricing_notes,
       ...(socialLinksDirty ? { social_links: formData.social_links } : {}),
@@ -384,11 +386,22 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
                       <div>
                         <Label htmlFor="fee">Base rate</Label>
                         <div className="flex gap-2">
-                          <Select value={formData.currency} onValueChange={(value) => updateField("currency", value)}>
-                            <SelectTrigger className="w-16">
-                              <SelectValue />
+                          <Select
+                            value={formData.currency}
+                            onValueChange={(value) => {
+                              setCurrencyDirty(true)
+                              updateField("currency", value)
+                            }}
+                          >
+                            <SelectTrigger aria-label="Artist currency" className="w-36">
+                              <SelectValue placeholder="Currency unavailable" />
                             </SelectTrigger>
                             <SelectContent>
+                              {formData.currency && !CURRENCIES.includes(formData.currency) && (
+                                <SelectItem value={formData.currency}>
+                                  {formData.currency.trim() ? formData.currency : "Currency unavailable"}
+                                </SelectItem>
+                              )}
                               {CURRENCIES.map((c) => (
                                 <SelectItem key={c} value={c}>{c}</SelectItem>
                               ))}
