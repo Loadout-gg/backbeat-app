@@ -12,8 +12,8 @@ import { DashboardContent } from "./dashboard-content"
 export default async function DashboardPage() {
   const [stats, eventsInProgress, bookings, userData] = await Promise.all([
     getDashboardStats(),
-    listEventsInProgress().catch(() => []), // Return empty array if events table doesn't exist
-    getBookings().catch(() => []), // Return empty array if bookings table doesn't exist
+    listEventsInProgress(),
+    getBookings({ failOnError: true }),
     getCurrentUser(),
   ])
 
