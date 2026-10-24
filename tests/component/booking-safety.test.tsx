@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from "react"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import type { BookingWithArtist } from "@/lib/actions/bookings"
 
 const { updateBooking, deleteBooking, router } = vi.hoisted(() => ({
@@ -80,4 +80,60 @@ it.each([
     booking.id,
     expect.objectContaining({ notes: "Updated legacy booking" }),
   )
+})
+
+it.each(["returned", "thrown"])(
+  "BB-11: handles %s delete failure, retains edits, and permits one retry",
+  async (kind) => {
+    if (kind === "returned") {
+      deleteBooking.mockResolvedValueOnce({ success: false, error: "PRIVATE_DATABASE_DETAIL" })
+    } else {
+      deleteBooking.mockRejectedValueOnce(new Error("PRIVATE_DATABASE_DETAIL"))
+    }
+    deleteBooking.mockResolvedValueOnce({ success: true })
+
+    render(<EventBookingClient booking={booking} />)
+    fireEvent.change(screen.getByLabelText("Note", { exact: true }), {
+      target: { value: "Unsaved operator draft" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: /^Delete$/ }))
+    fireEvent.click(screen.getByRole("button", { name: "Yes, delete" }))
+
+    const alert = await screen.findByRole("alert")
+    expect(alert.textContent).toMatch(
+      kind === "returned" ? /Unable to delete booking/ : /Unable to confirm deletion/,
+    )
+    expect(screen.queryByText(/PRIVATE_DATABASE_DETAIL/)).toBeNull()
+    expect(router.push).not.toHaveBeenCalled()
+    expect((screen.getByLabelText("Note", { exact: true }) as HTMLTextAreaElement).value)
+      .toBe("Unsaved operator draft")
+    expect((screen.getByRole("button", { name: "Yes, delete" }) as HTMLButtonElement).disabled)
+      .toBe(false)
+
+    fireEvent.click(screen.getByRole("button", { name: "Yes, delete" }))
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith("/dashboard"))
+    expect(deleteBooking).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole("alert")).toBeNull()
+  },
+)
+
+it("BB-11: rejects duplicate delete activation before the pending render", async () => {
+  let finish!: (result: { success: boolean }) => void
+  deleteBooking.mockReturnValueOnce(new Promise<{ success: boolean }>((resolve) => {
+    finish = resolve
+  }))
+
+  render(<EventBookingClient booking={booking} />)
+  fireEvent.click(screen.getByRole("button", { name: /^Delete$/ }))
+  const confirm = screen.getByRole("button", { name: "Yes, delete" })
+  act(() => {
+    confirm.click()
+    confirm.click()
+  })
+  expect(deleteBooking).toHaveBeenCalledOnce()
+  expect((screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement).disabled).toBe(true)
+  expect(router.push).not.toHaveBeenCalled()
+
+  await act(async () => finish({ success: true }))
+  expect(router.push).toHaveBeenCalledExactlyOnceWith("/dashboard")
 })
