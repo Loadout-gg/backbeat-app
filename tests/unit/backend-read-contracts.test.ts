@@ -433,3 +433,218 @@ describe("event creation validation", () => {
     expect(mocks.revalidate).not.toHaveBeenCalled()
   })
 })
+
+const readers = [
+  {
+    name: "bookings",
+    table: "bookings" as Table,
+    run: () => getBookings(),
+    order: "date.asc,id.asc",
+    status: null,
+    columns: "*,artist:artists(id,stage_name,name,surname,location,fee,currency,profile_image_url)",
+  },
+  {
+    name: "events",
+    table: "events" as Table,
+    run: () => listEvents(),
+    order: "date.desc,created_at.desc,id.asc",
+    status: null,
+    columns: "*,artists:artist_id(id,name),promoters:promoter_id(id,name,company_name)",
+  },
+  {
+    name: "events in progress",
+    table: "events" as Table,
+    run: () => listEventsInProgress(),
+    order: "date.asc,created_at.desc,id.asc",
+    status: "eq.in_progress",
+    columns: "*,artists:artist_id(id,name),promoters:promoter_id(id,name,company_name)",
+  },
+  {
+    name: "promoters",
+    table: "promoters" as Table,
+    run: () => listPromoters(),
+    order: "name.asc,id.asc",
+    status: null,
+    columns: "*",
+  },
+  {
+    name: "artists",
+    table: "artists" as Table,
+    run: () => listArtists(),
+    order: "name.asc,id.asc",
+    status: null,
+    columns: "*",
+  },
+]
+
+describe.each(readers)("$name collection", reader => {
+  it.each([2, 73])("returns complete scoped data with cap %s", async cap => {
+    const rows = Array.from(
+      { length: 205 },
+      (_, index) => makeRow(reader.table, index),
+    )
+    if (reader.table === "events" || reader.table === "bookings") {
+      rows[rows.length - 1].date = "2030-01-02"
+    }
+
+    const foreign = {
+      ...makeRow(reader.table, 900),
+      workspace_id: "foreign-workspace",
+    }
+    const source: Row[] = [foreign, ...rows].reverse()
+
+    if (reader.status) {
+      source.push({ ...makeRow(reader.table, 901), status: "confirmed" })
+    }
+    serveRows(source, cap)
+
+    const actual = await reader.run()
+    const expected = reader.order.startsWith("date.desc")
+      ? [rows[rows.length - 1], ...rows.slice(0, -1)]
+      : rows
+
+    expect(actual.map(row => row.id)).toEqual(expected.map(row => row.id))
+    expect(requests.map(request =>
+      Number(request.url.searchParams.get("offset") ?? 0),
+    )).toEqual(
+      Array.from(
+        { length: Math.ceil(rows.length / cap) },
+        (_, index) => index * cap,
+      ),
+    )
+
+    for (const request of requests) {
+      expect(tableOf(request)).toBe(reader.table)
+      expect(request.method).toBe("GET")
+      expect(request.headers.get("prefer")).toContain("count=exact")
+      expect(request.url.searchParams.get("workspace_id")).toBe(`eq.${WORKSPACE}`)
+      expect(request.url.searchParams.get("status")).toBe(reader.status)
+      expect(request.url.searchParams.get("order")).toBe(reader.order)
+      expect(request.url.searchParams.get("limit")).toBe("200")
+      expect(
+        request.url.searchParams.get("select")?.replace(/\s/g, ""),
+      ).toBe(reader.columns)
+    }
+    expect(mocks.workspace).toHaveBeenCalledOnce()
+    expect(mocks.createClient).toHaveBeenCalledOnce()
+  })
+
+  it("distinguishes an exactly counted empty collection", async () => {
+    respond = () => reply([], 0)
+    expect(await reader.run()).toEqual([])
+    expect(requests).toHaveLength(1)
+  })
+
+  it.each(["error", "empty", "duplicate", "changed count", "missing count"])(
+    "rejects a later %s rather than yielding partial success",
+    async kind => {
+      let page = 0
+      respond = () => {
+        page += 1
+        if (page === 1) return reply([makeRow(reader.table, 0)], 2)
+        if (kind === "error") {
+          return reply(
+            { code: "XX000", message: "read failed", details: null, hint: null },
+            undefined,
+            500,
+          )
+        }
+        if (kind === "empty") return reply([], 2)
+        if (kind === "duplicate") return reply([makeRow(reader.table, 0)], 2)
+        if (kind === "changed count") return reply([makeRow(reader.table, 1)], 3)
+        return reply([makeRow(reader.table, 1)])
+      }
+
+      await expect(reader.run()).rejects.toThrow()
+      expect(requests).toHaveLength(2)
+    },
+  )
+
+  it("does not query a collection when workspace resolution fails", async () => {
+    mocks.workspace.mockRejectedValueOnce(new Error("No active workspace"))
+    await expect(reader.run()).rejects.toThrow("No active workspace")
+    expect(requests).toEqual([])
+  })
+})
+
+it.each([
+  { table: "bookings" as Table, run: () => getBookings({ artistId: ARTIST }) },
+  { table: "events" as Table, run: () => listEvents({ artistId: ARTIST }) },
+])("keeps the artist filter on every $table page", async ({ table, run }) => {
+  const rows = Array.from({ length: 5 }, (_, index) => makeRow(table, index))
+  serveRows([
+    ...rows,
+    { ...makeRow(table, 900), artist_id: PROMOTER },
+    { ...makeRow(table, 901), workspace_id: "foreign-workspace" },
+  ], 2)
+
+  expect((await run()).map(row => row.id)).toEqual(rows.map(row => row.id))
+  expect(requests.length).toBeGreaterThan(1)
+  for (const request of requests) {
+    expect(request.url.searchParams.get("artist_id")).toBe(`eq.${ARTIST}`)
+    expect(request.url.searchParams.get("workspace_id")).toBe(`eq.${WORKSPACE}`)
+  }
+})
+
+it("does not introduce booking or general-event status/date filtering", async () => {
+  for (const table of ["bookings", "events"] as const) {
+    requests = []
+    const rows = [
+      { ...makeRow(table, 0), status: "cancelled" },
+      { ...makeRow(table, 1), status: "confirmed", date: "2030-01-02" },
+    ]
+    serveRows(rows, 1)
+    const actual = table === "bookings" ? await getBookings() : await listEvents()
+    expect(new Set(actual.map(row => row.id))).toEqual(new Set(rows.map(row => row.id)))
+    for (const request of requests) {
+      expect(request.url.searchParams.has("status")).toBe(false)
+      expect(request.url.searchParams.has("date")).toBe(false)
+    }
+  }
+})
+
+it.each([undefined, false, true])(
+  "booking reads reject failure regardless of legacy failOnError=%s",
+  async failOnError => {
+    respond = () => reply(
+      { code: "XX000", message: "private detail", details: null, hint: null },
+      undefined,
+      500,
+    )
+    await expect(getBookings({ failOnError })).rejects.toThrow(
+      "Unable to load bookings. Please try again.",
+    )
+  },
+)
+
+it("default booking reads reject an expired session", async () => {
+  mocks.getUser.mockResolvedValueOnce({ data: { user: null }, error: null })
+  await expect(getBookings()).rejects.toThrow("Not authenticated")
+  expect(requests).toEqual([])
+  expect(mocks.workspace).not.toHaveBeenCalled()
+})
+
+it("booking authentication errors cannot become successful empty reads", async () => {
+  mocks.getUser.mockResolvedValueOnce({
+    data: { user: { id: "synthetic-user" } },
+    error: { message: "auth unavailable" },
+  })
+  await expect(getBookings()).rejects.toThrow("Unable to load bookings")
+  expect(requests).toEqual([])
+})
+
+it("preserves artist normalization including a zero fee", async () => {
+  serveRows([makeRow("artists", 0)], 1)
+  expect(await listArtists()).toEqual([
+    expect.objectContaining({
+      stage_name: "Same name",
+      real_name: "Same name",
+      genre: null,
+      genres: [],
+      base_rate: 0,
+      social_links: [],
+      documents: [],
+      profile_image_url: null,
+    }),
+  ])
+})

@@ -1,5 +1,7 @@
 "use server";
 
+import { readCompleteCollection } from "@/lib/read-complete-collection";
+
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { getCurrentWorkspaceId } from "./workspace";
@@ -50,42 +52,62 @@ export interface BookingWithArtist extends Booking {
   };
 }
 
-export async function getBookings(options: { artistId?: string; failOnError?: boolean } = {}): Promise<Booking[]> {
-  if (options.artistId !== undefined && !createBookingSchema.shape.artistId.safeParse(options.artistId).success) {
+// failOnError is retained for source compatibility only.
+// Collection/auth failures always reject; false no longer means "return []".
+export async function getBookings(
+  options: { artistId?: string; failOnError?: boolean } = {}
+): Promise<Booking[]> {
+  if (
+    options.artistId !== undefined &&
+    !createBookingSchema.shape.artistId.safeParse(options.artistId).success
+  ) {
     throw new Error("Invalid artist ID");
   }
-  const supabase = await createClient();
 
+  const supabase = await createClient();
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
-  if (!user) {
-    if (options.failOnError) throw new Error("Not authenticated");
-    return [];
+
+  if (authError) {
+    throw new Error("Unable to load bookings. Please try again.");
   }
+  if (!user) throw new Error("Not authenticated");
 
   const workspaceId = await getCurrentWorkspaceId();
 
-  let query = supabase
-    .from("bookings")
-    .select(
-      `
-      *,
-      artist:artists(id, stage_name, name, surname, location, fee, currency, profile_image_url)
-    `
-    )
-    .eq("workspace_id", workspaceId);
+  try {
+    return await readCompleteCollection<Booking>(async (from, to) => {
+      let query = supabase
+        .from("bookings")
+        .select(
+          `
+          *,
+          artist:artists(id, stage_name, name, surname, location, fee, currency, profile_image_url)
+          `,
+          { count: "exact" }
+        )
+        .eq("workspace_id", workspaceId);
 
-  if (options.artistId !== undefined) query = query.eq("artist_id", options.artistId);
-  const { data: bookings, error } = await query.order("date", { ascending: true });
+      if (options.artistId !== undefined) {
+        query = query.eq("artist_id", options.artistId);
+      }
 
-  if (error) {
-    console.error("Error fetching bookings:", error);
-    if (options.failOnError) throw new Error("Unable to load bookings. Please try again.");
-    return [];
+      const { data, error, count } = await query
+        .order("date", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to);
+
+      return {
+        data: data as unknown as Booking[] | null,
+        error,
+        count,
+      };
+    }, "Bookings");
+  } catch {
+    throw new Error("Unable to load bookings. Please try again.");
   }
-
-  return (bookings || []) as Booking[];
 }
 
 export async function createBooking(formData: {

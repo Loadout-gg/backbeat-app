@@ -1,5 +1,7 @@
 "use server"
 
+import { readCompleteCollection } from "@/lib/read-complete-collection"
+
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentWorkspaceId } from "./workspace"
 import { revalidatePath } from "next/cache"
@@ -34,55 +36,72 @@ export type EventWithRelations = Event & {
   promoters: { id: string; name: string; company_name: string | null } | null
 }
 
-export async function listEvents(options: { artistId?: string } = {}): Promise<EventWithRelations[]> {
-  if (options.artistId !== undefined && !z.string().uuid().safeParse(options.artistId).success) {
+export async function listEvents(
+  options: { artistId?: string } = {},
+): Promise<EventWithRelations[]> {
+  if (
+    options.artistId !== undefined &&
+    !z.string().uuid().safeParse(options.artistId).success
+  ) {
     throw new Error("Invalid artist ID")
   }
+
   const supabase = await createClient()
   const workspaceId = await getCurrentWorkspaceId()
 
-  let query = supabase
-    .from("events")
-    .select(`
-      *,
-      artists:artist_id (id, name),
-      promoters:promoter_id (id, name, company_name)
-    `)
-    .eq("workspace_id", workspaceId)
+  return readCompleteCollection<EventWithRelations>(async (from, to) => {
+    let query = supabase
+      .from("events")
+      .select(`
+        *,
+        artists:artist_id (id, name),
+        promoters:promoter_id (id, name, company_name)
+      `, { count: "exact" })
+      .eq("workspace_id", workspaceId)
 
-  if (options.artistId !== undefined) query = query.eq("artist_id", options.artistId)
+    if (options.artistId !== undefined) {
+      query = query.eq("artist_id", options.artistId)
+    }
 
-  const { data, error } = await query.order("date", { ascending: false })
-    .order("created_at", { ascending: false })
+    const { data, error, count } = await query
+      .order("date", { ascending: false })
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true })
+      .range(from, to)
 
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  return (data ?? []) as EventWithRelations[]
+    return {
+      data: data as unknown as EventWithRelations[] | null,
+      error,
+      count,
+    }
+  }, "Events")
 }
 
 export async function listEventsInProgress(): Promise<EventWithRelations[]> {
   const supabase = await createClient()
   const workspaceId = await getCurrentWorkspaceId()
 
-  const { data, error } = await supabase
-    .from("events")
-    .select(`
-      *,
-      artists:artist_id (id, name),
-      promoters:promoter_id (id, name, company_name)
-    `)
-    .eq("workspace_id", workspaceId)
-    .eq("status", "in_progress")
-    .order("date", { ascending: true })
-    .order("created_at", { ascending: false })
+  return readCompleteCollection<EventWithRelations>(async (from, to) => {
+    const { data, error, count } = await supabase
+      .from("events")
+      .select(`
+        *,
+        artists:artist_id (id, name),
+        promoters:promoter_id (id, name, company_name)
+      `, { count: "exact" })
+      .eq("workspace_id", workspaceId)
+      .eq("status", "in_progress")
+      .order("date", { ascending: true })
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true })
+      .range(from, to)
 
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  return (data ?? []) as EventWithRelations[]
+    return {
+      data: data as unknown as EventWithRelations[] | null,
+      error,
+      count,
+    }
+  }, "Events in progress")
 }
 
 const createEventSchema = z.object({
@@ -150,17 +169,21 @@ export async function listPromoters(): Promise<Promoter[]> {
   const supabase = await createClient()
   const workspaceId = await getCurrentWorkspaceId()
 
-  const { data, error } = await supabase
-    .from("promoters")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .order("name", { ascending: true })
+  return readCompleteCollection<Promoter>(async (from, to) => {
+    const { data, error, count } = await supabase
+      .from("promoters")
+      .select("*", { count: "exact" })
+      .eq("workspace_id", workspaceId)
+      .order("name", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to)
 
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  return data ?? []
+    return {
+      data: data as unknown as Promoter[] | null,
+      error,
+      count,
+    }
+  }, "Promoters")
 }
 
 export async function createPromoter(input: {

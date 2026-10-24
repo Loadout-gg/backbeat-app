@@ -1,5 +1,7 @@
 "use server"
 
+import { readCompleteCollection } from "@/lib/read-complete-collection"
+
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentWorkspaceId } from "./workspace"
 import { revalidatePath } from "next/cache"
@@ -55,20 +57,28 @@ export async function listArtists(): Promise<Artist[]> {
   const supabase = await createClient()
   const workspaceId = await getCurrentWorkspaceId()
 
-  const { data, error } = await supabase
-    .from("artists")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .order("name", { ascending: true })
+  const data = await readCompleteCollection<Artist>(async (from, to) => {
+    const { data, error, count } = await supabase
+      .from("artists")
+      .select("*", { count: "exact" })
+      .eq("workspace_id", workspaceId)
+      .order("name", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to)
 
-  if (error) {
-    throw new Error(error.message)
-  }
+    return {
+      data: data as unknown as Artist[] | null,
+      error,
+      count,
+    }
+  }, "Artists")
 
-  return (data ?? []).map((artist) => ({
+  return data.map((artist) => ({
     ...artist,
     stage_name: artist.stage_name || artist.name || "Unknown",
-    real_name: artist.surname ? `${artist.name || ""} ${artist.surname}`.trim() : artist.name,
+    real_name: artist.surname
+      ? `${artist.name || ""} ${artist.surname}`.trim()
+      : artist.name,
     genre: artist.genres?.[0] || null,
     genres: artist.genres ?? [],
     base_rate: artist.fee ?? null,
