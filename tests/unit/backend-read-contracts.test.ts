@@ -305,3 +305,131 @@ describe("dashboard counts", () => {
     expect(requests).toEqual([])
   })
 })
+
+describe("event creation validation", () => {
+  const valid = { title: "Event", date: "2028-02-29" }
+
+  it.each([
+    { title: "" },
+    { title: " \t\n " },
+    { title: 42 },
+    { date: "2026-02-30" },
+    { date: "2025-02-29" },
+    { date: "2026-13-01" },
+    { date: "0000-01-01" },
+    { date: "infinity" },
+    { date: "-infinity" },
+    { date: "today" },
+    { date: "2026-01-01T00:00:00Z" },
+    { date: " 2026-01-01" },
+    { date: null },
+    { status: "completed" },
+    { status: "pending" },
+    { status: "" },
+    { status: null },
+    { artist_id: "" },
+    { artist_id: "bad" },
+    { artist_id: `${ARTIST} ` },
+    { artist_id: null },
+    { promoter_id: "bad" },
+    { promoter_id: `${PROMOTER} ` },
+    { promoter_id: null },
+    { location: 42 },
+  ])("rejects %j before backend access", async change => {
+    const input = { ...valid, ...change } as unknown as Parameters<typeof createEvent>[0]
+    const result = await createEvent(input)
+
+    expect(result.success).toBe(false)
+    expect(result.error).toBeTruthy()
+    expect(mocks.createClient).not.toHaveBeenCalled()
+    expect(mocks.workspace).not.toHaveBeenCalled()
+    expect(requests).toEqual([])
+    expect(mocks.revalidate).not.toHaveBeenCalled()
+  })
+
+  it.each(["in_progress", "confirmed", "cancelled"] as const)(
+    "persists normalized approved status %s with scoped relations",
+    async status => {
+      respond = () => reply({ id: EVENT })
+      const result = await createEvent({
+        title: "  Event  ",
+        date: "2028-02-29",
+        location: "  Venue  ",
+        status,
+        artist_id: ARTIST,
+        promoter_id: PROMOTER,
+        workspace_id: "foreign-workspace",
+        public_token: "must-not-write",
+      } as Parameters<typeof createEvent>[0])
+
+      expect(result).toEqual({ success: true, eventId: EVENT })
+      expect(requests).toHaveLength(1)
+      expect(requests[0].method).toBe("POST")
+      expect(tableOf(requests[0])).toBe("events")
+      expect(requests[0].url.searchParams.get("select")).toBe("id")
+      expect(requests[0].body).toEqual({
+        title: "Event",
+        date: "2028-02-29",
+        location: "Venue",
+        status,
+        artist_id: ARTIST,
+        promoter_id: PROMOTER,
+        workspace_id: WORKSPACE,
+      })
+      expect(mocks.revalidate.mock.calls).toEqual([
+        ["/dashboard/events"],
+        ["/dashboard"],
+      ])
+    },
+  )
+
+  it("defaults only omitted status and normalizes absent relations/blank location", async () => {
+    respond = () => reply({ id: EVENT })
+    expect(await createEvent({ ...valid, location: "   " })).toEqual({
+      success: true,
+      eventId: EVENT,
+    })
+    expect(requests[0].body).toEqual({
+      ...valid,
+      location: null,
+      status: "in_progress",
+      artist_id: null,
+      promoter_id: null,
+      workspace_id: WORKSPACE,
+    })
+  })
+
+  it("does not silently add new product text limits", async () => {
+    respond = () => reply({ id: EVENT })
+    expect((await createEvent({
+      title: "x".repeat(201),
+      date: "2028-02-29",
+      location: "x".repeat(1001),
+    })).success).toBe(true)
+  })
+
+  it.each(["database error", "missing row"])(
+    "does not revalidate success after %s",
+    async kind => {
+      respond = () => kind === "database error"
+        ? reply(
+            { code: "23503", message: "write denied", details: null, hint: null },
+            undefined,
+            400,
+          )
+        : reply(null)
+
+      const result = await createEvent(valid)
+      expect(result.success).toBe(false)
+      expect(result.error).toBeTruthy()
+      expect(mocks.revalidate).not.toHaveBeenCalled()
+    },
+  )
+
+  it("preserves workspace-resolution rejection without inserting", async () => {
+    mocks.workspace.mockRejectedValueOnce(new Error("No active workspace"))
+    await expect(createEvent(valid)).rejects.toThrow("No active workspace")
+    expect(requests).toEqual([])
+    expect(mocks.revalidate).not.toHaveBeenCalled()
+  })
+})

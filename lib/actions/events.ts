@@ -85,6 +85,25 @@ export async function listEventsInProgress(): Promise<EventWithRelations[]> {
   return (data ?? []) as EventWithRelations[]
 }
 
+const createEventSchema = z.object({
+  title: z.string()
+    .trim()
+    .min(1, "Event title is required"),
+  date: z.string()
+    .date("Enter a valid event date")
+    .refine(
+      value => !value.startsWith("0000-"),
+      "Enter a valid event date",
+    ),
+  location: z.string()
+    .trim()
+    .optional(),
+  status: z.enum(["in_progress", "confirmed", "cancelled"])
+    .default("in_progress"),
+  artist_id: z.string().uuid("Choose a valid artist").optional(),
+  promoter_id: z.string().uuid("Choose a valid promoter").optional(),
+})
+
 export async function createEvent(input: {
   title: string
   date: string
@@ -93,25 +112,32 @@ export async function createEvent(input: {
   artist_id?: string
   promoter_id?: string
 }): Promise<{ success: boolean; eventId?: string; error?: string }> {
+  const validation = createEventSchema.safeParse(input)
+  if (!validation.success) {
+    return { success: false, error: validation.error.issues[0].message }
+  }
+
+  const value = validation.data
   const supabase = await createClient()
   const workspaceId = await getCurrentWorkspaceId()
 
   const { data, error } = await supabase
     .from("events")
     .insert({
-      title: input.title,
-      date: input.date,
-      location: input.location || null,
-      status: input.status || "in_progress",
-      artist_id: input.artist_id || null,
-      promoter_id: input.promoter_id || null,
+      title: value.title,
+      date: value.date,
+      location: value.location || null,
+      status: value.status,
+      artist_id: value.artist_id ?? null,
+      promoter_id: value.promoter_id ?? null,
       workspace_id: workspaceId,
     })
     .select("id")
     .single()
 
-  if (error) {
-    return { success: false, error: error.message }
+  if (error) return { success: false, error: error.message }
+  if (!data || !z.string().uuid().safeParse(data.id).success) {
+    return { success: false, error: "Unable to create event. Please try again." }
   }
 
   revalidatePath("/dashboard/events")
