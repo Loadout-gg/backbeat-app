@@ -11,30 +11,44 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { createEvent, listPromoters, type Promoter } from "@/lib/actions/events"
-import { listArtists, type Artist } from "@/lib/actions/artists"
+import { createEvent, listPromoters, type PromoterOption } from "@/lib/actions/events"
+import { getArtists, type ArtistOption } from "@/lib/actions/artists"
 
 export default function NewEventPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [artists, setArtists] = useState<Artist[]>([])
-  const [promoters, setPromoters] = useState<Promoter[]>([])
+  const [artists, setArtists] = useState<ArtistOption[]>([])
+  const [promoters, setPromoters] = useState<PromoterOption[]>([])
   const [selectedArtist, setSelectedArtist] = useState<string>("none")
   const [selectedPromoter, setSelectedPromoter] = useState<string>("none")
   const [selectedStatus, setSelectedStatus] = useState<string>("in_progress")
+  const [lookupState, setLookupState] = useState<"loading" | "ready" | "error">("loading")
+  const [lookupAttempt, setLookupAttempt] = useState(0)
 
   useEffect(() => {
+    let active = true
     async function loadData() {
-      const [artistsData, promotersData] = await Promise.all([listArtists(), listPromoters()])
-      setArtists(artistsData)
-      setPromoters(promotersData)
+      try {
+        const [artistsData, promotersData] = await Promise.all([getArtists(), listPromoters()])
+        if (!active) return
+        setArtists(artistsData)
+        setPromoters(promotersData)
+        setLookupState("ready")
+      } catch {
+        if (!active) return
+        setArtists([])
+        setPromoters([])
+        setLookupState("error")
+      }
     }
-    loadData()
-  }, [])
+    void loadData()
+    return () => { active = false }
+  }, [lookupAttempt])
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (isLoading || lookupState !== "ready") return
     setIsLoading(true)
     setError(null)
 
@@ -43,19 +57,26 @@ export default function NewEventPage() {
     const date = formData.get("date") as string
     const location = formData.get("location") as string
 
-    const result = await createEvent({
-      title,
-      date,
-      location: location || undefined,
-      status: selectedStatus as "in_progress" | "confirmed" | "cancelled",
-      artist_id: selectedArtist === "none" ? undefined : selectedArtist,
-      promoter_id: selectedPromoter === "none" ? undefined : selectedPromoter,
-    })
+    try {
+      const result = await createEvent({
+        title,
+        date,
+        location: location || undefined,
+        status: selectedStatus as "in_progress" | "confirmed" | "cancelled",
+        artist_id: selectedArtist === "none" ? undefined : selectedArtist,
+        promoter_id: selectedPromoter === "none" ? undefined : selectedPromoter,
+      })
 
-    if (result.success) {
-      router.push("/dashboard/events")
-    } else {
-      setError(result.error || "Failed to create event")
+      if (result.success) {
+        router.push("/dashboard/events")
+      } else {
+        setError(result.error || "Failed to create event")
+      }
+    } catch {
+      setError(
+        "Unable to confirm whether the event was created. Check the event list before retrying."
+      )
+    } finally {
       setIsLoading(false)
     }
   }
@@ -81,8 +102,17 @@ export default function NewEventPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            {lookupState === "error" && (
+              <div className="space-y-2">
+                <p role="alert">Unable to load event options. Please try again.</p>
+                <Button type="button" variant="outline" onClick={() => {
+                  setLookupState("loading")
+                  setLookupAttempt(attempt => attempt + 1)
+                }}>Retry loading options</Button>
+              </div>
+            )}
             {error && (
-              <div className="p-3 text-sm text-red-500 bg-red-50 border border-red-200 rounded-md">{error}</div>
+              <div role="alert" className="p-3 text-sm text-red-500 bg-red-50 border border-red-200 rounded-md">{error}</div>
             )}
 
             <div className="space-y-2">
@@ -116,7 +146,7 @@ export default function NewEventPage() {
 
             <div className="space-y-2">
               <Label htmlFor="artist">Artist</Label>
-              <Select value={selectedArtist} onValueChange={setSelectedArtist} disabled={isLoading}>
+              <Select value={selectedArtist} onValueChange={setSelectedArtist} disabled={isLoading || lookupState !== "ready"}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select artist (optional)" />
                 </SelectTrigger>
@@ -133,7 +163,7 @@ export default function NewEventPage() {
 
             <div className="space-y-2">
               <Label htmlFor="promoter">Promoter</Label>
-              <Select value={selectedPromoter} onValueChange={setSelectedPromoter} disabled={isLoading}>
+              <Select value={selectedPromoter} onValueChange={setSelectedPromoter} disabled={isLoading || lookupState !== "ready"}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select promoter (optional)" />
                 </SelectTrigger>
@@ -149,7 +179,7 @@ export default function NewEventPage() {
             </div>
 
             <div className="flex gap-3 pt-4">
-              <Button type="submit" disabled={isLoading}>
+              <Button type="submit" disabled={isLoading || lookupState !== "ready"}>
                 {isLoading ? "Creating..." : "Create event"}
               </Button>
               <Button type="button" variant="outline" asChild>

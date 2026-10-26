@@ -39,6 +39,8 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
   const [activeTab, setActiveTab] = useState("Performance");
   const feeFocusTarget = useRef<BookingFeeError["field"] | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const deleteInFlight = useRef(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Form state - Performance tab
@@ -82,6 +84,7 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
   const [contactEmailSecondary, setContactEmailSecondary] = useState("");
 
   const artist = booking.artist;
+  const artistDisplayName = artist.stage_name || artist.name || "Unknown";
 
   // Consume submit-only focus intent when Radix mounts the field, even from another tab.
   const focusFeeError = (field: BookingFeeError["field"], element: HTMLElement | null) => {
@@ -168,11 +171,25 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
   };
 
   const handleDelete = async () => {
+    if (deleteInFlight.current) return;
+    deleteInFlight.current = true;
     setIsDeleting(true);
-    const result = await deleteBooking(booking.id);
-    setIsDeleting(false);
-    if (result.success) {
-      router.push("/dashboard");
+    setDeleteError(null);
+
+    try {
+      const result = await deleteBooking(booking.id);
+      if (result.success) {
+        router.push("/dashboard");
+      } else {
+        setDeleteError("Unable to delete booking. Please try again.");
+      }
+    } catch {
+      setDeleteError(
+        "Unable to confirm deletion. Check the booking list before retrying."
+      );
+    } finally {
+      deleteInFlight.current = false;
+      setIsDeleting(false);
     }
   };
 
@@ -205,15 +222,15 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
             <Avatar className="h-14 w-14 shrink-0">
               <AvatarImage
                 src={artist.profile_image_url || undefined}
-                alt={artist.stage_name}
+                alt={artistDisplayName}
               />
               <AvatarFallback className="bg-muted text-foreground">
-                {getInitials(artist.stage_name)}
+                {getInitials(artistDisplayName)}
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0 break-words">
               <h2 className="font-semibold text-lg text-foreground">
-                {artist.stage_name}
+                {artistDisplayName}
               </h2>
               <p className="text-sm text-muted-foreground">
                 {realName || "Name unknown"}
@@ -688,6 +705,11 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
         {/* Bottom actions */}
         <div className="flex flex-col gap-4 rounded-b-xl bg-card px-4 py-4 sm:px-6 lg:sticky lg:bottom-0 lg:z-10 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between border-t border-border">
           <div className="relative">
+            {deleteError && (
+              <p role="alert" className="mb-2 text-sm text-destructive">
+                {deleteError}
+              </p>
+            )}
             {showDeleteConfirm ? (
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm text-muted-foreground">
@@ -705,6 +727,7 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
                   variant="outline"
                   size="sm"
                   onClick={() => setShowDeleteConfirm(false)}
+                  disabled={isDeleting}
                 >
                   Cancel
                 </Button>
@@ -712,7 +735,10 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
             ) : (
               <Button
                 variant="outline"
-                onClick={() => setShowDeleteConfirm(true)}
+                onClick={() => {
+                  setDeleteError(null);
+                  setShowDeleteConfirm(true);
+                }}
               >
                 <Trash2 className="h-4 w-4 mr-2" />
                 Delete

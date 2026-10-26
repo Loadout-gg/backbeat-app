@@ -145,6 +145,7 @@ export default function NewArtistPage() {
   }
 
   const handleSubmit = async () => {
+    if (isLoading || showSuccess) return
     if (!formData.stage_name.trim()) {
       setError("Stage name is required")
       setCurrentStep(1)
@@ -177,12 +178,18 @@ export default function NewArtistPage() {
       special_needs: formData.special_needs || undefined,
     }
 
-    const result = await createArtist(input)
-
-    if (result.success) {
-      setShowSuccess(true)
-    } else {
-      setError(result.error || "Failed to create artist")
+    try {
+      const result = await createArtist(input)
+      if (result.success) {
+        setShowSuccess(true)
+      } else {
+        setError(result.error || "Failed to create artist")
+      }
+    } catch {
+      setError(
+        "Unable to confirm whether the artist was created. Check the artist list before retrying."
+      )
+    } finally {
       setIsLoading(false)
     }
   }
@@ -236,7 +243,7 @@ export default function NewArtistPage() {
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-6">
             {error && (
-              <div className="mb-4 p-3 text-sm text-red-500 bg-red-50 border border-red-200 rounded-md">{error}</div>
+              <div role="alert" className="mb-4 p-3 text-sm text-red-500 bg-red-50 border border-red-200 rounded-md">{error}</div>
             )}
 
             {/* Step 1: General Info */}
@@ -628,7 +635,7 @@ export default function NewArtistPage() {
             {currentStep < 4 ? (
               <Button onClick={handleNext}>Continue</Button>
             ) : (
-              <Button onClick={handleSubmit} disabled={isLoading}>
+              <Button onClick={handleSubmit} disabled={isLoading || showSuccess}>
                 {isLoading ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />

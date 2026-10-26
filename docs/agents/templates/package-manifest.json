@@ -1,0 +1,31 @@
+{
+  "format_version": 1,
+  "request_id": "<request ID>",
+  "revision": "<r01>",
+  "status": "REQUESTED_NOT_APPROVED",
+  "decision_owner": "Alberto",
+  "requester": "<actual requester>",
+  "task_reference": "<reference or unavailable>",
+  "source": {
+    "head": "<full observed commit SHA>",
+    "branch": "<actual branch>",
+    "worktree_state": "<clean or changed-path summary>"
+  },
+  "architecture_approved": false,
+  "implementation_authorized": false,
+  "external_actions_authorized": false,
+  "files": [
+    {
+      "path": "REQUEST.md",
+      "bytes": "<measured integer>",
+      "sha256": "<computed SHA-256>"
+    },
+    {
+      "path": "EVIDENCE.md",
+      "bytes": "<measured integer>",
+      "sha256": "<computed SHA-256>"
+    }
+  ],
+  "manifest_self_excluded": true,
+  "notes": "Template only. Replace placeholders with actual values; freeze delivered bytes. Record owner decisions separately, never turn these fields true without authentic scoped approval."
+}

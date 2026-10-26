@@ -21,7 +21,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Calendar } from "@/components/ui/calendar"
-import { type Artist, type SocialLink } from "@/lib/actions/artists"
+import { type Artist } from "@/lib/actions/artists"
+import { parseSocialLinks, parseDocuments, artistMetadataHref } from "@/lib/artist-validation"
 import { NewBookingModal } from "@/components/dashboard/new-booking-modal"
 import { formatArtistBaseRate } from "@/lib/artist-base-rate"
 
@@ -37,76 +38,6 @@ function getSocialIcon(type: string) {
   if (t.includes("tiktok")) return "TT"
   if (t.includes("website") || t.includes("web")) return "W"
   return "CN"
-}
-
-// Parse social links safely
-function parseSocialLinks(socialLinks: unknown): SocialLink[] {
-  if (!socialLinks) return []
-
-  if (Array.isArray(socialLinks)) {
-    return socialLinks.filter(
-      (link): link is SocialLink =>
-        typeof link === "object" && link !== null && "type" in link && "url" in link
-    )
-  }
-
-  if (typeof socialLinks === "string") {
-    try {
-      const parsed = JSON.parse(socialLinks)
-      if (Array.isArray(parsed)) {
-        return parsed.filter(
-          (link): link is SocialLink =>
-            typeof link === "object" && link !== null && "type" in link && "url" in link
-        )
-      }
-    } catch {
-      return []
-    }
-  }
-
-  return []
-}
-
-// Document type
-type Document = {
-  name: string
-  url?: string
-  type?: string
-}
-
-// Parse documents safely (handles JSON string or array)
-function parseDocuments(documents: unknown): Document[] {
-  if (!documents) return []
-
-  if (Array.isArray(documents)) {
-    return documents.filter(
-      (doc): doc is Document =>
-        typeof doc === "object" && doc !== null && "name" in doc
-    )
-  }
-
-  if (typeof documents === "string") {
-    try {
-      const parsed = JSON.parse(documents)
-      if (Array.isArray(parsed)) {
-        return parsed.filter(
-          (doc): doc is Document =>
-            typeof doc === "object" && doc !== null && "name" in doc
-        )
-      }
-    } catch {
-      return []
-    }
-  }
-
-  return []
-}
-
-// Ensure URL has scheme
-function ensureScheme(url: string): string {
-  if (!url) return "#"
-  if (url.startsWith("http://") || url.startsWith("https://")) return url
-  return `https://${url}`
 }
 
 // Format equipment as list items
@@ -317,11 +248,13 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                     {socialLinks.map((link, idx) => (
                       <a
                         key={idx}
-                        href={ensureScheme(link.url)}
+                        href={artistMetadataHref(link.url) ?? undefined}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex shrink-0 items-center justify-center w-7 h-7 border rounded text-xs font-medium hover:bg-muted"
                         title={link.type}
+                        aria-label={link.type}
+                        aria-disabled={artistMetadataHref(link.url) === null || undefined}
                       >
                         {getSocialIcon(link.type)}
                       </a>
@@ -618,15 +551,17 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="sm" asChild>
-                          <a
-                            href={doc.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
+                        {artistMetadataHref(doc.url) ? (
+                          <Button variant="ghost" size="sm" asChild>
+                            <a href={artistMetadataHref(doc.url)!} target="_blank" rel="noopener noreferrer">
+                              View
+                            </a>
+                          </Button>
+                        ) : (
+                          <Button variant="ghost" size="sm" disabled title="No supported document link">
                             View
-                          </a>
-                        </Button>
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"

@@ -1,8 +1,8 @@
 import { beforeEach, expect, it, vi } from "vitest"
 const mocks = vi.hoisted(() => {
-  const result = { data: [{ id: "event-a" }], error: null as { message: string } | null }
+  const result = { data: [{ id: "event-a" }], count: 1, error: null as { message: string } | null }
   const query = {
-    select: vi.fn(), eq: vi.fn(), order: vi.fn(),
+    select: vi.fn(), eq: vi.fn(), order: vi.fn(), range: vi.fn(),
     then: (resolve: (value: typeof result) => unknown) => Promise.resolve(result).then(resolve),
   }
   return { result, query, from: vi.fn(), createClient: vi.fn(), workspace: vi.fn() }
@@ -18,12 +18,16 @@ beforeEach(() => {
   mocks.workspace.mockResolvedValue("selected-workspace")
   mocks.createClient.mockResolvedValue({ from: mocks.from })
   mocks.from.mockReturnValue(mocks.query)
-  for (const fn of [mocks.query.select, mocks.query.eq, mocks.query.order]) fn.mockReturnValue(mocks.query)
+  for (const fn of [mocks.query.select, mocks.query.eq, mocks.query.order, mocks.query.range]) fn.mockReturnValue(mocks.query)
 })
 it("restricts artist events at the database boundary while retaining the authoritative workspace", async () => {
   expect(await listEvents({ artistId })).toEqual([{ id: "event-a" }])
   expect(mocks.query.eq.mock.calls).toEqual([["workspace_id", "selected-workspace"], ["artist_id", artistId]])
-  expect(mocks.query.order.mock.calls).toEqual([["date", { ascending: false }], ["created_at", { ascending: false }]])
+  expect(mocks.query.order.mock.calls).toEqual([
+  ["date", { ascending: false }],
+  ["created_at", { ascending: false }],
+  ["id", { ascending: true }],
+])
 })
 it.each(["", "invalid", "11111111-1111-4111-8111-111111111111 "])("rejects malformed artist filter %j before backend access", async (value) => {
   await expect(listEvents({ artistId: value })).rejects.toThrow("Invalid artist ID")

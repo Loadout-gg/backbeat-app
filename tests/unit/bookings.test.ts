@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest"
 const { db, query, workspace } = vi.hoisted(() => {
   const query: Record<string, ReturnType<typeof vi.fn>> = {}
-  for (const method of ["insert", "update", "delete", "select", "eq", "single", "order"]) query[method] = vi.fn()
+  for (const method of ["insert", "update", "delete", "select", "eq", "single", "order", "range"]) query[method] = vi.fn()
   return { query, workspace: vi.fn(async () => "selected-workspace"), db: { from: vi.fn(), auth: { getUser: vi.fn() } } }
 })
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn(async () => db) }))
@@ -16,7 +16,7 @@ beforeEach(() => {
   db.from.mockReturnValue(query)
   for (const method of Object.values(query)) method.mockReturnValue(query)
   query.single.mockResolvedValue({ data: { id, workspace_id: "wrong-workspace" }, error: null })
-  query.order.mockResolvedValue({ data: [], error: null })
+  query.range.mockResolvedValue({ data: [], count: 0, error: null })
 })
 it.each([
   ["create", () => createBooking(input)],
@@ -33,7 +33,7 @@ it("filters an artist booking query inside the authoritative workspace", async (
   expect(query.eq).toHaveBeenCalledWith("artist_id", id)
 })
 it("reports strict booking-read failure instead of a false empty list", async () => {
-  query.order.mockResolvedValueOnce({ data: null, error: { message: "backend unavailable" } })
+  query.range.mockResolvedValueOnce({ data: null, count: null, error: { message: "backend unavailable" } })
   const log = vi.spyOn(console, "error").mockImplementation(() => {})
   try {
     await expect(getBookings({ failOnError: true })).rejects.toThrow("Unable to load bookings")

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Calendar, CheckCircle2 } from "lucide-react";
 import {
@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { getArtists, type Artist } from "@/lib/actions/artists";
+import { getArtists, type ArtistOption } from "@/lib/actions/artists";
 import { createBooking, type Booking } from "@/lib/actions/bookings";
 import { formatArtistBaseRate } from "@/lib/artist-base-rate";
 
@@ -22,7 +22,7 @@ type ModalStep = "select-artist" | "booking-details" | "success";
 interface NewBookingModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  preselectedArtist?: Artist | null;
+  preselectedArtist?: ArtistOption | null;
 }
 
 export function NewBookingModal({
@@ -34,59 +34,133 @@ export function NewBookingModal({
   const [step, setStep] = useState<ModalStep>(
     preselectedArtist ? "booking-details" : "select-artist"
   );
-  const [artists, setArtists] = useState<Artist[]>([]);
+  const [artists, setArtists] = useState<ArtistOption[]>([]);
+  const [artistsError, setArtistsError] = useState<string | null>(null);
+  const [rosterAttempt, setRosterAttempt] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedArtist, setSelectedArtist] = useState<Artist | null>(
+  const [draftArtist, setSelectedArtist] = useState<ArtistOption | null>(
     preselectedArtist || null
   );
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [createdBooking, setCreatedBooking] = useState<Booking | null>(null);
+  const [completion, setCompletion] = useState<{
+    session: number;
+    request: number;
+    booking: Booking;
+    artist: ArtistOption;
+  } | null>(null);
 
-  // Form state
+  // Success renders the artist submitted with that booking, not refreshed props.
+  const selectedArtist = step === "success"
+    ? completion?.artist ?? null
+    : draftArtist;
+  const createdBooking = completion?.booking ?? null;
+  const preselectedArtistId = preselectedArtist?.id;
+
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState("10:30");
   const [duration, setDuration] = useState("00:00");
   const [notes, setNotes] = useState("");
 
-  // Load artists when modal opens at step 1
-  useEffect(() => {
-    if (open && !preselectedArtist) {
-      // This controlled modal stays mounted; loading starts on each external open transition.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setIsLoading(true);
-      getArtists()
-        .then(setArtists)
-        .finally(() => setIsLoading(false));
-    }
-  }, [open, preselectedArtist]);
+  const lifecycle = useRef({
+    mounted: false,
+    open: false,
+    artistId: undefined as string | undefined,
+    session: 0,
+    saveRequest: 0,
+    rosterRequest: 0,
+    saving: false,
+  });
 
-  const previousSelection = useRef<{ open: boolean; artistId?: string }>({ open: false });
+  const invalidateSession = useCallback(() => {
+    const current = lifecycle.current;
+    current.session += 1;
+    current.saveRequest += 1;
+    current.rosterRequest += 1;
+    current.saving = false;
+  }, []);
 
-  // Reset only for a new modal session or a different artist, not an RSC refresh.
+  const isCurrentSession = useCallback((session: number) => {
+    const current = lifecycle.current;
+    return current.mounted && current.open && current.session === session;
+  }, []);
+
+  useLayoutEffect(() => {
+    const current = lifecycle.current;
+    current.mounted = true;
+    return () => {
+      current.mounted = false;
+      invalidateSession();
+    };
+  }, [invalidateSession]);
+
+  // Invalidate at commit, before a settled promise can affect another session.
+  // A same-ID RSC object refresh is deliberately not a new session.
+  useLayoutEffect(() => {
+    const current = lifecycle.current;
+    if (current.open === open && current.artistId === preselectedArtistId) return;
+
+    invalidateSession();
+    current.open = open;
+    current.artistId = preselectedArtistId;
+
+    setIsSaving(false);
+    setIsLoading(open && !preselectedArtistId);
+    setArtistsError(null);
+    setSaveError(null);
+    setCompletion(null);
+
+    if (!open) return;
+
+    // A controlled open/identity transition initializes this modal's draft.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSelectedArtist(preselectedArtist || null);
+    setStep(preselectedArtist ? "booking-details" : "select-artist");
+    setArtists([]);
+    setSearchQuery("");
+    setDate("");
+    setStartTime("10:30");
+    setDuration("00:00");
+    setNotes("");
+  }, [open, preselectedArtist, preselectedArtistId, invalidateSession]);
+
   useEffect(() => {
-    const previous = previousSelection.current;
-    previousSelection.current = { open, artistId: preselectedArtist?.id };
-    if (open && (!previous.open || previous.artistId !== preselectedArtist?.id)) {
-      if (preselectedArtist) {
-        // A controlled open/artist transition initializes this modal's draft.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setSelectedArtist(preselectedArtist);
-        setStep("booking-details");
-      } else {
-        setStep("select-artist");
-        setSelectedArtist(null);
+    if (!open || preselectedArtistId) return;
+
+    const current = lifecycle.current;
+    const session = current.session;
+    const request = ++current.rosterRequest;
+    const isCurrent = () =>
+      isCurrentSession(session) &&
+      lifecycle.current.rosterRequest === request;
+
+    // Each open/retry starts a fresh roster read, not an unmarked stale list.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIsLoading(true);
+    setArtists([]);
+    setArtistsError(null);
+
+    async function loadArtists() {
+      try {
+        const result = await getArtists();
+        if (isCurrent()) setArtists(result);
+      } catch {
+        if (isCurrent()) {
+          setArtistsError("Unable to load artists. Please try again.");
+        }
+      } finally {
+        if (isCurrent()) setIsLoading(false);
       }
-      setSearchQuery("");
-      setDate("");
-      setStartTime("10:30");
-      setDuration("00:00");
-      setNotes("");
-      setCreatedBooking(null);
-      setSaveError(null);
     }
-  }, [open, preselectedArtist]);
+
+    void loadArtists();
+    return () => {
+      if (current.rosterRequest === request) {
+        current.rosterRequest += 1;
+      }
+    };
+  }, [open, preselectedArtistId, rosterAttempt, isCurrentSession]);
 
   const filteredArtists = artists.filter((artist) => {
     const query = searchQuery.toLowerCase();
@@ -101,52 +175,111 @@ export function NewBookingModal({
     );
   });
 
-  const handleSelectArtist = (artist: Artist) => {
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      // Invalidate immediately, including before the parent commits open=false.
+      invalidateSession();
+      lifecycle.current.open = false;
+      setIsSaving(false);
+      setIsLoading(false);
+    }
+    onOpenChange(nextOpen);
+  };
+
+  const handleSelectArtist = (artist: ArtistOption) => {
+    if (!lifecycle.current.open) return;
+    invalidateSession();
+    setIsLoading(false);
     setSelectedArtist(artist);
+    setCompletion(null);
+    setSaveError(null);
     setStep("booking-details");
   };
 
   const handleSaveBooking = async () => {
-    if (!selectedArtist || !date || !startTime) return;
+    const current = lifecycle.current;
+    if (
+      !current.mounted ||
+      !current.open ||
+      current.saving ||
+      step !== "booking-details" ||
+      !draftArtist ||
+      !date ||
+      !startTime
+    ) return;
 
+    const session = current.session;
+    const request = ++current.saveRequest;
+    const submittedArtist = Object.freeze({ ...draftArtist });
+    const submitted = Object.freeze({ date, startTime, duration, notes });
+    current.saving = true;
     setIsSaving(true);
     setSaveError(null);
 
-    // Parse duration (HH:MM format) to minutes
-    const [hours, minutes] = duration.split(":").map(Number);
+    const isCurrent = () =>
+      isCurrentSession(session) &&
+      lifecycle.current.saveRequest === request;
+    const [hours, minutes] = submitted.duration.split(":").map(Number);
     const durationMinutes = (hours || 0) * 60 + (minutes || 0);
 
     try {
       const result = await createBooking({
-        artistId: selectedArtist.id,
-        date,
-        startTime,
+        artistId: submittedArtist.id,
+        date: submitted.date,
+        startTime: submitted.startTime,
         durationMinutes,
-        notes: notes || undefined,
+        notes: submitted.notes || undefined,
       });
+
+      if (!isCurrent()) return;
+
       if (result.success && result.booking) {
-        setCreatedBooking(result.booking);
+        if (result.booking.artist_id !== submittedArtist.id) {
+          setSaveError(
+            "Unable to confirm the saved booking. Check the calendar before retrying."
+          );
+          return;
+        }
+        setCompletion({
+          session,
+          request,
+          artist: submittedArtist,
+          booking: Object.freeze({ ...result.booking }),
+        });
         setStep("success");
       } else {
         setSaveError(result.error || "Unable to save booking. Please try again.");
       }
     } catch {
-      setSaveError("Unable to save booking. Please try again.");
+      if (isCurrent()) {
+        setSaveError(
+          "Unable to save booking. The result could not be confirmed; check the calendar before retrying."
+        );
+      }
     } finally {
-      setIsSaving(false);
+      if (isCurrent()) {
+        lifecycle.current.saving = false;
+        setIsSaving(false);
+      }
     }
   };
 
+  const hasCurrentCompletion = () =>
+    completion !== null &&
+    isCurrentSession(completion.session) &&
+    lifecycle.current.saveRequest === completion.request;
+
   const handleBackToDashboard = () => {
-    onOpenChange(false);
+    if (!hasCurrentCompletion()) return;
+    handleOpenChange(false);
     router.push("/dashboard");
   };
 
   const handleStartEventSetup = () => {
-    if (createdBooking) {
-      onOpenChange(false);
-      router.push(`/dashboard/bookings/${createdBooking.id}`);
-    }
+    if (!hasCurrentCompletion() || !completion) return;
+    const bookingId = completion.booking.id;
+    handleOpenChange(false);
+    router.push(`/dashboard/bookings/${bookingId}`);
   };
 
   const getInitials = (name: string) => {
@@ -184,7 +317,7 @@ export function NewBookingModal({
         : "w-[calc(100vw-2rem)] max-w-5xl sm:max-w-5xl max-h-[calc(100dvh-2rem)] overflow-y-auto p-0";
 
   return (
-    <Dialog open={open} onOpenChange={step === "success" ? () => {} : onOpenChange}>
+    <Dialog open={open} onOpenChange={step === "success" ? () => {} : handleOpenChange}>
       <DialogContent aria-describedby={undefined} className={dialogClassName} showCloseButton={step !== "success"}>
         {/* ========== STEP 1: Select Artist ========== */}
         {step === "select-artist" && (
@@ -228,6 +361,18 @@ export function NewBookingModal({
                       </div>
                     ))}
                   </div>
+                ) : artistsError ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <p role="alert" className="mb-4 text-sm text-destructive">
+                      {artistsError}
+                    </p>
+                    <Button
+                      variant="outline"
+                      onClick={() => setRosterAttempt((attempt) => attempt + 1)}
+                    >
+                      Retry loading artists
+                    </Button>
+                  </div>
                 ) : filteredArtists.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-center">
                     <p className="text-muted-foreground mb-4">
@@ -239,7 +384,8 @@ export function NewBookingModal({
                       <Button
                         variant="outline"
                         onClick={() => {
-                          onOpenChange(false);
+                          if (!lifecycle.current.open) return;
+                          handleOpenChange(false);
                           router.push("/dashboard/artists/new");
                         }}
                       >
@@ -401,6 +547,12 @@ export function NewBookingModal({
               </div>
 
               {saveError && <p role="alert" className="mt-4 text-sm text-destructive">{saveError}</p>}
+              {isSaving && (
+                <p role="status" className="mt-4 text-sm text-muted-foreground">
+                  Closing this dialog does not cancel a submitted booking.
+                  Check the calendar before submitting again.
+                </p>
+              )}
               {/* Save button */}
               <div className="flex justify-end mt-6">
                 <Button

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { listEvents } from "@/lib/actions/events"
+import { eventDateParts } from "@/lib/event-date-display"
 
 function getStatusBadgeVariant(status: string) {
   switch (status) {
@@ -20,15 +21,6 @@ function getStatusBadgeVariant(status: string) {
 
 function formatStatus(status: string) {
   return status.replace("_", " ").replace(/\b\w/g, (l) => l.toUpperCase())
-}
-
-function formatDate(dateStr: string) {
-  const date = new Date(dateStr)
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  })
 }
 
 export default async function EventsPage() {
@@ -69,9 +61,9 @@ export default async function EventsPage() {
                 <div className="flex items-center gap-4">
                   <div className="flex flex-col items-center justify-center w-14 h-14 bg-muted rounded-md text-center">
                     <span className="text-xs uppercase text-muted-foreground">
-                      {new Date(event.date).toLocaleDateString("en-US", { month: "short" })}
+                      {eventDateParts(event.date).month}
                     </span>
-                    <span className="text-lg font-semibold">{new Date(event.date).getDate()}</span>
+                    <span className="text-lg font-semibold">{eventDateParts(event.date).day}</span>
                   </div>
                   <div>
                     <h3 className="font-medium">{event.title}</h3>

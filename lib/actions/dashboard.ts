@@ -10,26 +10,46 @@ export type DashboardStats = {
   totalPromoters: number
 }
 
+function checkedCount(result: {
+  count: number | null
+  error: { message: string } | null
+}): number {
+  if (
+    result.error ||
+    result.count === null ||
+    !Number.isSafeInteger(result.count) ||
+    result.count < 0
+  ) {
+    throw new Error("Unable to load dashboard counts. Please try again.")
+  }
+  return result.count
+}
+
 export async function getDashboardStats(): Promise<DashboardStats> {
   const supabase = await createClient()
   const workspaceId = await getCurrentWorkspaceId()
 
-  // Query real data from existing tables
-  // Artists and promoters tables exist; events/bookings will return 0 if tables don't exist or are empty
-  const [artistsResult, eventsResult, promotersResult] = await Promise.all([
-    supabase.from("artists").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId),
+  const [artists, events, promoters] = await Promise.all([
+    supabase
+      .from("artists")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId),
     supabase
       .from("events")
       .select("id", { count: "exact", head: true })
       .eq("workspace_id", workspaceId)
       .eq("status", "in_progress"),
-    supabase.from("promoters").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId),
+    supabase
+      .from("promoters")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId),
   ])
 
   return {
-    totalArtists: artistsResult.count ?? 0,
-    eventsInProgress: eventsResult.count ?? 0,
-    bookingsInProgress: 0, // Bookings table doesn't exist yet
-    totalPromoters: promotersResult.count ?? 0,
+    totalArtists: checkedCount(artists),
+    eventsInProgress: checkedCount(events),
+    // Compatibility field; the UI derives its booking count from the complete list.
+    bookingsInProgress: 0,
+    totalPromoters: checkedCount(promoters),
   }
 }

@@ -1,0 +1,21 @@
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const path = require('node:path')
+const { pathToFileURL } = require('node:url')
+
+test('Next emits minimal containment headers without disabling image safeguards', async () => {
+  const file = pathToFileURL(path.resolve(__dirname, '../../next.config.mjs')).href
+  const { default: config } = await import(file)
+  assert.equal(config.images.unoptimized, true)
+  assert.equal(typeof config.headers, 'function')
+  const rules = await config.headers()
+  const all = rules.find(rule => rule.source === '/:path*')
+  assert.ok(all)
+  const headers = Object.fromEntries(all.headers.map(({ key, value }) => [key.toLowerCase(), value]))
+  assert.equal(headers['x-content-type-options'], 'nosniff')
+  assert.equal(headers['x-frame-options'], 'DENY')
+  assert.equal(headers['referrer-policy'], 'no-referrer')
+  assert.equal(headers['permissions-policy'], 'camera=(), microphone=(), geolocation=(), payment=()')
+  assert.equal(headers['content-security-policy'], "base-uri 'self'; object-src 'none'; frame-ancestors 'none'")
+  assert.equal(headers['content-security-policy'].includes('unsafe-inline'), false)
+})
