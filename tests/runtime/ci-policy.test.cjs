@@ -16,3 +16,10 @@ test('CI runs every deterministic gate without deployment privileges', () => {
   assert.equal(uses.length, 3)
   for (const revision of uses) assert.match(revision, /^[a-f0-9]{40}$/)
 })
+
+test('CI evaluates production and full dependency security without blanket ignores', () => {
+  const workflow = fs.readFileSync(path.resolve(__dirname, '../../.github/workflows/ci.yml'), 'utf8')
+  assert.match(workflow, /^        run: pnpm audit --prod --audit-level=low$/m)
+  assert.match(workflow, /^        run: pnpm audit --audit-level=low$/m)
+  assert.doesNotMatch(workflow, /--ignore-unfixable|--ignore-registry-errors|audit --fix/)
+})
