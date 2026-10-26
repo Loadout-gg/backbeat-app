@@ -2,6 +2,12 @@
 
 Next.js application for artist and booking management. This checkout is the **isolated local development branch**, not a production release. The Agent visual system is documented in `PRODUCT.md` and `DESIGN.md`; local shell/dashboard, booking-editor and Artists-directory refinements are described in `docs/milestone-3.md`, `docs/milestone-4.md` and `docs/milestone-5.md`.
 
+## AI-assisted development
+
+Start with [AGENTS.md](AGENTS.md) and the [agent development guide](docs/agents/README.md) before changing this repository. Alberto owns architectural decisions; implementation tasks do not authorize a replacement architecture.
+
+Tool-specific entry points only reference the same policy. See [agent entry points and loading checks](docs/agents/agent-entrypoints.md) for supported discovery mechanisms and a manual bootstrap for other agents. Do not infer that an agent loaded the rules merely because the files exist.
+
 ## Safety boundary
 
 - Development runs in Openship on the Mac, in the dedicated Lima VM `backbeat-dev`.

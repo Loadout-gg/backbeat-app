@@ -1,0 +1,1 @@
+Read and follow [AGENTS.md](../AGENTS.md) before making changes. It is the canonical Backbeat project policy and links to the required development and architecture-decision documents. If you cannot read it, stop and report the missing context; do not invent a replacement policy.

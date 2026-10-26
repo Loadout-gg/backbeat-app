@@ -1,0 +1,30 @@
+{
+  "format_version": 1,
+  "request_id": "EXAMPLE-validator-replacement",
+  "revision": "r01",
+  "status": "EXAMPLE_NOT_SUBMITTED",
+  "decision_owner": "Alberto",
+  "requester": "documentation example",
+  "task_reference": "not a real assigned task",
+  "source": {
+    "head": "41d124e47fcf2463ff30ce7e53e981a4bd862aa9",
+    "branch": "fix/security-remediation-20261022",
+    "worktree_state": "clean at source inspection"
+  },
+  "architecture_approved": false,
+  "implementation_authorized": false,
+  "external_actions_authorized": false,
+  "files": [
+    {
+      "path": "REQUEST.md",
+      "bytes": 6355,
+      "sha256": "6d03d94c680be35a8b346d764ee27fc7614b55ae5b6d2464a3a7365cc052d402"
+    },
+    {
+      "path": "EVIDENCE.md",
+      "bytes": 6747,
+      "sha256": "05ee2213b08579e8a189af440990ddb4b71d41aeed5cd522d10e24a4a5ffb8bf"
+    }
+  ],
+  "manifest_self_excluded": true
+}
