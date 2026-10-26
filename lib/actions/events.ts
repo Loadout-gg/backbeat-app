@@ -41,7 +41,7 @@ export async function listEvents(
 ): Promise<EventWithRelations[]> {
   if (
     options.artistId !== undefined &&
-    !z.string().uuid().safeParse(options.artistId).success
+    !z.guid().safeParse(options.artistId).success
   ) {
     throw new Error("Invalid artist ID")
   }
@@ -119,8 +119,8 @@ const createEventSchema = z.object({
     .optional(),
   status: z.enum(["in_progress", "confirmed", "cancelled"])
     .default("in_progress"),
-  artist_id: z.string().uuid("Choose a valid artist").optional(),
-  promoter_id: z.string().uuid("Choose a valid promoter").optional(),
+  artist_id: z.guid("Choose a valid artist").optional(),
+  promoter_id: z.guid("Choose a valid promoter").optional(),
 })
 
 export async function createEvent(input: {
@@ -155,7 +155,7 @@ export async function createEvent(input: {
     .single()
 
   if (error) return { success: false, error: error.message }
-  if (!data || !z.string().uuid().safeParse(data.id).success) {
+  if (!data || !z.guid().safeParse(data.id).success) {
     return { success: false, error: "Unable to create event. Please try again." }
   }
 

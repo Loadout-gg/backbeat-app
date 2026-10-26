@@ -684,3 +684,18 @@ describe("S15 selector privacy", () => {
     expect(requests[0].url.searchParams.get("workspace_id")).toBe(`eq.${WORKSPACE}`)
   })
 })
+
+it.each([
+  "12345678-1234-1234-1234-123456789abc",
+  "ABCDEF12-1234-1234-1234-123456789ABC",
+])("S18 preserves literal legacy UUID-shaped action identifiers %s", async id => {
+  respond = request => request.method === "POST" ? reply({ id: EVENT }) : reply([], 0)
+  expect(await createEvent({ title: "Event", date: "2028-02-29", artist_id: id, promoter_id: id }))
+    .toEqual({ success: true, eventId: EVENT })
+  expect(requests[0].body).toEqual(expect.objectContaining({ artist_id: id, promoter_id: id }))
+  requests = []
+  expect(await listEvents({ artistId: id })).toEqual([])
+  expect(await getBookings({ artistId: id })).toEqual([])
+  expect(requests).toHaveLength(2)
+  for (const request of requests) expect(request.url.searchParams.get("artist_id")).toBe(`eq.${id}`)
+})
