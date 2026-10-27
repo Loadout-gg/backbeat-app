@@ -103,6 +103,6 @@ See [development](development.md) for safe verification and [the architecture re
 ## Runtime policy after the source snapshot
 
 The current runtime candidate and its release boundaries are documented in
-[Node 26 runtime policy](../runtime-node26.md). Read the current runtime pins and
+[Node 24 runtime policy](../runtime-node24.md). Read the current runtime pins and
 qualification evidence; the older Node 22 snapshot above is historical, not an
 instruction to undo an approved upgrade.

@@ -7,7 +7,7 @@ test('CI runs every deterministic gate without deployment privileges', () => {
   const workflow = fs.readFileSync(path.resolve(__dirname, '../../.github/workflows/ci.yml'), 'utf8')
   for (const text of [
     'pull_request:', 'workflow_dispatch:', 'contents: read',
-    'name: Quality', "node-version: '26.12.1'", "version: '12.3.4'",
+    'name: Quality', "node-version: '24.22.1'", "version: '12.3.4'",
     'pnpm install --frozen-lockfile --ignore-scripts',
     'pnpm typecheck', 'pnpm lint', 'pnpm test', 'pnpm test:runtime', 'pnpm build',
   ]) assert.ok(workflow.includes(text), `Missing CI contract: ${text}`)
