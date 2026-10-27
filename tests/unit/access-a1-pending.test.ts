@@ -6,3 +6,9 @@ it.each(["not-email", "", "x".repeat(400) + "@example.test"])("rejects malformed
  sessionStorage.setItem(pendingSignupKey, JSON.stringify({ email, firstName: "Ada", lastName: "Lovelace" }))
  expect(readPendingSignup()).toBeNull()
 })
+
+it("preserves valid pending-signup data in the browser tab", () => {
+  const pending = { email: "synthetic@example.test", firstName: "Ada", lastName: "Lovelace" }
+  sessionStorage.setItem(pendingSignupKey, JSON.stringify(pending))
+  expect(readPendingSignup()).toEqual(pending)
+})
