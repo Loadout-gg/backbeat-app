@@ -12,6 +12,8 @@ import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { BackbeatLogoFull } from "@/components/backbeat-logo"
 
+const unconfirmedEmailMessage = "Confirm your email before logging in."
+
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -37,7 +39,15 @@ export default function LoginPage() {
         router.push("/dashboard")
       }, 100)
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred")
+      // Fixed copy only: provider messages are never rendered.
+      const failure = error as { code?: string; status?: number }
+      setError(failure?.code === "invalid_credentials"
+        ? "Email or password is incorrect."
+        : failure?.status === 429
+          ? "Too many attempts. Please wait, then try again."
+          : failure?.code === "email_not_confirmed"
+            ? unconfirmedEmailMessage
+            : "Could not log in. Check your connection and try again.")
     } finally {
       setIsLoading(false)
     }
@@ -79,7 +89,10 @@ export default function LoginPage() {
                       onChange={(e) => setPassword(e.target.value)}
                     />
                   </div>
-                  {error && <p className="text-sm text-red-500">{error}</p>}
+                  {error && <p role="alert" className="text-sm text-destructive">
+                    {error}
+                    {error === unconfirmedEmailMessage && <> <Link href="/auth/signup-success" className="underline underline-offset-4">Continue confirmation</Link></>}
+                  </p>}
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? "Logging in..." : "Login"}
                   </Button>
