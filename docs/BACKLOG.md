@@ -25,13 +25,13 @@ Status values: `Proposed` (not yet discussed) · `Needs decision` · `Ready` · 
 | R1 | Booking status cannot be changed from the UI | `lib/actions/bookings.ts` | Contract | See F1 | Needs decision |
 | R2 | Promoters cannot be created; `createPromoter` is unused and unvalidated | `lib/actions/events.ts` | Contract | See F2 | Needs decision |
 | R3 | Events and Bookings are missing from the main navigation | `components/dashboard/sidebar.tsx` | Design (`DESIGN.md` fixes three routes) | Design approval | Needs decision |
-| R4 | Bookings list passes empty venue/address although they are stored | `app/dashboard/bookings/page.tsx` | `WITHIN_EXISTING_CONTRACT` | Nothing | Proposed |
+| R4 | Bookings list passes empty venue/address although they are stored | `app/dashboard/bookings/page.tsx` | `WITHIN_EXISTING_CONTRACT` | Nothing | In review |
 | R5 | Artist profile "Latest events" is hard-coded to "No events yet." | `artist-profile-client.tsx` | Product detail | Which events, how many | Needs decision |
-| R6 | New event artist selector shows the real name, the rest of the app the stage name | `app/dashboard/events/new/page.tsx` | `WITHIN_EXISTING_CONTRACT` | Nothing | Proposed |
-| R7 | Events page read failure falls back to the generic "Dashboard unavailable" | `app/dashboard/events/page.tsx` | `WITHIN_EXISTING_CONTRACT` | Nothing | Proposed |
+| R6 | New event artist selector shows the real name, the rest of the app the stage name | `app/dashboard/events/new/page.tsx` | `WITHIN_EXISTING_CONTRACT` | Nothing | In review |
+| R7 | Events page read failure falls back to the generic "Dashboard unavailable" | `app/dashboard/events/page.tsx` | `WITHIN_EXISTING_CONTRACT` | Nothing | In review |
 | R8 | `updateProfile` has no name validation and no affected-row witness | `lib/actions/workspace.ts` | Contract | Validation rule | Needs decision |
 | R9 | Dashboard counts promoters on every load but never shows them | `lib/actions/dashboard.ts` | Contract (DTO field) | Approval to drop the field | Proposed |
-| R10 | Milestone docs are partly stale (milestone 4 says Financial is coming soon; the booking fee lives there) | `docs/milestone-4.md` | Documentation | Nothing | Proposed |
+| R10 | Milestone docs are partly stale (milestone 4 says Financial is coming soon; the booking fee lives there) | `docs/milestone-4.md` | Documentation | Nothing | In review |
 
 ## Visual consistency and accessibility
 

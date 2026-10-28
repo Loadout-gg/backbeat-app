@@ -8,6 +8,7 @@ Read this first when picking up work, then `AGENTS.md` and `docs/agents/README.m
 - All CI steps pass locally on Node 24.22.1: install, typecheck, lint, 961 unit/component tests, 28 runtime tests, placeholder build, `next start` smoke test, both dependency audits.
 - Not run locally: integration and e2e suites. They need an authorized synthetic environment.
 - No open issues and no other open PRs when #12 was opened.
+- Open stacked PR on `docs/handover-backlog` (#12): R4, R6, R7, R10 in review; 968 unit/component tests on that branch.
 
 ## How work flows
 
@@ -31,3 +32,4 @@ Read this first when picking up work, then `AGENTS.md` and `docs/agents/README.m
 | Date | PR | What changed |
 |---|---|---|
 | 2026-10-28 | #12 | Added `docs/BACKLOG.md` and `docs/HANDOVER.md` from a full code read at `7e0db2b` |
+| 2026-10-28 | #TBD | R4, R6, R7, R10: bookings list shows stored venue, new-event artist list shows stage names, events read failure shows its own alert, dated Financial notes in milestone-4 and currency-display docs |
