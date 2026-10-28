@@ -44,7 +44,7 @@ Status values: `Proposed` (not yet discussed) · `Needs decision` · `Ready` · 
 | V4 | Focus ring about 2.6:1 on background (target 3:1); `muted-foreground` on solid `muted` 4.3:1 (target 4.5:1) | Design token | Approval to adjust two tokens | Needs decision |
 | V5 | Title Case labels ("New Booking", "Quick Actions", "Add Artist", "Full Name") among sentence case | Copy | Approval | Proposed |
 | V6 | Dark theme tokens defined but never activated | Product | Product decision | Proposed |
-| V7 | Raw `black`/`white` colours outside V3's palette grep: artist wizard panels `bg-white` (new and edit), artist profile toast `bg-black text-white`; modal overlays `bg-black/50` match the shadcn dialog overlay idiom. Found while fixing V3 | `WITHIN_EXISTING_CONTRACT` for panels/toast (`bg-card`, `bg-primary text-primary-foreground`); overlays stay as the shadcn idiom unless design says otherwise | Nothing (panels/toast) | Proposed |
+| V7 | Raw `black`/`white` colours outside V3's palette grep: artist wizard panels `bg-white` (new and edit), artist profile toast `bg-black text-white`; modal overlays `bg-black/50` match the shadcn dialog overlay idiom. Found while fixing V3 | `WITHIN_EXISTING_CONTRACT` for panels/toast (`bg-card`, `bg-primary text-primary-foreground`); overlays stay as the shadcn idiom unless design says otherwise | Nothing (panels/toast) | In review |
 
 ## CI and tooling
 
