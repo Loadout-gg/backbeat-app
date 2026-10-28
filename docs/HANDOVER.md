@@ -33,3 +33,4 @@ Read this first when picking up work, then `AGENTS.md` and `docs/agents/README.m
 |---|---|---|
 | 2026-10-28 | #12 | Added `docs/BACKLOG.md` and `docs/HANDOVER.md` from a full code read at `7e0db2b`; C1 added from the CI annotation on #12 |
 | 2026-10-28 | #13 | R4, R6, R7, R10: bookings list shows stored venue, new-event artist list shows stage names, events read failure shows its own alert, dated Financial notes in milestone-4 and currency-display docs; R11 added to the backlog (events list artist name, needs a read-projection decision); Codex review step added to the workflow |
+| 2026-10-28 | #TBD | V3: artist wizard, new event and login use theme tokens instead of raw palette colours; login errors are announced with fixed copy and never show the provider message; V7 added (remaining raw black/white) |
