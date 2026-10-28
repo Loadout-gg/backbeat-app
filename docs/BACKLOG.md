@@ -43,3 +43,9 @@ Status values: `Proposed` (not yet discussed) · `Needs decision` · `Ready` · 
 | V4 | Focus ring about 2.6:1 on background (target 3:1); `muted-foreground` on solid `muted` 4.3:1 (target 4.5:1) | Design token | Approval to adjust two tokens | Needs decision |
 | V5 | Title Case labels ("New Booking", "Quick Actions", "Add Artist", "Full Name") among sentence case | Copy | Approval | Proposed |
 | V6 | Dark theme tokens defined but never activated | Product | Product decision | Proposed |
+
+## CI and tooling
+
+| ID | Finding | Classification | Needs first | Status |
+|---|---|---|---|---|
+| C1 | CI annotation on #12: `actions/checkout`, `actions/setup-node` and `pnpm/action-setup` are pinned to SHAs that target Node 20; GitHub forces them onto Node 24 and is deprecating Node 20 for actions | CI change (`architecture-decisions.md`: material CI change) | Approval to bump the pinned action SHAs | Needs decision |
