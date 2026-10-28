@@ -32,6 +32,7 @@ Status values: `Proposed` (not yet discussed) · `Needs decision` · `Ready` · 
 | R8 | `updateProfile` has no name validation and no affected-row witness | `lib/actions/workspace.ts` | Contract | Validation rule | Needs decision |
 | R9 | Dashboard counts promoters on every load but never shows them | `lib/actions/dashboard.ts` | Contract (DTO field) | Approval to drop the field | Proposed |
 | R10 | Milestone docs are partly stale (milestone 4 says Financial is coming soon; the booking fee lives there) | `docs/milestone-4.md` | Documentation | Nothing | In review |
+| R11 | Events list shows the artist's real name (`artists.name`) while the rest of the app uses the stage name; the events read selects only `id, name`, so the fix changes that read's projection. Found while fixing R6 in #13 | `lib/actions/events.ts`, `app/dashboard/events/page.tsx` | Contract (read projection / DTO) | Approval to add `stage_name` to the events read | Needs decision |
 
 ## Visual consistency and accessibility
 
