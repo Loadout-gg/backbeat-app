@@ -11,7 +11,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { useAuthClientReady } from "@/lib/auth/use-client-ready"
-import { readPendingSignup } from "@/lib/auth/pending-signup"
+import { pendingSignupKey, readPendingSignup } from "@/lib/auth/pending-signup"
 import { nativeEmailFeedback } from "@/lib/auth/native-email-feedback"
 import { BackbeatLogoFull } from "@/components/backbeat-logo"
 
@@ -80,7 +80,7 @@ function SignupForm() {
         },
       })
       if (error) throw error
-      try { sessionStorage.setItem("backbeat.pending-signup", JSON.stringify({ email: email.trim(), firstName: firstName.trim(), lastName: lastName.trim() })) }
+      try { sessionStorage.setItem(pendingSignupKey, JSON.stringify({ email: email.trim(), firstName: firstName.trim(), lastName: lastName.trim() })) }
       catch { /* Confirmation offers email recovery when tab storage is unavailable. */ }
       setPendingEmail(email.trim())
       setPassword("")

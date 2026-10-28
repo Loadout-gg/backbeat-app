@@ -1,4 +1,4 @@
-FROM node:22.23.4-bookworm-slim
+FROM node:24.22.1-bookworm-slim
 WORKDIR /app
 RUN npm install --global pnpm@12.3.4
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./

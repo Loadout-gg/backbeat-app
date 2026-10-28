@@ -1,6 +1,7 @@
 export type PendingSignup = { email: string; firstName: string; lastName: string }
 export const pendingSignupKey = "backbeat.pending-signup"
 export function readPendingSignup(): PendingSignup | null {
+  if (typeof window === "undefined") return null
   try {
     const value = JSON.parse(sessionStorage.getItem(pendingSignupKey) || "null")
     if (!value || typeof value.email !== "string" || typeof value.firstName !== "string" || typeof value.lastName !== "string") return null

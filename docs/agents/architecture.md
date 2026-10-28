@@ -99,3 +99,10 @@ Preserve the existing Agent desktop foundation, English UI, brand/logo and real 
 Actual hosted schema, policies/grants, migration history, Auth/email configuration, storage, release ownership, rollback and production revision were not inspected for this documentation package. Do not claim parity or certification. Schema/source approval, execution authorization and production release remain separate gates.
 
 See [development](development.md) for safe verification and [the architecture request protocol](architecture-decisions.md) whenever a new choice is required.
+
+## Runtime policy after the source snapshot
+
+The current runtime candidate and its release boundaries are documented in
+[Node 24 runtime policy](../runtime-node24.md). Read the current runtime pins and
+qualification evidence; the older Node 22 snapshot above is historical, not an
+instruction to undo an approved upgrade.

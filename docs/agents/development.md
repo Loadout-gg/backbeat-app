@@ -92,3 +92,10 @@ These names identify files in the existing unit/component directories; inspect e
 - If architecture is blocked: the exact mandatory phrase, verified request package and affected/independent work.
 
 A local commit, passing unit suite or review GO is not a production release. Commit/push/PR/deploy only within the actual granted scope; branch creation or a draft PR can have automation effects. Do not enable or alter repository automation as part of documentation or routine feature work.
+
+## Runtime policy after the source snapshot
+
+The current runtime candidate and its release boundaries are documented in
+[Node 24 runtime policy](../runtime-node24.md). Read the current runtime pins and
+qualification evidence; the older Node 22 snapshot above is historical, not an
+instruction to undo an approved upgrade.
