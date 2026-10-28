@@ -212,29 +212,29 @@ export default function NewArtistPage() {
           </div>
 
           {/* Stepper */}
-          <div className="bg-gray-100 px-6 py-4">
+          <div className="bg-muted px-6 py-4">
             <div className="flex items-center gap-2">
               {STEPS.map((step, idx) => (
                 <div key={step.number} className="flex items-center">
                   <div
                     className={`flex items-center gap-2 ${
-                      currentStep === step.number ? "text-black" : "text-gray-500"
+                      currentStep === step.number ? "text-foreground" : "text-muted-foreground"
                     }`}
                   >
                     <span
                       className={`flex items-center justify-center w-7 h-7 rounded-full text-sm font-medium ${
                         currentStep === step.number
-                          ? "bg-black text-white"
+                          ? "bg-primary text-primary-foreground"
                           : currentStep > step.number
-                            ? "bg-gray-300 text-gray-600"
-                            : "bg-gray-200 text-gray-500"
+                            ? "bg-primary/10 text-foreground"
+                            : "bg-border text-muted-foreground"
                       }`}
                     >
                       {step.number}
                     </span>
                     <span className="text-sm font-medium">{step.label}</span>
                   </div>
-                  {idx < STEPS.length - 1 && <ChevronRight className="h-4 w-4 mx-3 text-gray-400" />}
+                  {idx < STEPS.length - 1 && <ChevronRight className="h-4 w-4 mx-3 text-muted-foreground" />}
                 </div>
               ))}
             </div>
@@ -243,7 +243,7 @@ export default function NewArtistPage() {
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-6">
             {error && (
-              <div role="alert" className="mb-4 p-3 text-sm text-red-500 bg-red-50 border border-red-200 rounded-md">{error}</div>
+              <div role="alert" className="mb-4 p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md">{error}</div>
             )}
 
             {/* Step 1: General Info */}
@@ -256,7 +256,7 @@ export default function NewArtistPage() {
                     <div className="flex gap-6">
                       {/* Image Upload Placeholder */}
                       <div className="flex-shrink-0">
-                        <div className="w-40 h-40 rounded-full bg-gray-200 flex items-center justify-center">
+                        <div className="w-40 h-40 rounded-full bg-border flex items-center justify-center">
                           <Button variant="secondary" size="sm">
                             Upload image
                           </Button>
@@ -436,7 +436,7 @@ export default function NewArtistPage() {
                     {formData.social_links.length > 0 && (
                       <div className="space-y-2 pt-2">
                         {formData.social_links.map((link, idx) => (
-                          <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                          <div key={idx} className="flex items-center justify-between p-2 bg-muted/50 rounded">
                             <span className="text-sm">
                               {link.type}: {link.url}
                             </span>
@@ -527,10 +527,10 @@ export default function NewArtistPage() {
                   <h2 className="text-lg font-medium mb-4">Documents</h2>
                   <div className="border rounded-lg p-6">
                     {/* Upload Area */}
-                    <div className="bg-gray-50 border-2 border-dashed rounded-lg p-12 text-center">
-                      <FileText className="h-10 w-10 mx-auto mb-4 text-gray-400" />
+                    <div className="bg-muted/50 border-2 border-dashed rounded-lg p-12 text-center">
+                      <FileText className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
                       <p className="text-sm font-medium mb-1">Drag and drop documents here or click to upload</p>
-                      <p className="text-xs text-blue-500 mb-4">
+                      <p className="text-xs text-muted-foreground mb-4">
                         Supported formats: PDF, DOC, DOCX, JPG, PNG (Max 10MB)
                       </p>
                       <Button variant="outline" disabled>
@@ -546,7 +546,7 @@ export default function NewArtistPage() {
                         {formData.documents.map((doc, idx) => (
                           <div key={idx} className="flex items-center justify-between p-3 border rounded-lg">
                             <div className="flex items-center gap-3">
-                              <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                               <span className="text-sm">{doc.name}</span>
                             </div>
                             <Button variant="ghost" size="icon">
@@ -607,10 +607,10 @@ export default function NewArtistPage() {
                 <section>
                   <h2 className="text-lg font-medium mb-4">Supporting documentation</h2>
                   <div className="border rounded-lg p-6">
-                    <div className="bg-gray-50 border-2 border-dashed rounded-lg p-12 text-center">
-                      <FileText className="h-10 w-10 mx-auto mb-4 text-gray-400" />
+                    <div className="bg-muted/50 border-2 border-dashed rounded-lg p-12 text-center">
+                      <FileText className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
                       <p className="text-sm font-medium mb-1">Drag and drop documents here or click to upload</p>
-                      <p className="text-xs text-blue-500 mb-4">
+                      <p className="text-xs text-muted-foreground mb-4">
                         Supported formats: PDF, DOC, DOCX, JPG, PNG (Max 10MB)
                       </p>
                       <Button variant="outline" disabled>
@@ -626,7 +626,7 @@ export default function NewArtistPage() {
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-3 p-6 border-t bg-gray-50">
+          <div className="flex items-center justify-end gap-3 p-6 border-t bg-muted/50">
             {currentStep > 1 && (
               <Button variant="outline" onClick={handlePrevious} disabled={isLoading}>
                 Previous
