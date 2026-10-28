@@ -14,8 +14,8 @@ Read this first when picking up work, then `AGENTS.md` and `docs/agents/README.m
 
 1. Pick the next item from `docs/BACKLOG.md`. If its "Needs first" column names a decision, get it from Alberto before coding; architectural decisions use the request package in `docs/agents/architecture-decisions.md`.
 2. Branch `fix/<slug>` or `feat/<slug>` from an up-to-date `main`; smallest change; tests; all CI steps locally; docs updated in the same PR.
-3. Open the PR to `main` with the handoff from `docs/agents/development.md`: classification, changed files, commands with real outcomes, `NOT_RUN`, open decisions.
-4. First-level review by Simone (with Claude) against `docs/agents/architecture.md` contracts, scope, tests and green CI. Fix findings in the same PR.
+3. Open the PR to `main` with the handoff from `docs/agents/development.md`: classification, changed files, commands with real outcomes, `NOT_RUN`, open decisions. Right after opening it, comment `@codex review` (`gh pr comment <n> --body "@codex review"`).
+4. First-level review by Simone (with Claude) against `docs/agents/architecture.md` contracts, scope, tests, green CI and the Codex verdict. Fix findings in the same PR and comment `@codex review` again after each fix until Codex reports no major issues on the latest commit.
 5. Alberto reviews and merges. Contributors never push or merge to `main`.
 6. Update `docs/BACKLOG.md` status and this file.
 
@@ -32,4 +32,4 @@ Read this first when picking up work, then `AGENTS.md` and `docs/agents/README.m
 | Date | PR | What changed |
 |---|---|---|
 | 2026-10-28 | #12 | Added `docs/BACKLOG.md` and `docs/HANDOVER.md` from a full code read at `7e0db2b`; C1 added from the CI annotation on #12 |
-| 2026-10-28 | #13 | R4, R6, R7, R10: bookings list shows stored venue, new-event artist list shows stage names, events read failure shows its own alert, dated Financial notes in milestone-4 and currency-display docs; R11 added to the backlog (events list artist name, needs a read-projection decision) |
+| 2026-10-28 | #13 | R4, R6, R7, R10: bookings list shows stored venue, new-event artist list shows stage names, events read failure shows its own alert, dated Financial notes in milestone-4 and currency-display docs; R11 added to the backlog (events list artist name, needs a read-projection decision); Codex review step added to the workflow |
