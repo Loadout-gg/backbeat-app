@@ -125,13 +125,27 @@ it("hands off the submitted email of the latest attempt, not a pending or edited
  fireEvent.change(screen.getByLabelText("Email"), { target: { value: "edited@example.test" } })
  await expectConfirmationFor("current@example.test")
 })
-it("asks which email to confirm when the handoff cannot be stored", async () => {
+it("prepares the handoff before the link appears, so opening it without a click keeps the email", async () => {
  draft("older@example.test", "Older", "Fixture")
  signInWithPassword.mockResolvedValue(unconfirmed())
  submit("current@example.test")
- const link = await screen.findByRole("link", { name: "Continue confirmation" })
+ await screen.findByRole("link", { name: "Continue confirmation" })
+ // Middle-click or "Open in new tab" runs no click handler; the new tab reads the draft as it stands.
+ cleanup()
+ render(<ConfirmationPage />)
+ await screen.findByLabelText("Confirmation code")
+ expect(screen.getByRole("dialog").textContent).toContain("current@example.test")
+ expect(document.body.textContent).not.toContain("older@example.test")
+ expect(screen.queryByDisplayValue("Older")).toBeNull()
+})
+it("asks which email to confirm when the handoff cannot be stored", async () => {
+ draft("older@example.test", "Older", "Fixture")
+ signInWithPassword.mockResolvedValue(unconfirmed())
  const storage = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("quota") })
- try { fireEvent.click(link) } finally { storage.mockRestore() }
+ try {
+  submit("current@example.test")
+  fireEvent.click(await screen.findByRole("link", { name: "Continue confirmation" }))
+ } finally { storage.mockRestore() }
  cleanup()
  render(<ConfirmationPage />)
  expect(await screen.findByLabelText("Registration email")).toBeTruthy()
