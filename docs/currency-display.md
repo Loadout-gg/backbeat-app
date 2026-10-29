@@ -23,3 +23,7 @@ The correction does not change artist/booking actions, saved values, schema, aut
 - Additional browser cases cover stored codes/symbols, zero, missing rate and missing/blank/other currency. Fixture records are read with the ordinary user's token and removed afterward.
 
 Local execution receipts and the exact review/commit/runtime binding live in `../development/currency-fix/`. Publication and production migration are separate, unperformed operations.
+
+## Later changes (2026-10-28)
+
+"Financial remains unavailable" is historical. The Financial tab in `app/dashboard/bookings/[id]/event-booking-client.tsx` now edits an optional per-booking fee (`lib/booking-fee.ts`, `migrations/004_booking_fee.sql`), stored separately from the artist base rate described above; no conversion between them is performed. `tests/e2e/booking-currency.spec.mjs` now checks that the Financial tab's fee amount and currency fields are empty, not a placeholder.

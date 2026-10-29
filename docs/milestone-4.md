@@ -31,3 +31,7 @@ Receipts, screenshots, runtime/source hashes and independent review records are 
 ## Known boundaries
 
 Existing server read-error/empty conflation, artist-edit dialog-description warnings, F15 fixed-value repeat-write weakness and missing optimistic concurrency remain separate hardening gates. Existing delete failure behavior is unchanged. No whole-product responsive/accessibility or release readiness claim is made.
+
+## Later changes (2026-10-28)
+
+The availability boundary above is historical. In current source the Financial tab is no longer a placeholder: it edits an optional per-booking fee amount and currency (EUR, USD, GBP, JPY) saved by Update booking. See the Financial panel in `app/dashboard/bookings/[id]/event-booking-client.tsx`, parsing and formatting in `lib/booking-fee.ts`, and the nullable `fee_amount_minor` / `fee_currency` columns in `migrations/004_booking_fee.sql`. It is not invoicing, payment, FX or booking confirmation. Travel, Accommodation, Documents and Artist contacts still render "This section is coming soon."

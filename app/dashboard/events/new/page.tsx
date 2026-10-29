@@ -154,7 +154,7 @@ export default function NewEventPage() {
                   <SelectItem value="none">None</SelectItem>
                   {artists.map((artist) => (
                     <SelectItem key={artist.id} value={artist.id}>
-                      {artist.name}
+                      {artist.stage_name}
                     </SelectItem>
                   ))}
                 </SelectContent>

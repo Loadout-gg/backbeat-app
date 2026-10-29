@@ -32,8 +32,8 @@ export default async function BookingsPage() {
                 month={date.toLocaleDateString("en-US", { month: "short" }).toUpperCase()}
                 day={String(date.getDate())}
                 artistName={booking.artist?.stage_name || booking.artist?.name || "Unknown Artist"}
-                venue=""
-                location=""
+                venue={booking.venue_name || ""}
+                location={booking.venue_address || ""}
                 time={booking.start_time.slice(0, 5)}
               />
             </div>
