@@ -16,6 +16,7 @@ import { pendingSignupKey, readPendingSignup } from "@/lib/auth/pending-signup"
 const unconfirmedEmailMessage = "Confirm your email before logging in."
 
 // Confirmation reads its email from the tab draft: keep a draft for this address, otherwise hand off the email alone.
+// Done before the link renders, so a new-tab open (no click handler) sees the same draft.
 function handOffConfirmationEmail(email: string) {
   if (readPendingSignup()?.email.toLowerCase() === email.toLowerCase()) return
   try { sessionStorage.setItem(pendingSignupKey, JSON.stringify({ email, firstName: "", lastName: "" })) }
@@ -30,7 +31,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [unconfirmedEmail, setUnconfirmedEmail] = useState("")
   const router = useRouter()
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -53,6 +53,7 @@ export default function LoginPage() {
     } catch (error: unknown) {
       // Fixed copy only: provider messages are never rendered.
       const failure = error as { code?: string; status?: number }
+      if (failure?.code === "email_not_confirmed") handOffConfirmationEmail(email.trim())
       setError(failure?.code === "invalid_credentials"
         ? "Email or password is incorrect."
         : failure?.status === 429
@@ -60,7 +61,6 @@ export default function LoginPage() {
           : failure?.code === "email_not_confirmed"
             ? unconfirmedEmailMessage
             : "Could not log in. Check your connection and try again.")
-      setUnconfirmedEmail(failure?.code === "email_not_confirmed" ? email.trim() : "")
     } finally {
       setIsLoading(false)
     }
@@ -104,7 +104,7 @@ export default function LoginPage() {
                   </div>
                   {error && <p role="alert" className="text-sm text-destructive">
                     {error}
-                    {error === unconfirmedEmailMessage && <> <Link href="/auth/signup-success" onClick={() => handOffConfirmationEmail(unconfirmedEmail)} className="underline underline-offset-4">Continue confirmation</Link></>}
+                    {error === unconfirmedEmailMessage && <> <Link href="/auth/signup-success" className="underline underline-offset-4">Continue confirmation</Link></>}
                   </p>}
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? "Logging in..." : "Login"}
