@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { listEvents, type EventWithRelations } from "@/lib/actions/events"
 import { eventDateParts } from "@/lib/event-date-display"
+import { RetryEventsButton } from "./retry-events-button"
 
 function getStatusBadgeVariant(status: string) {
   switch (status) {
@@ -50,7 +51,10 @@ export default async function EventsPage() {
       </div>
 
       {loadError ? (
-        <p role="alert" className="text-sm text-destructive">Unable to load events. Please refresh and try again.</p>
+        <div className="space-y-3">
+          <p role="alert" className="text-sm text-destructive">Unable to load events. Please refresh and try again.</p>
+          <RetryEventsButton />
+        </div>
       ) : events.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
