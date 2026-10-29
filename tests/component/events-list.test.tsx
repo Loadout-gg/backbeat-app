@@ -1,11 +1,22 @@
 // @vitest-environment jsdom
 import React from "react"
 import { afterEach, expect, it, vi } from "vitest"
-import { cleanup, render, screen } from "@testing-library/react"
-const { listEvents } = vi.hoisted(() => ({ listEvents: vi.fn() }))
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { redirect } from "next/navigation"
+const { listEvents, refresh } = vi.hoisted(() => ({ listEvents: vi.fn(), refresh: vi.fn() }))
 vi.mock("@/lib/actions/events", () => ({ listEvents }))
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...await importOriginal<typeof import("next/navigation")>(),
+  useRouter: () => ({ refresh }),
+}))
 import EventsPage from "@/app/dashboard/events/page"
 afterEach(cleanup)
+it("lets the onboarding redirect propagate instead of showing the read error", async () => {
+  listEvents.mockImplementationOnce(async () => redirect("/onboarding"))
+  await expect(EventsPage()).rejects.toMatchObject({
+    digest: expect.stringMatching(/^NEXT_REDIRECT;[^;]*;\/onboarding;/),
+  })
+})
 it("shows a safe read error instead of claiming the workspace has no events", async () => {
   listEvents.mockRejectedValueOnce(new Error("private database detail"))
   render(await EventsPage())
@@ -30,4 +41,24 @@ it("renders stored events without an error or empty state", async () => {
   expect(screen.getByRole("heading", { name: "Synthetic Night" })).toBeTruthy()
   expect(screen.queryByRole("alert")).toBeNull()
   expect(screen.queryByText(/No events yet/)).toBeNull()
+})
+it("re-runs the events read from the error state and restores the list", async () => {
+  listEvents.mockRejectedValueOnce(new Error("private database detail"))
+  const view = render(await EventsPage())
+  refresh.mockImplementationOnce(async () => view.rerender(await EventsPage()))
+  listEvents.mockResolvedValueOnce([{
+    id: "event-a", title: "Synthetic Night", date: "2030-03-01", location: null,
+    status: "confirmed", artists: null, promoters: null,
+  }])
+  const retry = screen.getByRole("button", { name: "Retry loading events" })
+  expect(retry.getAttribute("tabindex")).not.toBe("-1")
+  retry.focus()
+  expect(document.activeElement).toBe(retry)
+  await act(async () => { fireEvent.click(retry) })
+  expect(refresh).toHaveBeenCalledTimes(1)
+  expect(listEvents).toHaveBeenCalledTimes(2)
+  expect(screen.getByRole("heading", { name: "Synthetic Night" })).toBeTruthy()
+  expect(screen.queryByRole("alert")).toBeNull()
+  expect(screen.queryByRole("button", { name: "Retry loading events" })).toBeNull()
+  expect(screen.getByRole("link", { name: "New event" })).toBeTruthy()
 })
