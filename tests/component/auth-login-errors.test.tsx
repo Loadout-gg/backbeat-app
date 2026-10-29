@@ -66,6 +66,7 @@ const unconfirmed = () => ({ data: { user: null, session: null }, error: new Aut
 const draft = (email: string, firstName: string, lastName: string) => sessionStorage.setItem("backbeat.pending-signup", JSON.stringify({ email, firstName, lastName }))
 async function continueConfirmation() {
  fireEvent.click(await screen.findByRole("link", { name: "Continue confirmation" }))
+ expect(sessionStorage.getItem("backbeat.pending-signup") ?? "").not.toContain("12345678")
  cleanup()
  render(<ConfirmationPage />)
  return screen.findByLabelText("Confirmation code")
@@ -87,7 +88,6 @@ it("continues confirmation for the email just used when the tab has no draft", a
  signInWithPassword.mockResolvedValue(unconfirmed())
  submit("current@example.test")
  await expectConfirmationFor("current@example.test")
- expect(sessionStorage.getItem("backbeat.pending-signup")).not.toContain("12345678")
 })
 it("resumes a draft that belongs to the email just used", async () => {
  draft("current@example.test", "Current", "Fixture")
@@ -124,6 +124,21 @@ it("hands off the submitted email of the latest attempt, not a pending or edited
  await act(async () => settle(unconfirmed()))
  fireEvent.change(screen.getByLabelText("Email"), { target: { value: "edited@example.test" } })
  await expectConfirmationFor("current@example.test")
+})
+it("asks which email to confirm when the handoff cannot be stored", async () => {
+ draft("older@example.test", "Older", "Fixture")
+ signInWithPassword.mockResolvedValue(unconfirmed())
+ submit("current@example.test")
+ const link = await screen.findByRole("link", { name: "Continue confirmation" })
+ const storage = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("quota") })
+ try { fireEvent.click(link) } finally { storage.mockRestore() }
+ cleanup()
+ render(<ConfirmationPage />)
+ expect(await screen.findByLabelText("Registration email")).toBeTruthy()
+ expect(document.body.textContent).not.toContain("older@example.test")
+ expect(screen.queryByDisplayValue("Older")).toBeNull()
+ expect(resend).not.toHaveBeenCalled()
+ expect(verifyOtp).not.toHaveBeenCalled()
 })
 function submit(email = "ada@example.test") {
  render(<LoginPage />)
