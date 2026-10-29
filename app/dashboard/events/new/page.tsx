@@ -112,7 +112,7 @@ export default function NewEventPage() {
               </div>
             )}
             {error && (
-              <div role="alert" className="p-3 text-sm text-red-500 bg-red-50 border border-red-200 rounded-md">{error}</div>
+              <div role="alert" className="p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md">{error}</div>
             )}
 
             <div className="space-y-2">

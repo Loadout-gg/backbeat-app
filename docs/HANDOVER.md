@@ -5,7 +5,7 @@ Read this first when picking up work, then `AGENTS.md` and `docs/agents/README.m
 ## Current state (2026-10-28)
 
 - `main` at `7e0db2b`: Node 24.22.1 runtime (`docs/runtime-node24.md`), pnpm 12.3.4.
-- All CI steps pass locally on Node 24.22.1: install, typecheck, lint, 961 unit/component tests, 28 runtime tests, placeholder build, `next start` smoke test, both dependency audits.
+- All CI steps pass locally on Node 24.22.1: install, typecheck, lint, 984 unit/component tests on the #14 head (961 on `7e0db2b`), 28 runtime tests, placeholder build, `next start` smoke test, both dependency audits.
 - Not run locally: integration and e2e suites. They need an authorized synthetic environment.
 - No open issues and no other open PRs when #12 was opened.
 - Open stacked PR #13 on `docs/handover-backlog` (#12): R4, R6, R7, R10 in review; 968 unit/component tests on that branch.
@@ -33,3 +33,4 @@ Read this first when picking up work, then `AGENTS.md` and `docs/agents/README.m
 |---|---|---|
 | 2026-10-28 | #12 | Added `docs/BACKLOG.md` and `docs/HANDOVER.md` from a full code read at `7e0db2b`; C1 added from the CI annotation on #12 |
 | 2026-10-28 | #13 | R4, R6, R7, R10: bookings list shows stored venue, new-event artist list shows stage names, events read failure shows its own alert, dated Financial notes in milestone-4 and currency-display docs; R11 added to the backlog (events list artist name, needs a read-projection decision); Codex review step added to the workflow; review fixes: redirects propagate, retry action on events error |
+| 2026-10-28 | #14 | V3: artist wizard, new event and login use theme tokens instead of raw palette colours; login errors are announced with fixed copy and never show the provider message; V7 added (remaining raw black/white); V7 folded in (panels bg-card, toast primary tokens); review fix: login → confirmation keeps the entered email |
