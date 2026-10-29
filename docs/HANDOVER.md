@@ -5,7 +5,7 @@ Read this first when picking up work, then `AGENTS.md` and `docs/agents/README.m
 ## Current state (2026-10-28)
 
 - `main` at `7e0db2b`: Node 24.22.1 runtime (`docs/runtime-node24.md`), pnpm 12.3.4.
-- All CI steps pass locally on Node 24.22.1: install, typecheck, lint, 983 unit/component tests on the #14 head (961 on `7e0db2b`), 28 runtime tests, placeholder build, `next start` smoke test, both dependency audits.
+- All CI steps pass locally on Node 24.22.1: install, typecheck, lint, 984 unit/component tests on the #14 head (961 on `7e0db2b`), 28 runtime tests, placeholder build, `next start` smoke test, both dependency audits.
 - Not run locally: integration and e2e suites. They need an authorized synthetic environment.
 - No open issues and no other open PRs when #12 was opened.
 - Open stacked PR #13 on `docs/handover-backlog` (#12): R4, R6, R7, R10 in review; 968 unit/component tests on that branch.
