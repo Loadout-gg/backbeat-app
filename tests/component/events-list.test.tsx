@@ -2,10 +2,17 @@
 import React from "react"
 import { afterEach, expect, it, vi } from "vitest"
 import { cleanup, render, screen } from "@testing-library/react"
+import { redirect } from "next/navigation"
 const { listEvents } = vi.hoisted(() => ({ listEvents: vi.fn() }))
 vi.mock("@/lib/actions/events", () => ({ listEvents }))
 import EventsPage from "@/app/dashboard/events/page"
 afterEach(cleanup)
+it("lets the onboarding redirect propagate instead of showing the read error", async () => {
+  listEvents.mockImplementationOnce(async () => redirect("/onboarding"))
+  await expect(EventsPage()).rejects.toMatchObject({
+    digest: expect.stringMatching(/^NEXT_REDIRECT;[^;]*;\/onboarding;/),
+  })
+})
 it("shows a safe read error instead of claiming the workspace has no events", async () => {
   listEvents.mockRejectedValueOnce(new Error("private database detail"))
   render(await EventsPage())

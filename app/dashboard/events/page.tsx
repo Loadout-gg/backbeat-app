@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { unstable_rethrow } from "next/navigation"
 import { Plus, MapPin } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -28,7 +29,8 @@ export default async function EventsPage() {
   let loadError = false
   try {
     events = await listEvents()
-  } catch {
+  } catch (error) {
+    unstable_rethrow(error)
     loadError = true
   }
 
