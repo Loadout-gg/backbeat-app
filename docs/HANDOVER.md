@@ -32,4 +32,4 @@ Read this first when picking up work, then `AGENTS.md` and `docs/agents/README.m
 | Date | PR | What changed |
 |---|---|---|
 | 2026-10-28 | #12 | Added `docs/BACKLOG.md` and `docs/HANDOVER.md` from a full code read at `7e0db2b`; C1 added from the CI annotation on #12 |
-| 2026-10-28 | #13 | R4, R6, R7, R10: bookings list shows stored venue, new-event artist list shows stage names, events read failure shows its own alert, dated Financial notes in milestone-4 and currency-display docs; R11 added to the backlog (events list artist name, needs a read-projection decision); Codex review step added to the workflow |
+| 2026-10-28 | #13 | R4, R6, R7, R10: bookings list shows stored venue, new-event artist list shows stage names, events read failure shows its own alert, dated Financial notes in milestone-4 and currency-display docs; R11 added to the backlog (events list artist name, needs a read-projection decision); Codex review step added to the workflow; review fixes: redirects propagate, retry action on events error |

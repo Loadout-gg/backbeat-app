@@ -33,6 +33,7 @@ Status values: `Proposed` (not yet discussed) · `Needs decision` · `Ready` · 
 | R9 | Dashboard counts promoters on every load but never shows them | `lib/actions/dashboard.ts` | Contract (DTO field) | Approval to drop the field | Proposed |
 | R10 | Milestone docs are partly stale (milestone 4 says Financial is coming soon; the booking fee lives there) | `docs/milestone-4.md` | Documentation | Nothing | In review |
 | R11 | Events list shows the artist's real name (`artists.name`) while the rest of the app uses the stage name; the events read selects only `id, name`, so the fix changes that read's projection. Found while fixing R6 in #13 | `lib/actions/events.ts`, `app/dashboard/events/page.tsx` | Contract (read projection / DTO) | Approval to add `stage_name` to the events read | Needs decision |
+| R12 | Server-page read catches also swallow the Next redirect to `/onboarding` thrown by `getCurrentWorkspaceId`. Bookings list: `getBookings` reaches it outside any internal try, so a user without a selected workspace sees "Unable to load bookings" instead of onboarding. Artist profile calendar: same bare catch, but `getArtist` runs first outside it, so only a selection lost between the two reads is swallowed. Fix pattern: `unstable_rethrow` from `next/navigation` in the catch, as in the R7 review fix on #13. Found while fixing R7 | `app/dashboard/bookings/page.tsx`, `app/dashboard/artists/[id]/page.tsx` | `WITHIN_EXISTING_CONTRACT` | Owner ok to fix in a follow-up PR | Proposed |
 
 ## Visual consistency and accessibility
 
