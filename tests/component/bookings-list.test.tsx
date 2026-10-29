@@ -2,10 +2,17 @@
 import React from "react"
 import { afterEach, expect, it, vi } from "vitest"
 import { cleanup, render, screen } from "@testing-library/react"
+import { redirect } from "next/navigation"
 const { getBookings } = vi.hoisted(() => ({ getBookings: vi.fn() }))
 vi.mock("@/lib/actions/bookings", () => ({ getBookings }))
 import BookingsPage from "@/app/dashboard/bookings/page"
 afterEach(cleanup)
+it("lets the onboarding redirect propagate instead of showing the read error", async () => {
+  getBookings.mockImplementationOnce(async () => redirect("/onboarding"))
+  await expect(BookingsPage()).rejects.toMatchObject({
+    digest: expect.stringMatching(/^NEXT_REDIRECT;[^;]*;\/onboarding;/),
+  })
+})
 it("includes non-in-progress bookings and shows their status without inventing an artist", async () => {
   getBookings.mockResolvedValueOnce([{
     id: "booking-cancelled", date: "2030-01-02", start_time: "09:45:00", status: "cancelled", artist: null,

@@ -1,3 +1,4 @@
+import { unstable_rethrow } from "next/navigation"
 import { getBookings, type Booking } from "@/lib/actions/bookings"
 import { BookingCard } from "@/components/dashboard/booking-card"
 import { Badge } from "@/components/ui/badge"
@@ -7,7 +8,8 @@ export default async function BookingsPage() {
   let loadError = false
   try {
     bookings = await getBookings({ failOnError: true })
-  } catch {
+  } catch (error) {
+    unstable_rethrow(error)
     loadError = true
   }
 
