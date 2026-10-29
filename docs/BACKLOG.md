@@ -41,7 +41,7 @@ Status values: `Proposed` (not yet discussed) · `Needs decision` · `Ready` · 
 |---|---|---|---|---|
 | V1 | Favicons in `public/` are v0 placeholders; layout still declares `generator: "v0.app"` | Brand | Backbeat favicon artwork | Needs decision |
 | V2 | Geist, Geist Mono and Source Serif 4 are loaded but unused | Design | Approval to remove | Proposed |
-| V3 | Raw Tailwind palette colours (`gray-50`, `red-500`, `blue-500`) in artist wizard, new event and login; login error has no `role="alert"` and shows the raw Supabase message | `WITHIN_EXISTING_CONTRACT` | Nothing | In review |
+| V3 | Raw Tailwind palette colours (`gray-50`, `red-500`, `blue-500`) in artist wizard, new event and login; login error has no `role="alert"` and shows the raw Supabase message. Review fix on #14: login "Continue confirmation" hands off the email just submitted through the existing tab draft (same-address draft kept, otherwise email only with empty names, address prompt if storage refuses), so the shown, verified and resend email cannot be an older draft for another address | `WITHIN_EXISTING_CONTRACT` | Nothing | In review |
 | V4 | Focus ring about 2.6:1 on background (target 3:1); `muted-foreground` on solid `muted` 4.3:1 (target 4.5:1) | Design token | Approval to adjust two tokens | Needs decision |
 | V5 | Title Case labels ("New Booking", "Quick Actions", "Add Artist", "Full Name") among sentence case | Copy | Approval | Proposed |
 | V6 | Dark theme tokens defined but never activated | Product | Product decision | Proposed |
