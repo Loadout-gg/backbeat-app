@@ -23,7 +23,7 @@ it("includes non-in-progress bookings and shows their status without inventing a
   }])
   render(await BookingsPage())
   expect(screen.getByText("cancelled", { exact: true })).toBeTruthy()
-  expect(screen.getByRole("heading", { name: "Unknown Artist" })).toBeTruthy()
+  expect(screen.getByRole("heading", { name: "Unknown artist" })).toBeTruthy()
   expect(screen.getByRole("link", { name: "Continue setup" }).getAttribute("href")).toBe("/dashboard/bookings/booking-cancelled")
 })
 it("shows a safe read error instead of claiming the workspace is empty", async () => {

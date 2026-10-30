@@ -77,9 +77,9 @@ test('Agent dashboard preserves truthful data and works across desktop and mobil
     catch { throw new Error('Synthetic password interaction failed; details redacted') }
     await page.getByRole('button', { name: 'Login', exact: true }).click()
     await expect(page).toHaveURL(`${APP}/onboarding`)
-    await page.getByLabel('Full Name', { exact: true }).fill('Backbeat Synthetic Operator With A Long Account Name')
+    await page.getByLabel('Full name', { exact: true }).fill('Backbeat Synthetic Operator With A Long Account Name')
     await page.getByRole('button', { name: 'Continue', exact: true }).click()
-    await page.getByLabel('Workspace Name', { exact: true }).fill(tag)
+    await page.getByLabel('Workspace name', { exact: true }).fill(tag)
     await page.getByRole('button', { name: 'Create workspace', exact: true }).click()
     await expect(page).toHaveURL(`${APP}/dashboard`)
     const owned = await request(`/rest/v1/workspaces?name=eq.${tag}`)
@@ -88,7 +88,7 @@ test('Agent dashboard preserves truthful data and works across desktop and mobil
 
     await test.step('empty dashboard has real metrics and creation affordances', async () => {
       await expect(page.getByText('Performance in progress', { exact: true })).toHaveCount(0)
-      await expect(page.getByRole('button', { name: 'New Booking', exact: true }).first()).toBeVisible()
+      await expect(page.getByRole('button', { name: 'New booking', exact: true }).first()).toBeVisible()
       await expect(page.getByRole('link', { name: 'Add artist', exact: true }).first()).toBeVisible()
       await noOverflow('desktop-empty')
       await page.screenshot({ path: testInfo.outputPath('01-dashboard-empty.png'), fullPage: true })
@@ -168,7 +168,7 @@ test('Agent dashboard preserves truthful data and works across desktop and mobil
 
     await test.step('existing creation dialog and booking editor remain reachable', async () => {
       await page.setViewportSize({ width: 1440, height: 960 })
-      await page.getByRole('button', { name: 'New Booking', exact: true }).first().click()
+      await page.getByRole('button', { name: 'New booking', exact: true }).first().click()
       await expect(page.getByRole('dialog')).toBeVisible()
       await page.keyboard.press('Escape')
       await expect(page.getByRole('dialog')).toBeHidden()

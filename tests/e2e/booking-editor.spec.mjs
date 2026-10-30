@@ -73,9 +73,9 @@ test('Booking editor preserves saved data, accessible tabs and usable narrow lay
     catch { throw new Error('Synthetic password interaction failed; details redacted') }
     await page.getByRole('button', { name: 'Login', exact: true }).click()
     await expect(page).toHaveURL(`${APP}/onboarding`)
-    await page.getByLabel('Full Name', { exact: true }).fill('Backbeat Synthetic Operator With A Long Account Name')
+    await page.getByLabel('Full name', { exact: true }).fill('Backbeat Synthetic Operator With A Long Account Name')
     await page.getByRole('button', { name: 'Continue', exact: true }).click()
-    await page.getByLabel('Workspace Name', { exact: true }).fill(tag)
+    await page.getByLabel('Workspace name', { exact: true }).fill(tag)
     await page.getByRole('button', { name: 'Create workspace', exact: true }).click()
     await expect(page).toHaveURL(`${APP}/dashboard`)
     const owned = await request(`/rest/v1/workspaces?name=eq.${tag}`)
@@ -89,7 +89,7 @@ test('Booking editor preserves saved data, accessible tabs and usable narrow lay
     } })
     const fields = [
       ['venue_name', 'Venue name', 'Synthetic Harbour Performance Hall'],
-      ['venue_address', 'Venue Address', '42 Synthetic Harbour Road, Test City'],
+      ['venue_address', 'Venue address', '42 Synthetic Harbour Road, Test City'],
       ['contact_name_main', 'Contact name (main)', 'Synthetic Contact'],
       ['contact_phone_main', 'Phone number', '+39 0600000000'],
       ['contact_email_main', 'Email', 'layout.contact@backbeat.test'],
@@ -101,7 +101,7 @@ test('Booking editor preserves saved data, accessible tabs and usable narrow lay
     await page.reload()
     await page.getByRole('link', { name: 'Continue setup', exact: true }).click()
     await expect(page).toHaveURL(`${APP}/dashboard/bookings/${booking.id}`)
-    await expect(page.getByRole('heading', { level: 1, name: 'Event Booking', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Event booking', exact: true })).toBeVisible()
     for (const [,label,value] of fields) await expect(page.getByLabel(label, { exact: true })).toHaveValue(value)
 
     const beforeEdit = (await request(`/rest/v1/bookings?id=eq.${booking.id}`))[0]
@@ -259,7 +259,7 @@ test('Booking editor preserves saved data, accessible tabs and usable narrow lay
         const highDpiPage = await context.newPage()
         highDpiPage.on('pageerror', error => errors.push(String(error.message).slice(0, 400)))
         await highDpiPage.goto(`${APP}/dashboard/bookings/${booking.id}`)
-        await expect(highDpiPage.getByRole('heading', { level: 1, name: 'Event Booking', exact: true })).toBeVisible()
+        await expect(highDpiPage.getByRole('heading', { level: 1, name: 'Event booking', exact: true })).toBeVisible()
         await expect(highDpiPage.getByLabel('Venue name', { exact: true })).toHaveValue('Synthetic Harbour Performance Hall')
         const display = await highDpiPage.evaluate(() => ({
           width: innerWidth, height: innerHeight, dpr: devicePixelRatio,

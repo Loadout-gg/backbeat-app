@@ -30,7 +30,7 @@ it.each(["DJ Alice", "TheMidnightEchoCollective".repeat(5)])(
     expect(heading.parentElement?.classList.contains("min-w-0")).toBe(true)
     const header = heading.parentElement!.parentElement!.parentElement!
     expect(header.classList.contains("flex-col")).toBe(true)
-    const actions = screen.getByRole("button", { name: "New Booking" }).parentElement!
+    const actions = screen.getByRole("button", { name: "New booking" }).parentElement!
     expect(actions.classList.contains("flex-wrap")).toBe(true)
     expect(within(actions).getByRole("link", { name: "Edit" }).getAttribute("href")).toBe("/dashboard/artists/artist-a/edit")
     expect(within(actions).getByRole("button", { name: "Message" }).hasAttribute("disabled")).toBe(true)

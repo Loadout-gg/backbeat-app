@@ -137,7 +137,7 @@ export function DashboardContent({
                     onClick={() => setIsBookingModalOpen(true)}
                   >
                     <Plus className="h-4 w-4" />
-                    New Booking
+                    New booking
                   </Button>
                 </div>
               ) : (
@@ -153,7 +153,7 @@ export function DashboardContent({
                             .toUpperCase()}
                           day={String(date.getDate())}
                           artistName={
-                            booking.artist?.stage_name || "Unknown Artist"
+                            booking.artist?.stage_name || "Unknown artist"
                           }
                           venue={booking.venue_name || ""}
                           location={booking.venue_address || ""}
