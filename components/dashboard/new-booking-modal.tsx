@@ -324,7 +324,7 @@ export function NewBookingModal({
           <>
             <DialogHeader className="px-6 pt-6 pb-4">
               <DialogTitle className="text-xl font-semibold">
-                New Booking
+                New booking
               </DialogTitle>
             </DialogHeader>
 
@@ -439,7 +439,7 @@ export function NewBookingModal({
           <>
             <DialogHeader className="px-6 pt-6 pb-4">
               <DialogTitle className="text-xl font-semibold">
-                New Booking
+                New booking
               </DialogTitle>
             </DialogHeader>
 
@@ -647,7 +647,7 @@ export function NewBookingModal({
                     variant="outline"
                     onClick={handleBackToDashboard}
                   >
-                    Back to Dashboard
+                    Back to dashboard
                   </Button>
                   <Button
                     onClick={handleStartEventSetup}

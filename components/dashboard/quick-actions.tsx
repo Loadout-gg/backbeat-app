@@ -11,15 +11,15 @@ export function QuickActions({ onNewBooking }: { onNewBooking?: () => void }) {
 
   return (
     <>
-      <section aria-label="Quick Actions" className="space-y-3">
-        <h2 className="text-base font-semibold">Quick Actions</h2>
+      <section aria-label="Quick actions" className="space-y-3">
+        <h2 className="text-base font-semibold">Quick actions</h2>
         <div className="grid grid-cols-1 gap-2 rounded-xl bg-muted/60 p-3 sm:grid-cols-2 xl:grid-cols-1">
           <Button
             className="min-h-10 w-full justify-start gap-2"
             onClick={onNewBooking || (() => setIsBookingModalOpen(true))}
           >
             <Plus className="h-4 w-4" />
-            New Booking
+            New booking
           </Button>
           <Button variant="outline" className="min-h-10 w-full justify-start gap-2" asChild>
             <Link href="/dashboard/artists/new">

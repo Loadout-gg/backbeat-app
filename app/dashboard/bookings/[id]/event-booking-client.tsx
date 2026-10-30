@@ -205,7 +205,7 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
         {/* Header row */}
         <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-6 border-b border-border">
           <h1 className="text-xl font-semibold text-foreground">
-            Event Booking
+            Event booking
           </h1>
           <button
             onClick={() => router.back()}
@@ -371,7 +371,7 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
                       </div>
                       <div>
                         <label htmlFor="venue-address" className="text-xs font-medium text-foreground mb-1.5 block">
-                          Venue Address
+                          Venue address
                         </label>
                         <Input
                           placeholder="Venue address"
@@ -392,7 +392,7 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
                     <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
                         <label className="text-xs font-medium text-foreground mb-1.5 block">
-                          Event Type
+                          Event type
                         </label>
                         <Input
                           placeholder="Event type"
