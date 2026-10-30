@@ -3,7 +3,6 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
 vi.mock('@vercel/analytics/next', () => ({ Analytics: () => createElement('span', { 'data-analytics': 'enabled' }) }))
-vi.mock('next/font/google', () => ({ Geist: () => ({}), Geist_Mono: () => ({}), Source_Serif_4: () => ({}) }))
 import RootLayout from '@/app/layout'
 
 afterEach(() => vi.unstubAllEnvs())
