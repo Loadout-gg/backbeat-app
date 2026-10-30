@@ -2,6 +2,7 @@ import { unstable_rethrow } from "next/navigation"
 import { getBookings, type Booking } from "@/lib/actions/bookings"
 import { BookingCard } from "@/components/dashboard/booking-card"
 import { Badge } from "@/components/ui/badge"
+import { RetryButton } from "@/components/retry-button"
 
 export default async function BookingsPage() {
   let bookings: Booking[] = []
@@ -20,7 +21,12 @@ export default async function BookingsPage() {
         <p className="mt-1 text-sm text-muted-foreground">All bookings in your workspace.</p>
       </div>
       <div className="space-y-3">
-        {loadError && <p role="alert" className="text-sm text-destructive">Unable to load bookings. Please refresh and try again.</p>}
+        {loadError && (
+          <>
+            <p role="alert" className="text-sm text-destructive">Unable to load bookings. Please refresh and try again.</p>
+            <RetryButton label="Retry loading bookings" />
+          </>
+        )}
         {!loadError && bookings.length === 0 && (
           <p className="rounded-lg border bg-card p-5 text-sm text-muted-foreground">No bookings in your workspace yet.</p>
         )}

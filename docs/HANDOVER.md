@@ -19,6 +19,8 @@ Read this first when picking up work, then `AGENTS.md` and `docs/agents/README.m
 5. Alberto reviews and merges. Contributors never push or merge to `main`.
 6. Update `docs/BACKLOG.md` status and this file.
 
+Decision owners (from 2026-10-30): Alberto reviews product security; Simone decides UX, copy, visual and other non-security product scope. Architecture-reserved decisions in AGENTS.md stay with Alberto.
+
 ## Open questions for Alberto
 
 - First task: one small PR with R4, R6, R7 and R10?
@@ -35,3 +37,4 @@ Read this first when picking up work, then `AGENTS.md` and `docs/agents/README.m
 | 2026-10-28 | #13 | R4, R6, R7, R10: bookings list shows stored venue, new-event artist list shows stage names, events read failure shows its own alert, dated Financial notes in milestone-4 and currency-display docs; R11 added to the backlog (events list artist name, needs a read-projection decision); Codex review step added to the workflow; review fixes: redirects propagate, retry action on events error |
 | 2026-10-28 | #14 | V3: artist wizard, new event and login use theme tokens instead of raw palette colours; login errors are announced with fixed copy and never show the provider message; V7 added (remaining raw black/white); V7 folded in (panels bg-card, toast primary tokens); review fix: login → confirmation keeps the entered email |
 | 2026-10-29 | #15 | R12: bookings list and artist profile calendar let the `/onboarding` redirect propagate instead of showing their read error (`unstable_rethrow`, as R7); 987 unit/component tests; R13 added (no retry action on those two error states) |
+| 2026-10-30 | #16 | R13: bookings list and artist profile calendar read errors get a retry button that re-runs the server reads, through a shared `RetryButton` the events page now uses too (same label); decided by Simone; decision owners line added to "How work flows"; 991 unit/component tests |
