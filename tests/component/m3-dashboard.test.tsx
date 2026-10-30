@@ -14,7 +14,7 @@ import { QuickActions } from "@/components/dashboard/quick-actions"
 afterEach(cleanup)
 it("puts creation actions before the work lists in keyboard reading order", () => {
   render(<DashboardContent {...props} />)
-  const actions = screen.getByRole("region", { name: "Quick Actions" })
+  const actions = screen.getByRole("region", { name: "Quick actions" })
   const events = screen.getByRole("region", { name: "Events in progress" })
   expect(Boolean(actions.compareDocumentPosition(events) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
 })
@@ -38,7 +38,7 @@ it("does not invent midnight when an event supplies a calendar date only", () =>
 })
 it("uses bounded grid tracks for side-by-side quick actions", () => {
   render(<QuickActions onNewBooking={() => {}} />)
-  const actions = screen.getByRole("button", { name: "New Booking" }).parentElement!
+  const actions = screen.getByRole("button", { name: "New booking" }).parentElement!
   expect(actions.className).toContain("sm:grid-cols-2")
   expect(actions.className).toContain("xl:grid-cols-1")
 })
@@ -73,14 +73,14 @@ it("groups work in labelled regions and lists that can reflow without fixed side
   expect(within(bookings).getAllByRole("listitem")).toHaveLength(1)
   expect(within(events).getByRole("link", { name: /View all/ }).getAttribute("href")).toBe("/dashboard/events")
   expect(within(bookings).getByRole("link", { name: /View all/ }).getAttribute("href")).toBe("/dashboard/bookings")
-  expect(screen.getByRole("region", { name: "Quick Actions" })).toBeTruthy()
+  expect(screen.getByRole("region", { name: "Quick actions" })).toBeTruthy()
   expect(screen.getByRole("heading", { name: "Welcome back" }).className).toContain("break-words")
   expect(events.parentElement?.parentElement?.className).toContain("grid-cols-1")
 })
 it("lets the dashboard own booking creation from Quick Actions", () => {
   const onNewBooking = vi.fn()
   render(<QuickActions onNewBooking={onNewBooking} />)
-  fireEvent.click(screen.getByRole("button", { name: "New Booking" }))
+  fireEvent.click(screen.getByRole("button", { name: "New booking" }))
   expect(onNewBooking).toHaveBeenCalledOnce()
   expect(screen.queryByRole("dialog")).toBeNull()
   expect(screen.getByRole("link", { name: "Add artist" }).getAttribute("href")).toBe("/dashboard/artists/new")
@@ -113,9 +113,9 @@ it("exposes only the three supported metrics with the filtered booking count", (
 })
 
 // Compatibility checks: these existing behaviors are intentionally unchanged.
-it.each(["Bookings in progress", "Quick Actions"])("opens the real booking dialog from %s and can close it", async (name) => {
+it.each(["Bookings in progress", "Quick actions"])("opens the real booking dialog from %s and can close it", async (name) => {
   render(<DashboardContent {...props} />)
-  fireEvent.click(within(screen.getByRole("region", { name })).getByRole("button", { name: "New Booking" }))
+  fireEvent.click(within(screen.getByRole("region", { name })).getByRole("button", { name: "New booking" }))
   expect(screen.getAllByRole("dialog")).toHaveLength(1)
   expect(await screen.findByText("No artists available in your workspace")).toBeTruthy()
   fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Close" }))
@@ -123,7 +123,7 @@ it.each(["Bookings in progress", "Quick Actions"])("opens the real booking dialo
 })
 it("retains the standalone QuickActions dialog for existing callers", async () => {
   render(<QuickActions />)
-  fireEvent.click(screen.getByRole("button", { name: "New Booking" }))
+  fireEvent.click(screen.getByRole("button", { name: "New booking" }))
   expect(await screen.findByText("No artists available in your workspace")).toBeTruthy()
   expect(screen.getAllByRole("dialog")).toHaveLength(1)
 })

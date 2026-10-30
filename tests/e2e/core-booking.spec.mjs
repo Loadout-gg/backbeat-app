@@ -67,9 +67,9 @@ test('local operator completes onboarding, artist and booking persistence, and r
       catch { throw new Error('Synthetic password field interaction failed (details redacted)') }
       await page.getByRole('button', { name: 'Login', exact: true }).click()
       await expect(page).toHaveURL(`${APP}/onboarding`)
-      await page.getByLabel('Full Name', { exact: true }).fill('Backbeat Synthetic Operator')
+      await page.getByLabel('Full name', { exact: true }).fill('Backbeat Synthetic Operator')
       await page.getByRole('button', { name: 'Continue', exact: true }).click()
-      await page.getByLabel('Workspace Name', { exact: true }).fill(tag)
+      await page.getByLabel('Workspace name', { exact: true }).fill(tag)
       await page.getByRole('button', { name: 'Create workspace', exact: true }).click()
       await expect(page).toHaveURL(`${APP}/dashboard`)
       const workspaces = await request(`/rest/v1/workspaces?name=eq.${tag}`)
@@ -87,7 +87,7 @@ test('local operator completes onboarding, artist and booking persistence, and r
       await page.getByLabel('Name', { exact: true }).fill('Luna')
       await page.getByLabel('Surname', { exact: true }).fill('Synthetic')
       for (let step = 0; step < 3; step++) await page.getByRole('button', { name: 'Continue', exact: true }).click()
-      await page.getByRole('button', { name: 'Save and Complete', exact: true }).click()
+      await page.getByRole('button', { name: 'Save and complete', exact: true }).click()
       await expect(page.getByRole('heading', { name: 'Artist successfully added.' })).toBeVisible()
       await page.getByRole('button', { name: 'Ok', exact: true }).click()
       await expect(page).toHaveURL(`${APP}/dashboard/artists`)
@@ -101,7 +101,7 @@ test('local operator completes onboarding, artist and booking persistence, and r
       await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Luna')
       await page.getByLabel('Stage name', { exact: true }).fill(revisedStageName)
       for (let step = 0; step < 3; step++) await page.getByRole('button', { name: 'Continue', exact: true }).click()
-      await page.getByRole('button', { name: 'Save and Complete', exact: true }).click()
+      await page.getByRole('button', { name: 'Save and complete', exact: true }).click()
       await expect(page.getByRole('heading', { name: 'Artist successfully updated.' })).toBeVisible()
       await page.getByRole('button', { name: 'Ok', exact: true }).click()
       await expect(page).toHaveURL(url => url.pathname === `/dashboard/artists/${artists[0].id}`)
@@ -130,7 +130,7 @@ test('local operator completes onboarding, artist and booking persistence, and r
       const readArtist = async () => (await request(`/rest/v1/artists?id=eq.${artist.id}`))[0]
       const openEdit = async () => {
         await page.goto(`${APP}/dashboard/artists/${artist.id}/edit`)
-        await expect(page.getByRole('heading', { name: 'Edit Artist', exact: true })).toBeVisible()
+        await expect(page.getByRole('heading', { name: 'Edit artist', exact: true })).toBeVisible()
       }
       const finishSteps = async () => {
         for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Continue', exact: true }).click()
@@ -157,7 +157,7 @@ test('local operator completes onboarding, artist and booking persistence, and r
           await route.fulfill({ status: 503, contentType: 'text/plain', body: 'Synthetic local test failure' })
         } else await route.fallback()
       })
-      const save = page.getByRole('button', { name: 'Save and Complete', exact: true })
+      const save = page.getByRole('button', { name: 'Save and complete', exact: true })
       await save.click()
       await expect(page.getByRole('alert').filter({ hasText: 'Unable to save artist. Please try again.' })).toHaveText('Unable to save artist. Please try again.')
       await expect(save).toBeEnabled()
@@ -201,7 +201,7 @@ test('local operator completes onboarding, artist and booking persistence, and r
     })
 
     await test.step('booking creation, update after reload and visible failed-save recovery', async () => {
-      await page.getByRole('button', { name: 'New Booking', exact: true }).click()
+      await page.getByRole('button', { name: 'New booking', exact: true }).click()
       const dialog = page.getByRole('dialog')
       await dialog.locator('input[type=date]').fill('2030-01-02')
       await dialog.locator('input[type=time]').nth(0).fill('10:30')

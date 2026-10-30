@@ -116,7 +116,7 @@ it("preserves same-ID drafts on refreshed props and never replays consumed valid
   const { rerender } = render(<EventBookingClient booking={booking} />)
   const performanceDraft = {
     "Booking date": "2030-01-22", "Start time": "00:30", "Duration": "01:30", "Venue name": "New Hall",
-    "Venue Address": "New address", "Contact name (main)": "Sam", "Phone number": "+44 2000000000", "Email": "sam@backbeat.test", "Note": "New note",
+    "Venue address": "New address", "Contact name (main)": "Sam", "Phone number": "+44 2000000000", "Email": "sam@backbeat.test", "Note": "New note",
   }
   for (const [label, value] of Object.entries(performanceDraft)) fireEvent.change(screen.getByLabelText(label, { exact: true }), { target: { value } })
   fireEvent.change(await financialPanel(), { target: { value: "-10" } })
