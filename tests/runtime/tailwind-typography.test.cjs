@@ -30,3 +30,23 @@ test('Tailwind upgrade preserves the existing application sans font stack', asyn
   })
   assert.ok(usesThemeFont, 'The body font-sans utility must keep using the theme variable')
 })
+
+// The serif token stays valid without loading a web font (V2, #18).
+test('The serif theme token resolves to a system serif stack', async () => {
+  const consumerRequire = createRequire(require.resolve('@tailwindcss/postcss'))
+  const { compile } = consumerRequire('@tailwindcss/node')
+  const stylesheet = path.resolve(__dirname, '../../app/globals.css')
+  const compiler = await compile(fs.readFileSync(stylesheet, 'utf8'), {
+    base: path.dirname(stylesheet),
+    onDependency() {},
+  })
+  const root = postcss.parse(compiler.build(['font-serif']))
+  const stacks = []
+  root.walkRules('.font-serif', rule => {
+    rule.walkDecls('font-family', declaration => stacks.push(declaration.value))
+  })
+  assert.ok(stacks.length > 0, 'The font-serif utility must resolve the serif theme token')
+  assert.deepEqual(stacks.at(-1).split(/\s*,\s*/), [
+    'ui-serif', 'Georgia', 'Cambria', '"Times New Roman"', 'Times', 'serif',
+  ])
+})
