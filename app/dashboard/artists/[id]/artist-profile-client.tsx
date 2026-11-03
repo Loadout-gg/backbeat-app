@@ -146,7 +146,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
     <div className="min-w-0 space-y-6 p-4 sm:p-6 [overflow-wrap:anywhere]">
       {/* Updated Toast */}
       {showUpdatedToast && (
-        <div className="fixed top-4 right-4 z-50 bg-black text-white px-4 py-3 rounded-lg shadow-lg animate-in fade-in slide-in-from-top-2">
+        <div className="fixed top-4 right-4 z-50 bg-primary text-primary-foreground px-4 py-3 rounded-lg shadow-lg animate-in fade-in slide-in-from-top-2">
           Artist updated successfully.
         </div>
       )}
