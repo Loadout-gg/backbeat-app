@@ -4,7 +4,7 @@ allowBuilds:
   sharp: false
   unrs-resolver: false
 
-# Converge only semver-compatible edges on verified patched targets.
+# Converge compatible edges; the documented minimatch security exception is patched below.
 overrides:
   'lodash@': 4.18.1
   'ws@': 8.21.0
@@ -16,3 +16,8 @@ overrides:
   'vite@': 8.3.3
   'undici@': 8.12.2
   'eslint-plugin-react-hooks>zod': 4.6.6
+  # GHSA-g3hv-75wg-m249: patched matcher; the CJS patch preserves legacy ESLint callers.
+  'minimatch@<11.0.1': 11.0.4
+
+patchedDependencies:
+  minimatch@11.0.4: patches/minimatch@11.0.4.patch
