@@ -42,3 +42,21 @@ it("renders workspace bookings with artist names, dates and correct detail links
   expect(screen.getByText("09:45", { exact: true })).toBeTruthy()
   expect(screen.getByRole("link", { name: "Continue setup" }).getAttribute("href")).toBe("/dashboard/bookings/booking-a")
 })
+it("shows the stored venue name and address in the booking meta line", async () => {
+  getBookings.mockResolvedValueOnce([{
+    id: "booking-venue", date: "2030-01-02", start_time: "21:30:00", status: "confirmed",
+    venue_name: "Synthetic Hall", venue_address: "1 Synthetic Street",
+    artist: { stage_name: "DJ Luna", name: "Luna" },
+  }])
+  render(await BookingsPage())
+  expect(screen.getByText("1 Synthetic Street, Synthetic Hall • 21:30", { exact: true })).toBeTruthy()
+})
+it("omits absent venue values instead of rendering empty separators", async () => {
+  getBookings.mockResolvedValueOnce([{
+    id: "booking-partial", date: "2030-01-02", start_time: "21:30:00", status: "confirmed",
+    venue_name: "Synthetic Hall", venue_address: null,
+    artist: { stage_name: "DJ Luna", name: "Luna" },
+  }])
+  render(await BookingsPage())
+  expect(screen.getByText("Synthetic Hall • 21:30", { exact: true })).toBeTruthy()
+})

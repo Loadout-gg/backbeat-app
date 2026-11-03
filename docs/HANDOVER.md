@@ -8,14 +8,15 @@ Read this first when picking up work, then `AGENTS.md` and `docs/agents/README.m
 - All CI steps pass locally on Node 24.22.1: install, typecheck, lint, 961 unit/component tests, 28 runtime tests, placeholder build, `next start` smoke test, both dependency audits.
 - Not run locally: integration and e2e suites. They need an authorized synthetic environment.
 - No open issues and no other open PRs when #12 was opened.
+- Open stacked PR #13 on `docs/handover-backlog` (#12): R4, R6, R7, R10 in review; 968 unit/component tests on that branch.
 
 ## How work flows
 
-1. Pick the next item from `docs/BACKLOG.md`. If its "Needs first" column names a decision, get it from Alberto before coding; architectural decisions use the request package in `docs/agents/architecture-decisions.md`.
-2. Branch `fix/<slug>` or `feat/<slug>` from an up-to-date `main`; smallest change; tests; all CI steps locally; docs updated in the same PR.
-3. Open the PR to `main` with the handoff from `docs/agents/development.md`: classification, changed files, commands with real outcomes, `NOT_RUN`, open decisions.
-4. First-level review by Simone (with Claude) against `docs/agents/architecture.md` contracts, scope, tests and green CI. Fix findings in the same PR.
-5. Alberto reviews and merges. Contributors never push or merge to `main`.
+1. Pick the next item from `docs/BACKLOG.md`. Resolve its "Needs first" with the responsible owner: Simone for non-security product/UX/copy/visual scope; Alberto for product security and architecture-reserved choices. Architectural decisions use the request package in `docs/agents/architecture-decisions.md`.
+2. Follow [the approved Git and staging workflow](agents/git-workflow.md): new independent `fix/<slug>` or `feat/<slug>` branches start from up-to-date `origin/staging`. Preserve and coordinate existing PR stacks; no automatic rebase or retarget. Keep changes small, run applicable checks, and update docs in the same PR.
+3. Open feature/fix PRs explicitly to `staging`, with the handoff from `docs/agents/development.md`: classification, changed files, real command outcomes, `NOT_RUN`, open decisions. After opening, request `@codex review`; request a fresh review after corrective pushes.
+4. Simone (with Claude) checks scope, architecture contracts, tests, Quality and the Codex verdict on the current head. A green check or review is not merge authorization. Staging integration requires explicit authorization under `docs/agents/git-workflow.md` and a post-merge deployment check.
+5. Only Alberto can authorize a release toward `main`/live. Follow the approved release and reverse-synchronization procedure; no direct pushes or CI bypasses.
 6. Update `docs/BACKLOG.md` status and this file.
 
 ## Open questions for Alberto
@@ -30,4 +31,5 @@ Read this first when picking up work, then `AGENTS.md` and `docs/agents/README.m
 
 | Date | PR | What changed |
 |---|---|---|
-| 2026-10-28 | #12 | Added `docs/BACKLOG.md` and `docs/HANDOVER.md` from a full code read at `7e0db2b` |
+| 2026-10-28 | #12 | Added `docs/BACKLOG.md` and `docs/HANDOVER.md` from a full code read at `7e0db2b`; C1 added from the CI annotation on #12 |
+| 2026-10-28 | #13 | R4, R6, R7, R10: bookings list shows stored venue, new-event artist list shows stage names, events read failure shows its own alert, dated Financial notes in milestone-4 and currency-display docs; R11 added to the backlog (events list artist name, needs a read-projection decision); Codex review step added to the workflow; review fixes: redirects propagate, retry action on events error |

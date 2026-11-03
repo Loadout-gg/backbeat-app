@@ -1,10 +1,12 @@
 import Link from "next/link"
+import { unstable_rethrow } from "next/navigation"
 import { Plus, MapPin } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { listEvents } from "@/lib/actions/events"
+import { listEvents, type EventWithRelations } from "@/lib/actions/events"
 import { eventDateParts } from "@/lib/event-date-display"
+import { RetryEventsButton } from "./retry-events-button"
 
 function getStatusBadgeVariant(status: string) {
   switch (status) {
@@ -24,7 +26,14 @@ function formatStatus(status: string) {
 }
 
 export default async function EventsPage() {
-  const events = await listEvents()
+  let events: EventWithRelations[] = []
+  let loadError = false
+  try {
+    events = await listEvents()
+  } catch (error) {
+    unstable_rethrow(error)
+    loadError = true
+  }
 
   return (
     <div className="space-y-6">
@@ -41,7 +50,12 @@ export default async function EventsPage() {
         </Button>
       </div>
 
-      {events.length === 0 ? (
+      {loadError ? (
+        <div className="space-y-3">
+          <p role="alert" className="text-sm text-destructive">Unable to load events. Please refresh and try again.</p>
+          <RetryEventsButton />
+        </div>
+      ) : events.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
             <p className="text-muted-foreground mb-4">No events yet. Create your first event to get started.</p>
