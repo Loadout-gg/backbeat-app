@@ -11,6 +11,7 @@ test('container install receives the explicit denied-build policy before depende
   assert.doesNotMatch(policy, /^\s+[^#\n]+:\s*true\s*$/m);
   const beforeInstall = dockerfile.split('RUN pnpm install --frozen-lockfile --ignore-scripts')[0];
   assert.match(beforeInstall, /^COPY .*pnpm-workspace\.yaml .*\.\/$/m);
+  assert.match(beforeInstall, /^COPY patches\/ \.\/patches\/$/m);
 });
 
 test('local development declares its calendar timezone before build and at runtime', () => {
