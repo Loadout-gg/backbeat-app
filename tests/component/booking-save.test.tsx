@@ -19,7 +19,7 @@ const venueContact = {
   contact_phone_main: "+39 123 456", contact_email_main: "alex@example.com",
 }
 const fieldLabels = {
-  venue_name: "Venue name", venue_address: "Venue Address", contact_name_main: "Contact name (main)",
+  venue_name: "Venue name", venue_address: "Venue address", contact_name_main: "Contact name (main)",
   contact_phone_main: "Phone number", contact_email_main: "Email",
 } as const
 it.each([
@@ -30,7 +30,7 @@ it.each([
   "initializes venue and main contact from booking values %j", (fields) => {
     render(<EventBookingClient booking={{ ...booking, ...fields }} />)
     for (const [key, label] of Object.entries(fieldLabels)) {
-      const input = screen.getAllByPlaceholderText(label === "Venue Address" ? "Venue address" : label === "Contact name (main)" ? "Contact name" : label)[0] as HTMLInputElement
+      const input = screen.getAllByPlaceholderText(label === "Contact name (main)" ? "Contact name" : label)[0] as HTMLInputElement
       expect(input.value).toBe(fields[key as keyof typeof fields] ?? "")
     }
   },

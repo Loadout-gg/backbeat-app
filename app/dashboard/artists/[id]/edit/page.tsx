@@ -246,7 +246,7 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
         <div className="bg-card text-card-foreground rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b">
-            <h1 className="text-2xl font-semibold">Edit Artist</h1>
+            <h1 className="text-2xl font-semibold">Edit artist</h1>
             <Button variant="ghost" size="icon" onClick={handleClose}>
               <X className="h-5 w-5" />
             </Button>
@@ -444,7 +444,7 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
                 </section>
 
                 <section>
-                  <h2 className="text-lg font-medium mb-4">Social Media and Website</h2>
+                  <h2 className="text-lg font-medium mb-4">Social media and website</h2>
                   <div className="border rounded-lg p-6 space-y-4">
                     <div className="grid grid-cols-3 gap-4 items-end">
                       <div>
@@ -504,7 +504,7 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
                       />
                     </div>
                     <div>
-                      <Label className="mb-3 block">Music Genres</Label>
+                      <Label className="mb-3 block">Music genres</Label>
                       <div className="grid grid-cols-5 gap-3">
                         {MUSIC_GENRES.map((genre) => (
                           <div key={genre} className="flex items-center gap-2 border rounded-lg px-3 py-2">
@@ -528,7 +528,7 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
                   <div className="border rounded-lg p-6">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <Label htmlFor="dj_equipment">DJ Equipment</Label>
+                        <Label htmlFor="dj_equipment">DJ equipment</Label>
                         <Textarea
                           id="dj_equipment"
                           placeholder="List all equipment the artist provides"
@@ -538,7 +538,7 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
                         />
                       </div>
                       <div>
-                        <Label htmlFor="sound_system">Sound System</Label>
+                        <Label htmlFor="sound_system">Sound system</Label>
                         <Textarea
                           id="sound_system"
                           placeholder="Specify technical requirements from venue"
@@ -611,7 +611,7 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="special_diet">Special Diet</Label>
+                      <Label htmlFor="special_diet">Special diet</Label>
                       <Textarea
                         id="special_diet"
                         placeholder="Specify dietary requirements, preferences or restrictions"
@@ -621,7 +621,7 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="special_needs">Special Needs & Accessibility</Label>
+                      <Label htmlFor="special_needs">Special needs & accessibility</Label>
                       <Textarea
                         id="special_needs"
                         placeholder="Specify special needs and accessibility issues"
@@ -671,7 +671,7 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
                     Saving...
                   </>
                 ) : (
-                  "Save and Complete"
+                  "Save and complete"
                 )}
               </Button>
             )}

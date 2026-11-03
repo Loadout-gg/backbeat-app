@@ -154,7 +154,7 @@ function SignupForm() {
                     {fieldErrors["password"] && <p id="password-error" className="text-sm text-destructive">{fieldErrors["password"]}</p>}
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="repeat-password">Confirm Password</Label>
+                    <Label htmlFor="repeat-password">Confirm password</Label>
                     <Input
                       id="repeat-password" aria-invalid={!!fieldErrors["repeat-password"]} aria-describedby={fieldErrors["repeat-password"] ? "repeat-password-error" : undefined}
                       type="password"

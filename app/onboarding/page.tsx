@@ -112,7 +112,7 @@ export default function OnboardingPage() {
                 <form onSubmit={handleStepOne}>
                   <div className="flex flex-col gap-6">
                     <div className="grid gap-2">
-                      <Label htmlFor="fullName">Full Name</Label>
+                      <Label htmlFor="fullName">Full name</Label>
                       <Input
                         id="fullName"
                         type="text"
@@ -152,7 +152,7 @@ export default function OnboardingPage() {
                 <form onSubmit={handleStepTwo}>
                   <div className="flex flex-col gap-6">
                     <div className="grid gap-2">
-                      <Label htmlFor="workspaceName">Workspace Name</Label>
+                      <Label htmlFor="workspaceName">Workspace name</Label>
                       <Input
                         id="workspaceName"
                         type="text"

@@ -106,7 +106,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
     }
   }, [searchParams, pathname])
 
-  const displayName = artist.stage_name || artist.name || "Unknown Artist"
+  const displayName = artist.stage_name || artist.name || "Unknown artist"
   const realName = artist.surname
     ? `${artist.name || ""} ${artist.surname}`.trim()
     : artist.name !== artist.stage_name
@@ -158,7 +158,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
           Artists
         </Link>
         <ChevronRight className="h-4 w-4" />
-        <span className="text-foreground">Artist Profile</span>
+        <span className="text-foreground">Artist profile</span>
       </div>
 
       {/* Header */}
@@ -185,7 +185,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
           </Button>
           <Button onClick={() => setIsBookingModalOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
-            New Booking
+            New booking
           </Button>
         </div>
       </div>
@@ -195,7 +195,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
         {/* Contact Information Card */}
         <Card>
           <CardContent className="p-4 sm:p-6">
-            <h3 className="text-lg font-semibold mb-4">Contact Information</h3>
+            <h3 className="text-lg font-semibold mb-4">Contact information</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-8">
               <div>
                 <p className="text-sm text-muted-foreground">Contact name</p>
@@ -285,7 +285,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                 )}
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Travel Fee</p>
+                <p className="text-sm text-muted-foreground">Travel fee</p>
                 <p className="font-medium">
                   {artist.travel_fee || (
                     <span className="text-muted-foreground italic">
@@ -387,7 +387,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                 <h3 className="text-xl font-semibold mb-3">Equipment</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div>
-                    <h4 className="font-medium mb-2">DJ Equipment</h4>
+                    <h4 className="font-medium mb-2">DJ equipment</h4>
                     {djEquipmentList.length > 0 ? (
                       <ul className="space-y-1">
                         {djEquipmentList.map((item, idx) => (
@@ -403,7 +403,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                     )}
                   </div>
                   <div>
-                    <h4 className="font-medium mb-2">Sound System</h4>
+                    <h4 className="font-medium mb-2">Sound system</h4>
                     {soundSystemList.length > 0 ? (
                       <ul className="space-y-1">
                         {soundSystemList.map((item, idx) => (
@@ -435,7 +435,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                     <h3 className="text-xl font-semibold">
-                      Active Bookings & Events
+                      Active bookings & events
                     </h3>
                     <span className="text-sm text-muted-foreground">All upcoming</span>
                   </div>
@@ -532,7 +532,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                 <h3 className="text-xl font-semibold">Documents</h3>
                 <Button variant="outline" disabled title="Coming soon">
                   <Upload className="mr-2 h-4 w-4" />
-                  Upload Document
+                  Upload document
                 </Button>
               </div>
 
@@ -586,7 +586,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                   </p>
                   <Button variant="outline" disabled title="Coming soon">
                     <Upload className="mr-2 h-4 w-4" />
-                    Upload Document
+                    Upload document
                   </Button>
                 </div>
               )}
