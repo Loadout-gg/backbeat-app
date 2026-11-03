@@ -8,6 +8,10 @@ Read [the agent guide](docs/agents/README.md), its architecture and development 
 
 Implement an authorized task within existing contracts or an explicitly approved architectural plan. Ordinary implementation details do not need a new architecture decision. Use the [classification rules](docs/agents/architecture-decisions.md) whenever scope is unclear.
 
+## Git and release workflow
+
+Before editing or publishing, read [the Git and staging workflow](docs/agents/git-workflow.md). New independent work starts from `origin/staging`; feature/fix PRs target `staging`. `main` is the live release branch, not the default destination for feature work. Simone may explicitly authorize a checked PR merge into staging; only Alberto can authorize a live release. Preserve existing stacked PRs until their transition is explicitly coordinated.
+
 ## Architectural stop
 
 If the task requires an unapproved architectural choice, print this exact line, preserving the two spaces after `alberto`:

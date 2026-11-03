@@ -12,11 +12,11 @@ Read this first when picking up work, then `AGENTS.md` and `docs/agents/README.m
 
 ## How work flows
 
-1. Pick the next item from `docs/BACKLOG.md`. If its "Needs first" column names a decision, get it from Alberto before coding; architectural decisions use the request package in `docs/agents/architecture-decisions.md`.
-2. Branch `fix/<slug>` or `feat/<slug>` from an up-to-date `main`; smallest change; tests; all CI steps locally; docs updated in the same PR.
-3. Open the PR to `main` with the handoff from `docs/agents/development.md`: classification, changed files, commands with real outcomes, `NOT_RUN`, open decisions. Right after opening it, comment `@codex review` (`gh pr comment <n> --body "@codex review"`).
-4. First-level review by Simone (with Claude) against `docs/agents/architecture.md` contracts, scope, tests, green CI and the Codex verdict. Fix findings in the same PR and comment `@codex review` again after each fix until Codex reports no major issues on the latest commit.
-5. Alberto reviews and merges. Contributors never push or merge to `main`.
+1. Pick the next item from `docs/BACKLOG.md`. Resolve its "Needs first" with the responsible owner: Simone for non-security product/UX/copy/visual scope; Alberto for product security and architecture-reserved choices. Architectural decisions use the request package in `docs/agents/architecture-decisions.md`.
+2. Follow [the approved Git and staging workflow](agents/git-workflow.md): new independent `fix/<slug>` or `feat/<slug>` branches start from up-to-date `origin/staging`. Preserve and coordinate existing PR stacks; no automatic rebase or retarget. Keep changes small, run applicable checks, and update docs in the same PR.
+3. Open feature/fix PRs explicitly to `staging`, with the handoff from `docs/agents/development.md`: classification, changed files, real command outcomes, `NOT_RUN`, open decisions. After opening, request `@codex review`; request a fresh review after corrective pushes.
+4. Simone (with Claude) checks scope, architecture contracts, tests, Quality and the Codex verdict on the current head. A green check or review is not merge authorization. Staging integration requires explicit authorization under `docs/agents/git-workflow.md` and a post-merge deployment check.
+5. Only Alberto can authorize a release toward `main`/live. Follow the approved release and reverse-synchronization procedure; no direct pushes or CI bypasses.
 6. Update `docs/BACKLOG.md` status and this file.
 
 Decision owners (from 2026-10-30): Alberto reviews product security; Simone decides UX, copy, visual and other non-security product scope. Architecture-reserved decisions in AGENTS.md stay with Alberto.
@@ -38,5 +38,5 @@ Decision owners (from 2026-10-30): Alberto reviews product security; Simone deci
 | 2026-10-28 | #14 | V3: artist wizard, new event and login use theme tokens instead of raw palette colours; login errors are announced with fixed copy and never show the provider message; V7 added (remaining raw black/white); V7 folded in (panels bg-card, toast primary tokens); review fix: login → confirmation keeps the entered email |
 | 2026-10-29 | #15 | R12: bookings list and artist profile calendar let the `/onboarding` redirect propagate instead of showing their read error (`unstable_rethrow`, as R7); 987 unit/component tests; R13 added (no retry action on those two error states) |
 | 2026-10-30 | #16 | R13: bookings list and artist profile calendar read errors get a retry button that re-runs the server reads, through a shared `RetryButton` the events page now uses too (same label); decided by Simone; decision owners line added to "How work flows"; 991 unit/component tests |
-| 2026-10-30 | #17 | V5: Title Case UI labels to sentence case (case only, no copy, aria or structure change; DJ, genre names and example names kept), tests and e2e specs follow the new text; decided by Simone; 991 unit/component tests |
-| 2026-10-30 | #18 | V2: unused Geist and Geist Mono `next/font` loaders removed (build no longer emits or preloads them); Source Serif 4 kept because the `--font-serif` token still names it; decided by Simone; 991 unit/component tests; Source Serif 4 removed, `--font-serif` now the system serif stack |
+| 2026-10-30 | #17 | V5: Title Case UI labels to sentence case (case only for visible text and the Quick actions accessible name; roles, associations, structure and logic unchanged; DJ, genre names and example names kept), tests and e2e specs follow the new text; decided by Simone; 991 unit/component tests |
+| 2026-10-30 | #18 | V2: all three unused next/font loaders (Geist, Geist Mono and Source Serif 4) removed; --font-serif now uses the system serif stack, sans unchanged; decided by Simone; author-reported build/preload evidence in PR #18 and 991 unit/component tests |
