@@ -1,6 +1,6 @@
 # Backbeat backlog
 
-Single list of known work. Nothing here is approved: an item moves to `Ready` only when its "Needs first" is resolved by Alberto. Architectural items follow `AGENTS.md` (stop line + request package). Effort and impact are zone estimates from a code read at `7e0db2b`, not measurements.
+Single list of known work; listing an item is not authorization to implement or merge it. An item moves to `Ready` only when its "Needs first" is resolved by the responsible owner: Simone for non-security product/UX/copy/visual scope; Alberto for product security and architecture-reserved choices. Recorded decisions remain scoped to their item. Architectural items follow `AGENTS.md` (stop line + request package); integration/release follows [the approved Git and staging workflow](agents/git-workflow.md). Effort and impact are zone estimates from a code read at `7e0db2b`, not measurements.
 
 Status values: `Proposed` (not yet discussed) · `Needs decision` · `Ready` · `In progress` · `In review` (PR open) · `Done` · `Dropped`.
 
