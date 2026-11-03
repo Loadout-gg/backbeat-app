@@ -9,7 +9,7 @@ import type { Artist } from "@/lib/actions/artists"
 import type { Booking } from "@/lib/actions/bookings"
 import type { EventWithRelations } from "@/lib/actions/events"
 
-const mocks = vi.hoisted(() => ({ getArtist: vi.fn(), getBookings: vi.fn(), listEvents: vi.fn() }))
+const mocks = vi.hoisted(() => ({ getArtist: vi.fn(), getBookings: vi.fn(), listEvents: vi.fn(), refresh: vi.fn() }))
 vi.mock("@/lib/actions/artists", () => ({ getArtist: mocks.getArtist }))
 vi.mock("@/lib/actions/bookings", () => ({ getBookings: mocks.getBookings }))
 vi.mock("@/lib/actions/events", () => ({ listEvents: mocks.listEvents }))
@@ -17,7 +17,7 @@ vi.mock("@/components/dashboard/new-booking-modal", () => ({ NewBookingModal: ()
 vi.mock("next/navigation", async (importOriginal) => ({
   ...await importOriginal<typeof import("next/navigation")>(),
   useSearchParams: () => new URLSearchParams("tab=calendar"),
-  useRouter: () => ({ push: vi.fn() }), usePathname: () => "/dashboard/artists/artist-a",
+  useRouter: () => ({ push: vi.fn(), refresh: mocks.refresh }), usePathname: () => "/dashboard/artists/artist-a",
   notFound: () => { throw new Error("not found") },
 }))
 const artist = { id: "artist-a", name: "Alice", stage_name: "DJ Alice" } as Artist
@@ -84,6 +84,24 @@ it.each(["getBookings", "listEvents"] as const)("lets the onboarding redirect fr
   await expect(ArtistPage({ params: Promise.resolve({ id: artist.id }) })).rejects.toMatchObject({
     digest: expect.stringMatching(/^NEXT_REDIRECT;[^;]*;\/onboarding;/),
   })
+})
+// router.refresh is mocked to re-render the server page: page-wiring evidence, not a Next runtime refresh.
+it.each(["getBookings", "listEvents"] as const)("re-runs the calendar reads after %s fails and restores the calendar", async (reader) => {
+  mocks[reader].mockRejectedValueOnce(new Error("private database detail"))
+  const props = { params: Promise.resolve({ id: artist.id }) }
+  const view = render(await ArtistPage(props))
+  mocks.refresh.mockImplementationOnce(async () => view.rerender(await ArtistPage(props)))
+  const retry = screen.getByRole("button", { name: "Retry loading calendar" })
+  expect(retry.getAttribute("tabindex")).not.toBe("-1")
+  retry.focus()
+  expect(document.activeElement).toBe(retry)
+  await act(async () => { fireEvent.click(retry) })
+  expect(mocks.refresh).toHaveBeenCalledTimes(1)
+  expect(mocks[reader]).toHaveBeenCalledTimes(2)
+  expect(screen.getByRole("link", { name: /DJ Alice/ }).getAttribute("href")).toBe("/dashboard/bookings/booking-a")
+  expect(screen.getByText("Autumn show")).toBeTruthy()
+  expect(screen.queryByRole("alert")).toBeNull()
+  expect(screen.queryByRole("button", { name: "Retry loading calendar" })).toBeNull()
 })
 it("retains the genuine empty state after successful empty reads", async () => {
   mocks.getBookings.mockResolvedValue([])

@@ -24,6 +24,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { type Artist } from "@/lib/actions/artists"
 import { parseSocialLinks, parseDocuments, artistMetadataHref } from "@/lib/artist-validation"
 import { NewBookingModal } from "@/components/dashboard/new-booking-modal"
+import { RetryButton } from "@/components/retry-button"
 import { formatArtistBaseRate } from "@/lib/artist-base-rate"
 
 // Social icon mapping
@@ -440,8 +441,11 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                   </div>
 
                   {calendarError ? (
-                    <div role="alert" className="text-center py-12 border rounded-lg text-destructive">
-                      Unable to load this artist’s calendar. Please refresh to try again.
+                    <div className="space-y-3">
+                      <div role="alert" className="text-center py-12 border rounded-lg text-destructive">
+                        Unable to load this artist’s calendar. Please refresh to try again.
+                      </div>
+                      <RetryButton label="Retry loading calendar" />
                     </div>
                   ) : hasCalendarItems ? (
                     /* Persisted bookings and events */

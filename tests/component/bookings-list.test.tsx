@@ -1,10 +1,14 @@
 // @vitest-environment jsdom
 import React from "react"
 import { afterEach, expect, it, vi } from "vitest"
-import { cleanup, render, screen } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { redirect } from "next/navigation"
-const { getBookings } = vi.hoisted(() => ({ getBookings: vi.fn() }))
+const { getBookings, refresh } = vi.hoisted(() => ({ getBookings: vi.fn(), refresh: vi.fn() }))
 vi.mock("@/lib/actions/bookings", () => ({ getBookings }))
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...await importOriginal<typeof import("next/navigation")>(),
+  useRouter: () => ({ refresh }),
+}))
 import BookingsPage from "@/app/dashboard/bookings/page"
 afterEach(cleanup)
 it("lets the onboarding redirect propagate instead of showing the read error", async () => {
@@ -66,4 +70,31 @@ it("omits absent venue values instead of rendering empty separators", async () =
   }])
   render(await BookingsPage())
   expect(screen.getByText("Synthetic Hall • 21:30", { exact: true })).toBeTruthy()
+})
+// router.refresh is mocked to re-render the server page: page-wiring evidence, not a Next runtime refresh.
+it("re-runs the bookings read from the error state and restores the list", async () => {
+  getBookings.mockRejectedValueOnce(new Error("private database detail"))
+  const view = render(await BookingsPage())
+  refresh.mockImplementationOnce(async () => view.rerender(await BookingsPage()))
+  getBookings.mockResolvedValueOnce([{
+    id: "booking-a", date: "2030-01-02", start_time: "09:45:00", status: "confirmed",
+    artist: { stage_name: "DJ Luna", name: "Luna" },
+  }])
+  expect(screen.getByRole("heading", { name: "Bookings" })).toBeTruthy()
+  const retry = screen.getByRole("button", { name: "Retry loading bookings" })
+  expect(retry.getAttribute("tabindex")).not.toBe("-1")
+  retry.focus()
+  expect(document.activeElement).toBe(retry)
+  await act(async () => { fireEvent.click(retry) })
+  expect(refresh).toHaveBeenCalledTimes(1)
+  expect(getBookings).toHaveBeenCalledTimes(2)
+  expect(screen.getByRole("heading", { name: "DJ Luna" })).toBeTruthy()
+  expect(screen.queryByRole("alert")).toBeNull()
+  expect(screen.queryByRole("button", { name: "Retry loading bookings" })).toBeNull()
+  expect(screen.queryByText("No bookings in your workspace yet.")).toBeNull()
+})
+it("offers no retry action when the read succeeds", async () => {
+  getBookings.mockResolvedValueOnce([])
+  render(await BookingsPage())
+  expect(screen.queryByRole("button", { name: "Retry loading bookings" })).toBeNull()
 })
