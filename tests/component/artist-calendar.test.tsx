@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { renderToString } from "react-dom/server"
 import { hydrateRoot } from "react-dom/client"
+import { redirect } from "next/navigation"
 import ArtistPage from "@/app/dashboard/artists/[id]/page"
 import type { Artist } from "@/lib/actions/artists"
 import type { Booking } from "@/lib/actions/bookings"
@@ -13,7 +14,8 @@ vi.mock("@/lib/actions/artists", () => ({ getArtist: mocks.getArtist }))
 vi.mock("@/lib/actions/bookings", () => ({ getBookings: mocks.getBookings }))
 vi.mock("@/lib/actions/events", () => ({ listEvents: mocks.listEvents }))
 vi.mock("@/components/dashboard/new-booking-modal", () => ({ NewBookingModal: () => null }))
-vi.mock("next/navigation", () => ({
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...await importOriginal<typeof import("next/navigation")>(),
   useSearchParams: () => new URLSearchParams("tab=calendar"),
   useRouter: () => ({ push: vi.fn() }), usePathname: () => "/dashboard/artists/artist-a",
   notFound: () => { throw new Error("not found") },
@@ -76,6 +78,12 @@ it.each(["getBookings", "listEvents"] as const)("shows a visible calendar error,
   expect(screen.getByRole("alert").textContent).toMatch(/Unable to load.*calendar/i)
   expect(screen.queryByText("No upcoming bookings or events for this artist.")).toBeNull()
   expect(screen.queryByText(/private database detail/)).toBeNull()
+})
+it.each(["getBookings", "listEvents"] as const)("lets the onboarding redirect from %s propagate instead of showing the calendar error", async (reader) => {
+  mocks[reader].mockImplementationOnce(async () => redirect("/onboarding"))
+  await expect(ArtistPage({ params: Promise.resolve({ id: artist.id }) })).rejects.toMatchObject({
+    digest: expect.stringMatching(/^NEXT_REDIRECT;[^;]*;\/onboarding;/),
+  })
 })
 it("retains the genuine empty state after successful empty reads", async () => {
   mocks.getBookings.mockResolvedValue([])

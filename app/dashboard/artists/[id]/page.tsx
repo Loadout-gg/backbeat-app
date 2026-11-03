@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation"
+import { notFound, unstable_rethrow } from "next/navigation"
 import { getArtist } from "@/lib/actions/artists"
 import { getBookings } from "@/lib/actions/bookings"
 import { listEvents } from "@/lib/actions/events"
@@ -28,7 +28,8 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
     ])
     bookings = results[0].filter((booking) => booking.artist_id === id)
     events = results[1].filter((event) => event.artist_id === id)
-  } catch {
+  } catch (error) {
+    unstable_rethrow(error)
     calendarError = true
   }
 
