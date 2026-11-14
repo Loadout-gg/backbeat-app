@@ -103,7 +103,7 @@ const booking = (overrides: Partial<Booking> = {}): Booking => ({
   venue_name: null, venue_address: null, contact_name_main: null, contact_phone_main: null,
   contact_email_main: null, status: "in_progress", created_at: "", updated_at: "", ...overrides,
 })
-const props = { welcomeMessage: "Welcome back", stats: { eventsInProgress: 7, bookingsInProgress: 99, totalArtists: 12 }, eventsInProgress: [], bookings: [] }
+const props = { welcomeMessage: "Welcome back", stats: { eventsInProgress: 7, bookingsInProgress: 99, totalArtists: 12 }, eventsInProgress: [], bookings: [], calendarToday: "2026-11-14" }
 it("exposes only the three supported metrics with the filtered booking count", () => {
   render(<DashboardContent {...props} bookings={[booking(), booking({ id: "other", status: "cancelled" })]} />)
   expect(screen.queryByText("Performance in progress")).toBeNull()
