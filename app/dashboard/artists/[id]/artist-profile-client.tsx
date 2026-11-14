@@ -26,6 +26,7 @@ import { parseSocialLinks, parseDocuments, artistMetadataHref } from "@/lib/arti
 import { NewBookingModal } from "@/components/dashboard/new-booking-modal"
 import { RetryButton } from "@/components/retry-button"
 import { formatArtistBaseRate } from "@/lib/artist-base-rate"
+import { formatBookingTime } from "@/lib/booking-display"
 
 // Social icon mapping
 function getSocialIcon(type: string) {
@@ -56,7 +57,7 @@ function isValidTab(tab: string | null): tab is TabValue {
 }
 
 function ArtistCalendarDay({ modifiers, ...props }: ComponentProps<typeof Day>) {
-  return <Day {...props} modifiers={modifiers} data-booked={modifiers.booked || undefined} />
+  return <Day {...props} modifiers={modifiers} data-booked={modifiers.booked || undefined} data-multiple={modifiers.multiple || undefined} />
 }
 
 interface ArtistProfileClientProps {
@@ -130,15 +131,27 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
     (item.status === "in_progress" || item.status === "confirmed") &&
     parseISO(item.date) >= today
 
+  const calendarBookings = bookings.filter(isUpcomingActive)
+  // Days where this artist has more than one active upcoming booking (display only).
+  const bookingsPerDay = new Map<string, number>()
+  for (const booking of calendarBookings) {
+    bookingsPerDay.set(booking.date, (bookingsPerDay.get(booking.date) ?? 0) + 1)
+  }
+  const multipleBookingDays = [...bookingsPerDay].filter(([, count]) => count > 1)
+  const multipleBookingDates = multipleBookingDays.map(([date]) => parseISO(date))
+  const bookingCountOn = (date: Date) =>
+    multipleBookingDays.find(([day]) => parseISO(day).getTime() === date.getTime())?.[1] ?? 0
+
   const calendarEvents = [
-    ...bookings.filter(isUpcomingActive).map((booking) => ({
+    ...calendarBookings.map((booking) => ({
       id: `booking-${booking.id}`, date: parseISO(booking.date),
-      title: `${displayName} · Booking`, location: "", time: booking.start_time,
+      title: `${displayName} · Booking`, location: "", time: formatBookingTime(booking.start_time),
       href: `/dashboard/bookings/${booking.id}`,
+      sameDayCount: bookingsPerDay.get(booking.date) ?? 1,
     })),
     ...events.filter(isUpcomingActive).map((event) => ({
       id: `event-${event.id}`, date: parseISO(event.date), title: event.title,
-      location: event.location || "", time: "", href: null,
+      location: event.location || "", time: "", href: null, sameDayCount: 0,
     })),
   ].sort((a, b) => a.date.getTime() - b.date.getTime() || a.time.localeCompare(b.time))
   const hasCalendarItems = calendarEvents.length > 0
@@ -473,6 +486,11 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                               <p className="text-sm text-muted-foreground">
                                 {[event.location, event.time].filter(Boolean).join(" • ")}
                               </p>
+                              {event.sameDayCount > 1 && (
+                                <Badge variant="outline" className="mt-1">
+                                  {event.sameDayCount} bookings this day
+                                </Badge>
+                              )}
                             </div>
                           </div>
 
@@ -500,13 +518,16 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                   <div className="border rounded-lg p-2 sm:p-4">
                     <Calendar
                       today={today}
-                      modifiers={{ booked: calendarEvents.map((event) => event.date) }}
-                      modifiersClassNames={{ booked: "bg-primary text-primary-foreground font-semibold" }}
+                      modifiers={{ booked: calendarEvents.map((event) => event.date), multiple: multipleBookingDates }}
+                      modifiersClassNames={{
+                        booked: "bg-primary text-primary-foreground font-semibold",
+                        multiple: "ring-2 ring-ring ring-offset-1 ring-offset-background",
+                      }}
                       labels={{
                         labelPrevious: () => "Previous month",
                         labelNext: () => "Next month",
                         labelGridcell: (date, modifiers, options, dateLib) =>
-                          `${labelGridcell(date, modifiers, options, dateLib)}${modifiers?.booked ? ", active booking or event" : ""}`,
+                          `${labelGridcell(date, modifiers, options, dateLib)}${modifiers?.booked ? ", active booking or event" : ""}${modifiers?.multiple ? `, ${bookingCountOn(date)} bookings` : ""}`,
                       }}
                       components={{ Day: ArtistCalendarDay }}
                       month={calendarMonth}
@@ -518,6 +539,12 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                       <span aria-hidden="true" className="h-3 w-3 shrink-0 rounded-sm border border-foreground bg-primary" />
                       <span>Active booking or event</span>
                     </div>
+                    {multipleBookingDates.length > 0 && (
+                      <div className="mt-2 flex items-center gap-2 text-sm">
+                        <span aria-hidden="true" className="h-3 w-3 shrink-0 rounded-sm bg-primary ring-2 ring-ring ring-offset-1 ring-offset-background" />
+                        <span>More than one booking on this day</span>
+                      </div>
+                    )}
                     <p className="mt-2 text-xs text-muted-foreground">
                       Calendar is read-only. All upcoming entries are listed.
                     </p>
@@ -646,6 +673,8 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
         open={isBookingModalOpen}
         onOpenChange={setIsBookingModalOpen}
         preselectedArtist={artist}
+        existingBookings={calendarError ? null : bookings}
+        calendarToday={calendarToday}
       />
 
       {/* Footer */}
