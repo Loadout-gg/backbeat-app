@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { BOOKING_FEE_CURRENCIES, parseBookingFee, formatBookingFeeInput, type BookingFeeError } from "@/lib/booking-fee";
 import { createBookingSchema } from "@/lib/booking-validation";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { X, Trash2, Plus, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,12 +12,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 
-import { updateBooking, deleteBooking, type BookingWithArtist } from "@/lib/actions/bookings";
+import { updateBooking, deleteBooking, type Booking, type BookingWithArtist } from "@/lib/actions/bookings";
+import { BOOKING_STATUS_LABELS, bookingStatusBadgeVariant, findSameDayBookings, sameDayWarning } from "@/lib/booking-display";
 import { formatArtistBaseRate } from "@/lib/artist-base-rate";
 
 interface EventBookingClientProps {
   booking: BookingWithArtist;
+  /** This artist's bookings from the existing scoped read; null when that read failed. */
+  artistBookings?: readonly Booking[] | null;
 }
 
 const TABS = [
@@ -28,7 +33,7 @@ const TABS = [
   "Artist contacts",
 ] as const;
 
-export function EventBookingClient({ booking }: EventBookingClientProps) {
+export function EventBookingClient({ booking, artistBookings }: EventBookingClientProps) {
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
   const saveInFlight = useRef(false);
@@ -52,7 +57,6 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
   const [startTime, setStartTime] = useState(
     booking.start_time ? booking.start_time.slice(0, 5) : "10:30"
   );
-  const amPm = startTime ? (Number(startTime.split(":")[0]) >= 12 ? "PM" : "AM") : "-";
   const [durationMinutes, setDurationMinutes] = useState(
     booking.duration_minutes || 0
   );
@@ -117,10 +121,16 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
     const totalMins = h * 60 + m + durationMinutes;
     const endH = Math.floor((totalMins % (24 * 60)) / 60);
     const endM = totalMins % 60;
-    const endAmPm = endH >= 12 ? "PM" : "AM";
-    const display12h = endH > 12 ? endH - 12 : endH === 0 ? 12 : endH;
-    return `${display12h}:${endM.toString().padStart(2, "0")} ${endAmPm}`;
+    return `${endH.toString().padStart(2, "0")}:${endM.toString().padStart(2, "0")}`;
   };
+
+  // Non-blocking notice for the draft date; the current booking and cancelled ones are excluded.
+  const sameDayCount = artistBookings
+    ? findSameDayBookings(artistBookings, { artistId: booking.artist_id, date: bookingDate, excludeId: booking.id }).length
+    : 0;
+  const sameDayNotice = artistBookings === null
+    ? "Other bookings for this date could not be checked."
+    : sameDayCount > 0 ? sameDayWarning(sameDayCount) : null;
 
   const handleUpdateBooking = async () => {
     if (saveInFlight.current) return;
@@ -179,7 +189,7 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
     try {
       const result = await deleteBooking(booking.id);
       if (result.success) {
-        router.push("/dashboard");
+        router.push("/dashboard/bookings");
       } else {
         setDeleteError("Unable to delete booking. Please try again.");
       }
@@ -204,16 +214,21 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
       <div className="min-w-0 bg-card border border-border rounded-xl shadow-sm">
         {/* Header row */}
         <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-6 border-b border-border">
-          <h1 className="text-xl font-semibold text-foreground">
-            Event booking
-          </h1>
-          <button
-            onClick={() => router.back()}
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            <h1 className="text-xl font-semibold text-foreground">
+              Event booking
+            </h1>
+            <Badge variant={bookingStatusBadgeVariant(booking.status)} aria-label={`Status: ${BOOKING_STATUS_LABELS[booking.status]}`}>
+              {BOOKING_STATUS_LABELS[booking.status]}
+            </Badge>
+          </div>
+          <Link
+            href="/dashboard/bookings"
             className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
             aria-label="Close"
           >
             <X className="h-5 w-5" />
-          </button>
+          </Link>
         </div>
 
         {/* Artist summary bar */}
@@ -283,8 +298,14 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
                       value={bookingDate}
                       onChange={(event) => setBookingDate(event.target.value)}
                       disabled={isSaving}
+                      aria-describedby={sameDayNotice ? "booking-same-day" : undefined}
                       className="h-9 min-w-0 text-sm"
                     />
+                    {sameDayNotice && (
+                      <p id="booking-same-day" role="status" className="mt-2 text-sm text-muted-foreground">
+                        {sameDayNotice}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div>
@@ -292,7 +313,7 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
                     Performance time
                   </h3>
                   <div className="border border-border rounded-lg p-4">
-                    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_3.5rem] gap-3 sm:grid-cols-[minmax(0,1.3fr)_3.5rem_minmax(0,1fr)_minmax(0,1fr)]">
+                    <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3">
                       <div>
                         <label htmlFor="booking-start-time" className="text-xs font-medium text-foreground mb-1.5 block">
                           Start time
@@ -308,15 +329,7 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
                           />
                         </div>
                       </div>
-                      <div>
-                        <label className="text-xs font-medium text-foreground mb-1.5 block">
-                          &nbsp;
-                        </label>
-                        <div aria-label="Start time period" className="flex items-center h-9 px-3 bg-muted/50 rounded-md text-sm text-muted-foreground">
-                          {amPm}
-                        </div>
-                      </div>
-                      <div className="col-span-2 min-w-0 sm:col-span-1">
+                      <div className="min-w-0">
                         <label htmlFor="booking-duration" className="text-xs font-medium text-foreground mb-1.5 block">
                           Duration
                         </label>
@@ -333,13 +346,16 @@ export function EventBookingClient({ booking }: EventBookingClientProps) {
                           className="min-w-0 h-9 text-sm placeholder:text-foreground"
                         />
                       </div>
-                      <div className="col-span-2 min-w-0 sm:col-span-1">
-                        <label className="text-xs font-medium text-foreground mb-1.5 block">
+                      <div className="min-w-0">
+                        <label htmlFor="booking-end-time" className="text-xs font-medium text-foreground mb-1.5 block">
                           End time
                         </label>
-                        <div className="flex items-center h-9 px-3 bg-muted/50 rounded-md text-sm text-muted-foreground">
-                          {computeEndTime()}
-                        </div>
+                        <Input
+                          id="booking-end-time"
+                          readOnly
+                          value={computeEndTime()}
+                          className="min-w-0 h-9 border-transparent bg-muted/50 text-sm text-muted-foreground"
+                        />
                       </div>
                     </div>
                   </div>

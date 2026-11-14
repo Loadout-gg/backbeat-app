@@ -8,21 +8,22 @@ Status values: `Proposed` (not yet discussed) · `Needs decision` · `Ready` · 
 
 | ID | Item | Effort | Impact | Needs first | Status |
 |---|---|---|---|---|---|
-| F1 | Booking lifecycle: status control in the editor, transition rules, status filter on the list. Wires the unused `updateBookingStatus` (includes R1) | Medium | High | Transition graph (or explicit "any transition") | Needs decision |
+| F1 | Booking lifecycle: status control in the editor, transition rules, status filter on the list. Wires the unused `updateBookingStatus` (includes R1). The read-only status filter on the bookings list is delivered by `fix/booking-ux-polish`; status control and transitions are P1 of request ARCH-20261114-booking-domain r02 (Simone 2026-11-14: `completed` = show performed, not tied to payment) | Medium | High | Transition graph (or explicit "any transition") | Needs decision |
 | F2 | Promoter directory: list, create, edit pages; Zod schema for `createPromoter`; `updatePromoter`; "Add promoter" from new event (includes R2) | Medium | High | Validation rules, menu placement, person vs company | Needs decision |
-| F3 | Travel and Accommodation tabs: legs and stays as booking child tables | High | High | Request package: schema, zoned date/time contract, travellers | Needs decision |
+| F3 | Travel and Accommodation tabs: legs and stays as booking child tables. P4 of request ARCH-20261114-booking-domain r02 | High | High | Request package: schema, zoned date/time contract, travellers | Needs decision |
 | F4 | Team and invitations: invite flow, member management, role permission matrix + RLS, multi-workspace selection | Very high | High | Request package: roles, invite channel, production email, data on removal | Needs decision |
-| F5 | Booking to event conversion ("Complete and create event") | High | Medium | Conversion rule and booking-event link | Proposed |
-| F6 | Secondary contact, driver, lineup, event type, expected audience (fields drawn and disabled in the editor) | Medium | Medium | Schema | Proposed |
-| F7 | Artist documents: upload, storage, permissions, preview | High | Medium | Request package: storage service | Proposed |
+| F5 | Booking to event conversion ("Complete and create event"). P5 of request ARCH-20261114-booking-domain r02 | High | Medium | Conversion rule and booking-event link | Proposed |
+| F6 | Secondary contact, driver, lineup, event type, expected audience (fields drawn and disabled in the editor). P3 of request ARCH-20261114-booking-domain r02; Simone 2026-11-14: the Artist contacts tab = per-booking artist-team contacts with role plus read-only artist profile contacts | Medium | Medium | Schema | Proposed |
+| F7 | Artist documents: upload, storage, permissions, preview. Booking documents are D3.5 of request ARCH-20261114-booking-domain r02 (link-only first, storage as a separate request) | High | Medium | Request package: storage service | Proposed |
 | F8 | Public event sharing via `events.public_token` | High | Low | Request package: security | Proposed |
 | F9 | Artist CSV export and artist deletion (deleting an artist cascades to its bookings today) | Low | Low | Export format, deletion rules | Proposed |
+| F10 | Booking list status filter (URL parameter, existing four values) with Upcoming/Past grouping and status badge colours matching the events page; non-blocking past-date hint in the create modal; non-blocking same-day notice (another non-cancelled booking of the same artist that day) in the create modal and editor; artist calendar marks days with more than one booking. Uses existing reads only; no schema, RLS or action change. Fix in `fix/booking-ux-polish` | Medium | Medium | Decided by Simone | In review |
 
 ## Code review findings
 
 | ID | Finding | Where | Classification | Needs first | Status |
 |---|---|---|---|---|---|
-| R1 | Booking status cannot be changed from the UI | `lib/actions/bookings.ts` | Contract | See F1 | Needs decision |
+| R1 | Booking status cannot be changed from the UI. P1 of request ARCH-20261114-booking-domain r02 | `lib/actions/bookings.ts` | Contract | See F1 | Needs decision |
 | R2 | Promoters cannot be created; `createPromoter` is unused and unvalidated | `lib/actions/events.ts` | Contract | See F2 | Needs decision |
 | R3 | Events and Bookings are missing from the main navigation | `components/dashboard/sidebar.tsx` | Design (`DESIGN.md` fixes three routes) | Design approval | Needs decision |
 | R4 | Bookings list passes empty venue/address although they are stored | `app/dashboard/bookings/page.tsx` | `WITHIN_EXISTING_CONTRACT` | Nothing | In review |
@@ -35,6 +36,9 @@ Status values: `Proposed` (not yet discussed) · `Needs decision` · `Ready` · 
 | R11 | Events list shows the artist's real name (`artists.name`) while the rest of the app uses the stage name; the events read selects only `id, name`, so the fix changes that read's projection. Found while fixing R6 in #13 | `lib/actions/events.ts`, `app/dashboard/events/page.tsx` | Contract (read projection / DTO) | Approval to add `stage_name` to the events read | Needs decision |
 | R12 | Server-page read catches also swallow the Next redirect to `/onboarding` thrown by `getCurrentWorkspaceId`. Bookings list: `getBookings` reaches it outside any internal try, so a user without a selected workspace sees "Unable to load bookings" instead of onboarding. Artist profile calendar: same bare catch, but `getArtist` runs first outside it, so only a selection lost between the two reads is swallowed. Fix pattern: `unstable_rethrow` from `next/navigation` in the catch, as in the R7 review fix on #13. Found while fixing R7. Fix in #15: both catches rethrow Next control flow before showing the read error; a re-scan of `app/` found no other server page or layout catch around a redirect/notFound read | `app/dashboard/bookings/page.tsx`, `app/dashboard/artists/[id]/page.tsx` | `WITHIN_EXISTING_CONTRACT` | Owner ok to fix in a follow-up PR | In review |
 | R13 | Bookings list and artist profile calendar read errors offer no recovery action ("Please refresh" text only), unlike the events page retry button added on #13. Found while fixing R12. Fix: both error states get a "Retry loading …" button that re-runs the server reads (`router.refresh()`), through one shared `components/retry-button.tsx` that the events page now uses too, same label. Fix in #16 | `app/dashboard/bookings/page.tsx`, `app/dashboard/artists/[id]/artist-profile-client.tsx` | `WITHIN_EXISTING_CONTRACT` | Decided by Simone | In review |
+| R14 | Dashboard booking cards and the artist profile calendar show the stored `time` with seconds ("21:30:00"); test fixtures used "09:45" so tests did not catch it. Fix in `fix/booking-ux-polish`: shared `formatBookingTime` (HH:MM) | `app/dashboard/dashboard-content.tsx`, `artist-profile-client.tsx` | `WITHIN_EXISTING_CONTRACT` | Decided by Simone | In review |
+| R15 | Dashboard booking card shows "Unknown artist" when the stage name is missing, while the bookings list falls back to the artist name. Fix in `fix/booking-ux-polish`: one shared `bookingArtistName` rule | `app/dashboard/dashboard-content.tsx` | `WITHIN_EXISTING_CONTRACT` | Decided by Simone | In review |
+| R16 | Booking actions return the raw provider `error.message` (create, status, delete, update), shown by the editor and create modal; `.single()` on zero affected rows likely yields a provider error instead of "Booking not found" (runtime NOT_VERIFIED) | `lib/actions/bookings.ts` | Product security / action error contract | Alberto | Needs decision |
 
 ## Visual consistency and accessibility
 
@@ -47,6 +51,7 @@ Status values: `Proposed` (not yet discussed) · `Needs decision` · `Ready` · 
 | V5 | Title Case labels ("New Booking", "Quick Actions", "Add Artist", "Full Name") among sentence case. Fix in #17: 25 labels and one placeholder in `app/` and `components/` to sentence case (case only; acronyms, genre names and example names kept), before/after table in the #17 description | Copy | Decided by Simone | In review |
 | V6 | Dark theme tokens defined but never activated | Product | Product decision | Proposed |
 | V7 | Raw `black`/`white` colours outside V3's palette grep: artist wizard panels `bg-white` (new and edit), artist profile toast `bg-black text-white`; modal overlays `bg-black/50` match the shadcn dialog overlay idiom. Found while fixing V3 | `WITHIN_EXISTING_CONTRACT` for panels/toast (`bg-card`, `bg-primary text-primary-foreground`); overlays stay as the shadcn idiom unless design says otherwise | Nothing (panels/toast) | In review |
+| V8 | Booking editor: AM/PM pill beside a 24-hour time input, End time read-out without an associated label, Close used `router.back()` (leaves the app from a direct link), delete returned to the dashboard; create modal: Note label not bound, artist search without accessible name, fixed-width search on mobile. Fix in `fix/booking-ux-polish`: AM/PM removed and end time shown as 24-hour HH:MM in a labelled read-only field, read-only status badge, Close and post-delete go to `/dashboard/bookings`, Note/search labelled, search full width on mobile | `WITHIN_EXISTING_CONTRACT` | Decided by Simone | In review |
 
 ## CI and tooling
 

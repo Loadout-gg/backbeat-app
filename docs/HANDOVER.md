@@ -28,6 +28,8 @@ Decision owners (from 2026-10-30): Alberto reviews product security; Simone deci
 - Order for R1-R3, R5, R8, R9 and for the candidate features in the backlog.
 - Is the hosted Supabase project referenced by migration 004 (`jttrznlbbjyufzyqmzzs`) staging or production?
 - Fix V1-V3 now, or leave visual consistency for later?
+- R16 (booking actions return raw provider error messages to the UI): replace with fixed copy while keeping validation messages? Product security decision.
+- `ARCH-20261114-booking-domain` r02 (booking domain P1–P5: lifecycle, finance, contacts/documents, travel/accommodation, booking → event), delivered by Simone outside the repo; supersedes r01 with Simone's answers on the Artist contacts tab and the meaning of `completed`. Open: staging backend identity and applied migrations, role visibility for money/documents. Simone will have staging DB access; migrations still need Alberto's approval and a per-target authorization.
 
 ## Log
 
@@ -40,3 +42,4 @@ Decision owners (from 2026-10-30): Alberto reviews product security; Simone deci
 | 2026-10-30 | #16 | R13: bookings list and artist profile calendar read errors get a retry button that re-runs the server reads, through a shared `RetryButton` the events page now uses too (same label); decided by Simone; decision owners line added to "How work flows"; 991 unit/component tests |
 | 2026-10-30 | #17 | V5: Title Case UI labels to sentence case (case only for visible text and the Quick actions accessible name; roles, associations, structure and logic unchanged; DJ, genre names and example names kept), tests and e2e specs follow the new text; decided by Simone; 991 unit/component tests |
 | 2026-10-30 | #18 | V2: all three unused next/font loaders (Geist, Geist Mono and Source Serif 4) removed; --font-serif now uses the system serif stack, sans unchanged; decided by Simone; author-reported build/preload evidence in PR #18 and 991 unit/component tests |
+| 2026-11-14 | `fix/booking-ux-polish` | F10, R14, R15, V8: booking times as HH:MM on dashboard and artist calendar, dashboard artist-name fallback, bookings list status filter with Upcoming/Past groups and status badges, editor status badge/Close/24-hour end time, create modal labels and past-date hint, same-day notices and multi-booking calendar days; no schema, RLS or action change; decided by Simone. R16 added (raw provider errors, Alberto). Booking domain request `ARCH-20261114-booking-domain` r02 referenced from F1, F3, F5, F6, F7, R1 |

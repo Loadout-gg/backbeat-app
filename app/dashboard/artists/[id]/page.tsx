@@ -3,7 +3,7 @@ import { getArtist } from "@/lib/actions/artists"
 import { getBookings } from "@/lib/actions/bookings"
 import { listEvents } from "@/lib/actions/events"
 import { ArtistProfileClient } from "./artist-profile-client"
-import { calendarDay } from "@/lib/calendar-day"
+import { configuredCalendarDay } from "@/lib/calendar-day"
 
 interface ArtistPageProps {
   params: Promise<{ id: string }>
@@ -33,7 +33,7 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
     calendarError = true
   }
 
-  const calendarToday = calendarDay(new Date(), process.env.BACKBEAT_CALENDAR_TIME_ZONE ?? "UTC")
+  const calendarToday = configuredCalendarDay()
 
   return (
     <ArtistProfileClient

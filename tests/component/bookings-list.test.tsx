@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from "react"
 import { afterEach, expect, it, vi } from "vitest"
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { redirect } from "next/navigation"
 const { getBookings, refresh } = vi.hoisted(() => ({ getBookings: vi.fn(), refresh: vi.fn() }))
 vi.mock("@/lib/actions/bookings", () => ({ getBookings }))
@@ -22,7 +22,7 @@ it("includes non-in-progress bookings and shows their status without inventing a
     id: "booking-cancelled", date: "2030-01-02", start_time: "09:45:00", status: "cancelled", artist: null,
   }])
   render(await BookingsPage())
-  expect(screen.getByText("cancelled", { exact: true })).toBeTruthy()
+  expect(within(screen.getByRole("listitem")).getByText("Cancelled", { exact: true })).toBeTruthy()
   expect(screen.getByRole("heading", { name: "Unknown artist" })).toBeTruthy()
   expect(screen.getByRole("link", { name: "Continue setup" }).getAttribute("href")).toBe("/dashboard/bookings/booking-cancelled")
 })
