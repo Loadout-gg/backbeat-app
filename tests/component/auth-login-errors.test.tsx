@@ -141,10 +141,12 @@ it("prepares the handoff before the link appears, so opening it without a click 
 it("asks which email to confirm when the handoff cannot be stored", async () => {
  draft("older@example.test", "Older", "Fixture")
  signInWithPassword.mockResolvedValue(unconfirmed())
- const storage = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("quota") })
+ // Node 26 also exposes Storage; target the browser storage realm actually used by the component.
+ const storage = vi.spyOn(Object.getPrototypeOf(window.sessionStorage), "setItem").mockImplementation(() => { throw new Error("quota") })
  try {
   submit("current@example.test")
   fireEvent.click(await screen.findByRole("link", { name: "Continue confirmation" }))
+  expect(storage).toHaveBeenCalledWith("backbeat.pending-signup", JSON.stringify({ email: "current@example.test", firstName: "", lastName: "" }))
  } finally { storage.mockRestore() }
  cleanup()
  render(<ConfirmationPage />)

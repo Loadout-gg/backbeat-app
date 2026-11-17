@@ -1,5 +1,8 @@
 # Node 24 runtime policy
 
+Historical policy, superseded for the new candidate by [Node 26](runtime-node26.md).
+The qualification claims below are historical, not current release clearance.
+
 The reproducible local/CI/container candidate is Node 24.22.1 LTS (Krypton). The engine range is
 `>=24.22.1 <25`; the package manager remains pnpm 12.3.4. Node declarations are
 pinned to 24.19.2. Read `.node-version`, `package.json`, the lockfile and CI rather
