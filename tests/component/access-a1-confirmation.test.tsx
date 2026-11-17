@@ -8,14 +8,37 @@ vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({ auth: { verifyO
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push, refresh: vi.fn() }) }))
 import ConfirmationPage from "@/app/auth/signup-success/page"
 vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} })
+async function cleanupConfirmation() {
+ cleanup()
+ // Unmount first to cancel intervals, then execute input-otp's outstanding
+ // selection-sync callbacks while jsdom still owns window. Do not discard them.
+ await vi.runOnlyPendingTimersAsync()
+}
 beforeEach(() => {
+ // Keep findBy/waitFor progressing while owning third-party timers per test.
+ vi.useFakeTimers({ shouldAdvanceTime: true })
  sessionStorage.clear()
  sessionStorage.setItem("backbeat.pending-signup", JSON.stringify({ email: "ada@example.test", firstName: "Ada", lastName: "Lovelace" }))
  verifyOtp.mockReset(); resend.mockReset()
  verifyOtp.mockResolvedValue({ data: { session: { user: { id: "mock-user" } } }, error: null })
  resend.mockResolvedValue({ error: null })
 })
-afterEach(cleanup)
+afterEach(async () => {
+ try { await cleanupConfirmation() }
+ finally { vi.useRealTimers() }
+})
+it("drains pending OTP callbacks before restoring real timers", async () => {
+ render(<ConfirmationPage />)
+ fireEvent.change(screen.getByLabelText("Confirmation code"), { target: { value: "123456" } })
+ cleanup()
+ // input-otp 1.4.1 leaves its selection-sync timeouts pending after unmount.
+ expect(vi.getTimerCount()).toBeGreaterThan(0)
+ const completed = vi.fn()
+ setTimeout(completed, 0)
+ await cleanupConfirmation()
+ expect(completed).toHaveBeenCalledOnce()
+ expect(vi.getTimerCount()).toBe(0)
+})
 it("focuses the code input when confirmation opens", async () => {
  render(<ConfirmationPage />)
  const input = await screen.findByLabelText("Confirmation code")
