@@ -35,7 +35,10 @@ Sign up with a synthetic email through the local app, or use the automatic test 
 
 ## Local quality gates
 
-Prerequisites: Node **24.22.1**, pnpm **12.3.4**; Google Chrome installed for browser tests.
+Prerequisites: Node **26.13.1**, pnpm **12.3.4**; Google Chrome installed for browser tests.
+The current major policy is **26.x**; exact local/CI pins and release gates are in
+[the Node 26 policy](docs/runtime-node26.md). Historical environment commands below
+do not authorize starting a local stack or running fixtures.
 
 ```sh
 node --version
@@ -88,7 +91,7 @@ env = {key: os.environ[key] for key in ['HOME', 'PATH', 'TMPDIR'] if key in os.e
 env.update(CI='1', BACKBEAT_TEST_URL='http://127.0.0.1:55322',
     BACKBEAT_TEST_ANON_KEY=keys['ANON_KEY'],
     BACKBEAT_TEST_SERVICE_ROLE_KEY=keys['SERVICE_ROLE_KEY'])
-assert subprocess.check_output(['node', '--version'], env=env, text=True).strip() == 'v24.22.1'
+assert subprocess.check_output(['node', '--version'], env=env, text=True).strip() == 'v26.13.1'
 for script in ['test:integration', 'test:e2e']:
     subprocess.run(['pnpm', 'run', script], env=env, check=True, timeout=180)
 PY
