@@ -16,7 +16,32 @@ beforeEach(() => {
  verifyOtp.mockResolvedValue({ data: { session: { user: { id: "mock-user" } } }, error: null })
  resend.mockResolvedValue({ error: null })
 })
-afterEach(() => { cleanup(); vi.useRealTimers() })
+async function cleanupAuth() {
+ cleanup()
+ // Execute outstanding OTP callbacks before jsdom releases window.
+ if (vi.isFakeTimers()) await vi.runOnlyPendingTimersAsync()
+}
+afterEach(async () => {
+ try { await cleanupAuth() }
+ finally { vi.useRealTimers() }
+})
+function renderConfirmation() {
+ // Own OTP timers only for confirmation remounts; login timing stays explicit.
+ vi.useFakeTimers({ shouldAdvanceTime: true })
+ render(<ConfirmationPage />)
+}
+it("drains pending confirmation callbacks after a login handoff", async () => {
+ sessionStorage.setItem("backbeat.pending-signup", JSON.stringify({ email: "ada@example.test", firstName: "Ada", lastName: "Lovelace" }))
+ renderConfirmation()
+ fireEvent.change(screen.getByLabelText("Confirmation code"), { target: { value: "123456" } })
+ cleanup()
+ expect(vi.getTimerCount()).toBeGreaterThan(0)
+ const completed = vi.fn()
+ setTimeout(completed, 0)
+ await cleanupAuth()
+ expect(completed).toHaveBeenCalledOnce()
+ expect(vi.getTimerCount()).toBe(0)
+})
 const providerText = "Provider detail that must not be shown"
 for (const [name, failure, message] of [
  ["invalid credentials", new AuthApiError(providerText, 400, "invalid_credentials"), "Email or password is incorrect."],
@@ -68,7 +93,7 @@ async function continueConfirmation() {
  fireEvent.click(await screen.findByRole("link", { name: "Continue confirmation" }))
  expect(sessionStorage.getItem("backbeat.pending-signup") ?? "").not.toContain("12345678")
  cleanup()
- render(<ConfirmationPage />)
+ renderConfirmation()
  return screen.findByLabelText("Confirmation code")
 }
 async function expectConfirmationFor(email: string) {
@@ -132,7 +157,7 @@ it("prepares the handoff before the link appears, so opening it without a click 
  await screen.findByRole("link", { name: "Continue confirmation" })
  // Middle-click or "Open in new tab" runs no click handler; the new tab reads the draft as it stands.
  cleanup()
- render(<ConfirmationPage />)
+ renderConfirmation()
  await screen.findByLabelText("Confirmation code")
  expect(screen.getByRole("dialog").textContent).toContain("current@example.test")
  expect(document.body.textContent).not.toContain("older@example.test")
@@ -149,7 +174,7 @@ it("asks which email to confirm when the handoff cannot be stored", async () => 
   expect(storage).toHaveBeenCalledWith("backbeat.pending-signup", JSON.stringify({ email: "current@example.test", firstName: "", lastName: "" }))
  } finally { storage.mockRestore() }
  cleanup()
- render(<ConfirmationPage />)
+ renderConfirmation()
  expect(await screen.findByLabelText("Registration email")).toBeTruthy()
  expect(document.body.textContent).not.toContain("older@example.test")
  expect(screen.queryByDisplayValue("Older")).toBeNull()
