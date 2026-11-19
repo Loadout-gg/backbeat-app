@@ -16,6 +16,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getArtists, type ArtistOption } from "@/lib/actions/artists";
 import { createBooking, type Booking } from "@/lib/actions/bookings";
 import { formatArtistBaseRate } from "@/lib/artist-base-rate";
+import { findSameDayBookings, isPastBookingDate, sameDayWarning } from "@/lib/booking-display";
 
 type ModalStep = "select-artist" | "booking-details" | "success";
 
@@ -23,12 +24,18 @@ interface NewBookingModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   preselectedArtist?: ArtistOption | null;
+  /** Bookings already loaded by the page; null when that read failed, omitted when not available. */
+  existingBookings?: readonly Booking[] | null;
+  /** Server "today" (configured calendar zone) for the non-blocking past-date hint. */
+  calendarToday?: string;
 }
 
 export function NewBookingModal({
   open,
   onOpenChange,
   preselectedArtist,
+  existingBookings,
+  calendarToday,
 }: NewBookingModalProps) {
   const router = useRouter();
   const [step, setStep] = useState<ModalStep>(
@@ -308,6 +315,19 @@ export function NewBookingModal({
     return formatted;
   };
 
+  // Non-blocking hints for the draft date; neither prevents saving.
+  const isPastDate = Boolean(date && calendarToday && isPastBookingDate(date, calendarToday));
+  const sameDayCount = draftArtist && date && existingBookings
+    ? findSameDayBookings(existingBookings, { artistId: draftArtist.id, date }).length
+    : 0;
+  const sameDayNotice = draftArtist && date && existingBookings === null
+    ? "Other bookings for this date could not be checked."
+    : sameDayCount > 0 ? sameDayWarning(sameDayCount) : null;
+  const dateNoticeIds = [
+    isPastDate ? "new-booking-past-date" : "",
+    sameDayNotice ? "new-booking-same-day" : "",
+  ].filter(Boolean).join(" ");
+
   // Dynamic width based on step
   const dialogClassName =
     step === "select-artist"
@@ -324,19 +344,20 @@ export function NewBookingModal({
           <>
             <DialogHeader className="px-6 pt-6 pb-4">
               <DialogTitle className="text-xl font-semibold">
-                New Booking
+                New booking
               </DialogTitle>
             </DialogHeader>
 
             <div className="px-6 pb-6">
-              <div className="flex items-center justify-between mb-6">
+              <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <h3 className="text-base font-medium text-foreground">
                   Select artist
                 </h3>
-                <div className="relative w-80">
+                <div className="relative w-full sm:w-80">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     placeholder="Search by name, genre or location"
+                    aria-label="Search artists"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-9"
@@ -439,7 +460,7 @@ export function NewBookingModal({
           <>
             <DialogHeader className="px-6 pt-6 pb-4">
               <DialogTitle className="text-xl font-semibold">
-                New Booking
+                New booking
               </DialogTitle>
             </DialogHeader>
 
@@ -491,8 +512,19 @@ export function NewBookingModal({
                         onChange={(e) => setDate(e.target.value)}
                         className="pl-9"
                         placeholder="Pick a date"
+                        aria-describedby={dateNoticeIds || undefined}
                       />
                     </div>
+                    {isPastDate && (
+                      <p id="new-booking-past-date" role="status" className="mt-2 text-sm text-muted-foreground">
+                        This date is in the past. You can still save the booking.
+                      </p>
+                    )}
+                    {sameDayNotice && (
+                      <p id="new-booking-same-day" role="status" className="mt-2 text-sm text-muted-foreground">
+                        {sameDayNotice}
+                      </p>
+                    )}
                   </div>
 
                   {/* Performance time */}
@@ -535,9 +567,10 @@ export function NewBookingModal({
                 {/* Right column - Notes */}
                 <div className="min-w-0">
                   <h4 className="text-base font-medium text-foreground mb-3">
-                    Note
+                    <label htmlFor="new-booking-notes">Note</label>
                   </h4>
                   <Textarea
+                    id="new-booking-notes"
                     placeholder="Type your message here."
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
@@ -647,7 +680,7 @@ export function NewBookingModal({
                     variant="outline"
                     onClick={handleBackToDashboard}
                   >
-                    Back to Dashboard
+                    Back to dashboard
                   </Button>
                   <Button
                     onClick={handleStartEventSetup}

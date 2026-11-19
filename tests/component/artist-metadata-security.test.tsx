@@ -82,7 +82,7 @@ it.each([false, true])("BB-05: unrelated editor saves do not clean legacy metada
   for (let step = 1; step < 4; step++) {
     fireEvent.click(screen.getByRole("button", { name: "Continue" }))
   }
-  fireEvent.click(screen.getByRole("button", { name: "Save and Complete" }))
+  fireEvent.click(screen.getByRole("button", { name: "Save and complete" }))
   await waitFor(() => expect(updateArtist).toHaveBeenCalledOnce())
   const payload = updateArtist.mock.calls[0][1]
   expect(payload.name).toBe("Changed name only")

@@ -19,7 +19,7 @@ const venueContact = {
   contact_phone_main: "+39 123 456", contact_email_main: "alex@example.com",
 }
 const fieldLabels = {
-  venue_name: "Venue name", venue_address: "Venue Address", contact_name_main: "Contact name (main)",
+  venue_name: "Venue name", venue_address: "Venue address", contact_name_main: "Contact name (main)",
   contact_phone_main: "Phone number", contact_email_main: "Email",
 } as const
 it.each([
@@ -30,7 +30,7 @@ it.each([
   "initializes venue and main contact from booking values %j", (fields) => {
     render(<EventBookingClient booking={{ ...booking, ...fields }} />)
     for (const [key, label] of Object.entries(fieldLabels)) {
-      const input = screen.getAllByPlaceholderText(label === "Venue Address" ? "Venue address" : label === "Contact name (main)" ? "Contact name" : label)[0] as HTMLInputElement
+      const input = screen.getAllByPlaceholderText(label === "Contact name (main)" ? "Contact name" : label)[0] as HTMLInputElement
       expect(input.value).toBe(fields[key as keyof typeof fields] ?? "")
     }
   },
@@ -46,7 +46,7 @@ it("enables the date and five approved venue/contact fields with unique labels a
     expect(document.activeElement).toBe(input)
   }
   expect(screen.getByLabelText("Email").getAttribute("type")).toBe("email")
-  const enabled = Array.from(container.querySelectorAll("input:not([type=time])")).filter(input => !input.matches(":disabled"))
+  const enabled = Array.from(container.querySelectorAll("input:not([type=time]):not([readonly])")).filter(input => !input.matches(":disabled"))
   expect(enabled).toEqual([screen.getByLabelText("Booking date"), ...approved])
 })
 it.each(["edited", "blank"])("submits explicit %s venue and main contact strings", async (mode) => {
@@ -91,12 +91,12 @@ afterEach(() => {
   refresh.mockReset()
 })
 it.each([
-  ["19:00:00", "09:00", "AM", "10:00 AM"],
-  ["09:00:00", "19:00", "PM", "8:00 PM"],
-  ["19:00:00", "00:00", "AM", "1:00 AM"],
-  ["09:00:00", "12:00", "PM", "1:00 PM"],
-  ["09:00:00", "23:30", "PM", "12:30 AM"],
-])("saves a 24-hour edit from %s to %s with matching end time", async (initial, edited, period, end) => {
+  ["19:00:00", "09:00", "10:00"],
+  ["09:00:00", "19:00", "20:00"],
+  ["19:00:00", "00:00", "01:00"],
+  ["09:00:00", "12:00", "13:00"],
+  ["09:00:00", "23:30", "00:30"],
+])("saves a 24-hour edit from %s to %s with a matching 24-hour end time", async (initial, edited, end) => {
   updateBooking.mockResolvedValueOnce({ success: true })
   render(<EventBookingClient booking={{ ...booking, start_time: initial }} />)
   fireEvent.change(screen.getByDisplayValue(initial.slice(0, 5)), { target: { value: edited } })
@@ -105,8 +105,8 @@ it.each([
     start_time: edited, duration_minutes: 60, notes: "Original note",
     venue_name: "", venue_address: "", contact_name_main: "", contact_phone_main: "", contact_email_main: "",
   }))
-  expect(screen.getByText(end)).toBeTruthy()
-  expect(screen.getByText(period)).toBeTruthy()
+  expect((screen.getByLabelText("End time") as HTMLInputElement).value).toBe(end)
+  expect(screen.queryByText(/^(AM|PM)$/)).toBeNull()
   expect(screen.queryByRole("combobox")).toBeNull()
 })
 it("disables unsaved placeholder inputs, nested buttons and the driver checkbox", () => {

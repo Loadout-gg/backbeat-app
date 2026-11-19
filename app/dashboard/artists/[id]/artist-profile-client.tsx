@@ -24,7 +24,9 @@ import { Calendar } from "@/components/ui/calendar"
 import { type Artist } from "@/lib/actions/artists"
 import { parseSocialLinks, parseDocuments, artistMetadataHref } from "@/lib/artist-validation"
 import { NewBookingModal } from "@/components/dashboard/new-booking-modal"
+import { RetryButton } from "@/components/retry-button"
 import { formatArtistBaseRate } from "@/lib/artist-base-rate"
+import { formatBookingTime } from "@/lib/booking-display"
 
 // Social icon mapping
 function getSocialIcon(type: string) {
@@ -55,7 +57,7 @@ function isValidTab(tab: string | null): tab is TabValue {
 }
 
 function ArtistCalendarDay({ modifiers, ...props }: ComponentProps<typeof Day>) {
-  return <Day {...props} modifiers={modifiers} data-booked={modifiers.booked || undefined} />
+  return <Day {...props} modifiers={modifiers} data-booked={modifiers.booked || undefined} data-multiple={modifiers.multiple || undefined} />
 }
 
 interface ArtistProfileClientProps {
@@ -105,7 +107,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
     }
   }, [searchParams, pathname])
 
-  const displayName = artist.stage_name || artist.name || "Unknown Artist"
+  const displayName = artist.stage_name || artist.name || "Unknown artist"
   const realName = artist.surname
     ? `${artist.name || ""} ${artist.surname}`.trim()
     : artist.name !== artist.stage_name
@@ -129,15 +131,27 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
     (item.status === "in_progress" || item.status === "confirmed") &&
     parseISO(item.date) >= today
 
+  const calendarBookings = bookings.filter(isUpcomingActive)
+  // Days where this artist has more than one active upcoming booking (display only).
+  const bookingsPerDay = new Map<string, number>()
+  for (const booking of calendarBookings) {
+    bookingsPerDay.set(booking.date, (bookingsPerDay.get(booking.date) ?? 0) + 1)
+  }
+  const multipleBookingDays = [...bookingsPerDay].filter(([, count]) => count > 1)
+  const multipleBookingDates = multipleBookingDays.map(([date]) => parseISO(date))
+  const bookingCountOn = (date: Date) =>
+    multipleBookingDays.find(([day]) => parseISO(day).getTime() === date.getTime())?.[1] ?? 0
+
   const calendarEvents = [
-    ...bookings.filter(isUpcomingActive).map((booking) => ({
+    ...calendarBookings.map((booking) => ({
       id: `booking-${booking.id}`, date: parseISO(booking.date),
-      title: `${displayName} · Booking`, location: "", time: booking.start_time,
+      title: `${displayName} · Booking`, location: "", time: formatBookingTime(booking.start_time),
       href: `/dashboard/bookings/${booking.id}`,
+      sameDayCount: bookingsPerDay.get(booking.date) ?? 1,
     })),
     ...events.filter(isUpcomingActive).map((event) => ({
       id: `event-${event.id}`, date: parseISO(event.date), title: event.title,
-      location: event.location || "", time: "", href: null,
+      location: event.location || "", time: "", href: null, sameDayCount: 0,
     })),
   ].sort((a, b) => a.date.getTime() - b.date.getTime() || a.time.localeCompare(b.time))
   const hasCalendarItems = calendarEvents.length > 0
@@ -146,7 +160,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
     <div className="min-w-0 space-y-6 p-4 sm:p-6 [overflow-wrap:anywhere]">
       {/* Updated Toast */}
       {showUpdatedToast && (
-        <div className="fixed top-4 right-4 z-50 bg-black text-white px-4 py-3 rounded-lg shadow-lg animate-in fade-in slide-in-from-top-2">
+        <div className="fixed top-4 right-4 z-50 bg-primary text-primary-foreground px-4 py-3 rounded-lg shadow-lg animate-in fade-in slide-in-from-top-2">
           Artist updated successfully.
         </div>
       )}
@@ -157,7 +171,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
           Artists
         </Link>
         <ChevronRight className="h-4 w-4" />
-        <span className="text-foreground">Artist Profile</span>
+        <span className="text-foreground">Artist profile</span>
       </div>
 
       {/* Header */}
@@ -184,7 +198,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
           </Button>
           <Button onClick={() => setIsBookingModalOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
-            New Booking
+            New booking
           </Button>
         </div>
       </div>
@@ -194,7 +208,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
         {/* Contact Information Card */}
         <Card>
           <CardContent className="p-4 sm:p-6">
-            <h3 className="text-lg font-semibold mb-4">Contact Information</h3>
+            <h3 className="text-lg font-semibold mb-4">Contact information</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-8">
               <div>
                 <p className="text-sm text-muted-foreground">Contact name</p>
@@ -284,7 +298,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                 )}
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Travel Fee</p>
+                <p className="text-sm text-muted-foreground">Travel fee</p>
                 <p className="font-medium">
                   {artist.travel_fee || (
                     <span className="text-muted-foreground italic">
@@ -386,7 +400,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                 <h3 className="text-xl font-semibold mb-3">Equipment</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div>
-                    <h4 className="font-medium mb-2">DJ Equipment</h4>
+                    <h4 className="font-medium mb-2">DJ equipment</h4>
                     {djEquipmentList.length > 0 ? (
                       <ul className="space-y-1">
                         {djEquipmentList.map((item, idx) => (
@@ -402,7 +416,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                     )}
                   </div>
                   <div>
-                    <h4 className="font-medium mb-2">Sound System</h4>
+                    <h4 className="font-medium mb-2">Sound system</h4>
                     {soundSystemList.length > 0 ? (
                       <ul className="space-y-1">
                         {soundSystemList.map((item, idx) => (
@@ -434,14 +448,17 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                     <h3 className="text-xl font-semibold">
-                      Active Bookings & Events
+                      Active bookings & events
                     </h3>
                     <span className="text-sm text-muted-foreground">All upcoming</span>
                   </div>
 
                   {calendarError ? (
-                    <div role="alert" className="text-center py-12 border rounded-lg text-destructive">
-                      Unable to load this artist’s calendar. Please refresh to try again.
+                    <div className="space-y-3">
+                      <div role="alert" className="text-center py-12 border rounded-lg text-destructive">
+                        Unable to load this artist’s calendar. Please refresh to try again.
+                      </div>
+                      <RetryButton label="Retry loading calendar" />
                     </div>
                   ) : hasCalendarItems ? (
                     /* Persisted bookings and events */
@@ -469,6 +486,11 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                               <p className="text-sm text-muted-foreground">
                                 {[event.location, event.time].filter(Boolean).join(" • ")}
                               </p>
+                              {event.sameDayCount > 1 && (
+                                <Badge variant="outline" className="mt-1">
+                                  {event.sameDayCount} bookings this day
+                                </Badge>
+                              )}
                             </div>
                           </div>
 
@@ -496,13 +518,16 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                   <div className="border rounded-lg p-2 sm:p-4">
                     <Calendar
                       today={today}
-                      modifiers={{ booked: calendarEvents.map((event) => event.date) }}
-                      modifiersClassNames={{ booked: "bg-primary text-primary-foreground font-semibold" }}
+                      modifiers={{ booked: calendarEvents.map((event) => event.date), multiple: multipleBookingDates }}
+                      modifiersClassNames={{
+                        booked: "bg-primary text-primary-foreground font-semibold",
+                        multiple: "ring-2 ring-ring ring-offset-1 ring-offset-background",
+                      }}
                       labels={{
                         labelPrevious: () => "Previous month",
                         labelNext: () => "Next month",
                         labelGridcell: (date, modifiers, options, dateLib) =>
-                          `${labelGridcell(date, modifiers, options, dateLib)}${modifiers?.booked ? ", active booking or event" : ""}`,
+                          `${labelGridcell(date, modifiers, options, dateLib)}${modifiers?.booked ? ", active booking or event" : ""}${modifiers?.multiple ? `, ${bookingCountOn(date)} bookings` : ""}`,
                       }}
                       components={{ Day: ArtistCalendarDay }}
                       month={calendarMonth}
@@ -514,6 +539,12 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                       <span aria-hidden="true" className="h-3 w-3 shrink-0 rounded-sm border border-foreground bg-primary" />
                       <span>Active booking or event</span>
                     </div>
+                    {multipleBookingDates.length > 0 && (
+                      <div className="mt-2 flex items-center gap-2 text-sm">
+                        <span aria-hidden="true" className="h-3 w-3 shrink-0 rounded-sm bg-primary ring-2 ring-ring ring-offset-1 ring-offset-background" />
+                        <span>More than one booking on this day</span>
+                      </div>
+                    )}
                     <p className="mt-2 text-xs text-muted-foreground">
                       Calendar is read-only. All upcoming entries are listed.
                     </p>
@@ -528,7 +559,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                 <h3 className="text-xl font-semibold">Documents</h3>
                 <Button variant="outline" disabled title="Coming soon">
                   <Upload className="mr-2 h-4 w-4" />
-                  Upload Document
+                  Upload document
                 </Button>
               </div>
 
@@ -582,7 +613,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                   </p>
                   <Button variant="outline" disabled title="Coming soon">
                     <Upload className="mr-2 h-4 w-4" />
-                    Upload Document
+                    Upload document
                   </Button>
                 </div>
               )}
@@ -642,6 +673,8 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
         open={isBookingModalOpen}
         onOpenChange={setIsBookingModalOpen}
         preselectedArtist={artist}
+        existingBookings={calendarError ? null : bookings}
+        calendarToday={calendarToday}
       />
 
       {/* Footer */}

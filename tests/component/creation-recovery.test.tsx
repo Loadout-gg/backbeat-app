@@ -46,10 +46,10 @@ it.each(["returned", "thrown"])(
     for (let step = 1; step < 4; step++) {
       fireEvent.click(screen.getByRole("button", { name: "Continue" }))
     }
-    fireEvent.change(screen.getByRole("textbox", { name: "Special Needs & Accessibility" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: "Special needs & accessibility" }), {
       target: { value: "Retained requirements" },
     })
-    fireEvent.click(screen.getByRole("button", { name: "Save and Complete" }))
+    fireEvent.click(screen.getByRole("button", { name: "Save and complete" }))
 
     const alert = await screen.findByRole("alert")
     expect(alert.textContent).toMatch(
@@ -58,12 +58,12 @@ it.each(["returned", "thrown"])(
     expect(screen.queryByText(/PRIVATE_ARTIST_FAILURE/)).toBeNull()
     expect(screen.queryByText("Artist successfully added.")).toBeNull()
     expect(router.push).not.toHaveBeenCalled()
-    expect((screen.getByRole("textbox", { name: "Special Needs & Accessibility" }) as HTMLTextAreaElement).value)
+    expect((screen.getByRole("textbox", { name: "Special needs & accessibility" }) as HTMLTextAreaElement).value)
       .toBe("Retained requirements")
-    expect((screen.getByRole("button", { name: "Save and Complete" }) as HTMLButtonElement).disabled)
+    expect((screen.getByRole("button", { name: "Save and complete" }) as HTMLButtonElement).disabled)
       .toBe(false)
 
-    fireEvent.click(screen.getByRole("button", { name: "Save and Complete" }))
+    fireEvent.click(screen.getByRole("button", { name: "Save and complete" }))
     expect(await screen.findByText("Artist successfully added.")).toBeTruthy()
     expect(createArtist).toHaveBeenCalledTimes(2)
     expect(createArtist.mock.calls[1][0]).toEqual(expect.objectContaining({

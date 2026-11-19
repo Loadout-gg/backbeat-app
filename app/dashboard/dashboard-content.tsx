@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 import { NewBookingModal } from "@/components/dashboard/new-booking-modal"
 import { type Booking } from "@/lib/actions/bookings"
+import { bookingArtistName, formatBookingTime } from "@/lib/booking-display"
 
 interface DashboardStats {
   eventsInProgress: number
@@ -31,6 +32,7 @@ interface DashboardContentProps {
   stats: DashboardStats
   eventsInProgress: Event[]
   bookings: Booking[]
+  calendarToday: string
 }
 
 export function DashboardContent({
@@ -38,6 +40,7 @@ export function DashboardContent({
   stats,
   eventsInProgress,
   bookings,
+  calendarToday,
 }: DashboardContentProps) {
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false)
 
@@ -137,7 +140,7 @@ export function DashboardContent({
                     onClick={() => setIsBookingModalOpen(true)}
                   >
                     <Plus className="h-4 w-4" />
-                    New Booking
+                    New booking
                   </Button>
                 </div>
               ) : (
@@ -152,12 +155,10 @@ export function DashboardContent({
                             .toLocaleDateString("en-US", { month: "short" })
                             .toUpperCase()}
                           day={String(date.getDate())}
-                          artistName={
-                            booking.artist?.stage_name || "Unknown Artist"
-                          }
+                          artistName={bookingArtistName(booking.artist)}
                           venue={booking.venue_name || ""}
                           location={booking.venue_address || ""}
-                          time={booking.start_time}
+                          time={formatBookingTime(booking.start_time)}
                         />
                       </li>
                     )
@@ -175,6 +176,8 @@ export function DashboardContent({
       <NewBookingModal
         open={isBookingModalOpen}
         onOpenChange={setIsBookingModalOpen}
+        existingBookings={bookings}
+        calendarToday={calendarToday}
       />
 
       <footer className="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-muted/60 px-4 py-4 text-xs text-muted-foreground">

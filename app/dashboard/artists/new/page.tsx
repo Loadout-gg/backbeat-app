@@ -202,39 +202,39 @@ export default function NewArtistPage() {
   return (
     <>
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+        <div className="bg-card text-card-foreground rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b">
-            <h1 className="text-2xl font-semibold">Add Artist</h1>
+            <h1 className="text-2xl font-semibold">Add artist</h1>
             <Button variant="ghost" size="icon" onClick={handleClose}>
               <X className="h-5 w-5" />
             </Button>
           </div>
 
           {/* Stepper */}
-          <div className="bg-gray-100 px-6 py-4">
+          <div className="bg-muted px-6 py-4">
             <div className="flex items-center gap-2">
               {STEPS.map((step, idx) => (
                 <div key={step.number} className="flex items-center">
                   <div
                     className={`flex items-center gap-2 ${
-                      currentStep === step.number ? "text-black" : "text-gray-500"
+                      currentStep === step.number ? "text-foreground" : "text-muted-foreground"
                     }`}
                   >
                     <span
                       className={`flex items-center justify-center w-7 h-7 rounded-full text-sm font-medium ${
                         currentStep === step.number
-                          ? "bg-black text-white"
+                          ? "bg-primary text-primary-foreground"
                           : currentStep > step.number
-                            ? "bg-gray-300 text-gray-600"
-                            : "bg-gray-200 text-gray-500"
+                            ? "bg-primary/10 text-foreground"
+                            : "bg-border text-muted-foreground"
                       }`}
                     >
                       {step.number}
                     </span>
                     <span className="text-sm font-medium">{step.label}</span>
                   </div>
-                  {idx < STEPS.length - 1 && <ChevronRight className="h-4 w-4 mx-3 text-gray-400" />}
+                  {idx < STEPS.length - 1 && <ChevronRight className="h-4 w-4 mx-3 text-muted-foreground" />}
                 </div>
               ))}
             </div>
@@ -243,7 +243,7 @@ export default function NewArtistPage() {
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-6">
             {error && (
-              <div role="alert" className="mb-4 p-3 text-sm text-red-500 bg-red-50 border border-red-200 rounded-md">{error}</div>
+              <div role="alert" className="mb-4 p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md">{error}</div>
             )}
 
             {/* Step 1: General Info */}
@@ -256,7 +256,7 @@ export default function NewArtistPage() {
                     <div className="flex gap-6">
                       {/* Image Upload Placeholder */}
                       <div className="flex-shrink-0">
-                        <div className="w-40 h-40 rounded-full bg-gray-200 flex items-center justify-center">
+                        <div className="w-40 h-40 rounded-full bg-border flex items-center justify-center">
                           <Button variant="secondary" size="sm">
                             Upload image
                           </Button>
@@ -405,7 +405,7 @@ export default function NewArtistPage() {
 
                 {/* Social Media Section */}
                 <section>
-                  <h2 className="text-lg font-medium mb-4">Social Media and Website</h2>
+                  <h2 className="text-lg font-medium mb-4">Social media and website</h2>
                   <div className="border rounded-lg p-6 space-y-4">
                     <div className="grid grid-cols-3 gap-4 items-end">
                       <div>
@@ -436,7 +436,7 @@ export default function NewArtistPage() {
                     {formData.social_links.length > 0 && (
                       <div className="space-y-2 pt-2">
                         {formData.social_links.map((link, idx) => (
-                          <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                          <div key={idx} className="flex items-center justify-between p-2 bg-muted/50 rounded">
                             <span className="text-sm">
                               {link.type}: {link.url}
                             </span>
@@ -470,7 +470,7 @@ export default function NewArtistPage() {
                       />
                     </div>
                     <div>
-                      <Label className="mb-3 block">Music Genres</Label>
+                      <Label className="mb-3 block">Music genres</Label>
                       <div className="grid grid-cols-5 gap-3">
                         {MUSIC_GENRES.map((genre) => (
                           <div key={genre} className="flex items-center gap-2 border rounded-lg px-3 py-2">
@@ -495,7 +495,7 @@ export default function NewArtistPage() {
                   <div className="border rounded-lg p-6">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <Label htmlFor="dj_equipment">DJ Equipment</Label>
+                        <Label htmlFor="dj_equipment">DJ equipment</Label>
                         <Textarea
                           id="dj_equipment"
                           placeholder="List all equipment the artist provides"
@@ -505,7 +505,7 @@ export default function NewArtistPage() {
                         />
                       </div>
                       <div>
-                        <Label htmlFor="sound_system">Sound System</Label>
+                        <Label htmlFor="sound_system">Sound system</Label>
                         <Textarea
                           id="sound_system"
                           placeholder="Specify any technical requirements needed from the venue"
@@ -527,10 +527,10 @@ export default function NewArtistPage() {
                   <h2 className="text-lg font-medium mb-4">Documents</h2>
                   <div className="border rounded-lg p-6">
                     {/* Upload Area */}
-                    <div className="bg-gray-50 border-2 border-dashed rounded-lg p-12 text-center">
-                      <FileText className="h-10 w-10 mx-auto mb-4 text-gray-400" />
+                    <div className="bg-muted/50 border-2 border-dashed rounded-lg p-12 text-center">
+                      <FileText className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
                       <p className="text-sm font-medium mb-1">Drag and drop documents here or click to upload</p>
-                      <p className="text-xs text-blue-500 mb-4">
+                      <p className="text-xs text-muted-foreground mb-4">
                         Supported formats: PDF, DOC, DOCX, JPG, PNG (Max 10MB)
                       </p>
                       <Button variant="outline" disabled>
@@ -546,7 +546,7 @@ export default function NewArtistPage() {
                         {formData.documents.map((doc, idx) => (
                           <div key={idx} className="flex items-center justify-between p-3 border rounded-lg">
                             <div className="flex items-center gap-3">
-                              <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                               <span className="text-sm">{doc.name}</span>
                             </div>
                             <Button variant="ghost" size="icon">
@@ -581,17 +581,17 @@ export default function NewArtistPage() {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="special_diet">Special Diet</Label>
+                      <Label htmlFor="special_diet">Special diet</Label>
                       <Textarea
                         id="special_diet"
-                        placeholder="Specify dietary requirements, preferences or restrictions (i.e. Vegetarian, Gluten Free)"
+                        placeholder="Specify dietary requirements, preferences or restrictions (i.e. vegetarian, gluten free)"
                         value={formData.special_diet}
                         onChange={(e) => updateField("special_diet", e.target.value)}
                         rows={3}
                       />
                     </div>
                     <div>
-                      <Label htmlFor="special_needs">Special Needs & Accessibility</Label>
+                      <Label htmlFor="special_needs">Special needs & accessibility</Label>
                       <Textarea
                         id="special_needs"
                         placeholder="Specify special needs and accessibility issues (i.e. Wheelchair accessible, Mobility assistance)"
@@ -607,10 +607,10 @@ export default function NewArtistPage() {
                 <section>
                   <h2 className="text-lg font-medium mb-4">Supporting documentation</h2>
                   <div className="border rounded-lg p-6">
-                    <div className="bg-gray-50 border-2 border-dashed rounded-lg p-12 text-center">
-                      <FileText className="h-10 w-10 mx-auto mb-4 text-gray-400" />
+                    <div className="bg-muted/50 border-2 border-dashed rounded-lg p-12 text-center">
+                      <FileText className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
                       <p className="text-sm font-medium mb-1">Drag and drop documents here or click to upload</p>
-                      <p className="text-xs text-blue-500 mb-4">
+                      <p className="text-xs text-muted-foreground mb-4">
                         Supported formats: PDF, DOC, DOCX, JPG, PNG (Max 10MB)
                       </p>
                       <Button variant="outline" disabled>
@@ -626,7 +626,7 @@ export default function NewArtistPage() {
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-3 p-6 border-t bg-gray-50">
+          <div className="flex items-center justify-end gap-3 p-6 border-t bg-muted/50">
             {currentStep > 1 && (
               <Button variant="outline" onClick={handlePrevious} disabled={isLoading}>
                 Previous
@@ -642,7 +642,7 @@ export default function NewArtistPage() {
                     Saving...
                   </>
                 ) : (
-                  "Save and Complete"
+                  "Save and complete"
                 )}
               </Button>
             )}
