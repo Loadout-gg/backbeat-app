@@ -180,7 +180,7 @@ test('A1 public signup confirms real caught email and creates exactly one Master
       await page.getByLabel('Surname', { exact: true }).fill('Synthetic')
       await page.getByLabel('Email', { exact: true }).fill(email)
       await secretFill(page.getByLabel('Password', { exact: true }), password)
-      await secretFill(page.getByLabel('Confirm Password', { exact: true }), password)
+      await secretFill(page.getByLabel('Confirm password', { exact: true }), password)
       const submitted = page.waitForResponse(r => new URL(r.url()).origin === API && new URL(r.url()).pathname === '/auth/v1/signup' && r.request().method() === 'POST')
       signupAttempted = true
       await page.getByRole('button', { name: /^(Create account|Sign up)$/i }).click()
@@ -273,15 +273,15 @@ test('A1 public signup confirms real caught email and creates exactly one Master
       expect(result.user.id).toBe(userId)
       expect(Boolean(result.user.email_confirmed_at)).toBe(true)
       await expect(page).toHaveURL(`${APP}/onboarding`)
-      await expect(page.getByLabel('Workspace Name', { exact: true })).toBeVisible()
-      await expect(page.getByLabel('Full Name', { exact: true })).toHaveCount(0)
+      await expect(page.getByLabel('Workspace name', { exact: true })).toBeVisible()
+      await expect(page.getByLabel('Full name', { exact: true })).toHaveCount(0)
       await inspectEmptySurface(page, testInfo, receipt, 'workspace')
       const profile = await request(`/rest/v1/profiles?id=eq.${userId}&select=first_name,last_name,full_name`)
       expect(profile).toEqual([{ first_name: 'Ada', last_name: 'Synthetic', full_name: 'Ada Synthetic' }])
       receipt.profilePersisted = true
     })
     await test.step('workspace creation is persisted, Master-owned and reload-safe', async () => {
-      await page.getByLabel('Workspace Name', { exact: true }).fill(tag)
+      await page.getByLabel('Workspace name', { exact: true }).fill(tag)
       await page.getByRole('button', { name: 'Create workspace', exact: true }).click()
       await expect(page).toHaveURL(`${APP}/dashboard`)
       const owned = await request(`/rest/v1/workspaces?created_by=eq.${userId}&select=id,name`)

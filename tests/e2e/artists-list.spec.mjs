@@ -125,9 +125,9 @@ test('Artists directory finds every workspace artist with truthful controls and 
     catch { throw new Error('Synthetic password interaction failed; details redacted') }
     await page.getByRole('button', { name: 'Login', exact: true }).click()
     await expect(page).toHaveURL(`${APP}/onboarding`)
-    await page.getByLabel('Full Name', { exact: true }).fill('M5 Synthetic Operator')
+    await page.getByLabel('Full name', { exact: true }).fill('M5 Synthetic Operator')
     await page.getByRole('button', { name: 'Continue', exact: true }).click()
-    await page.getByLabel('Workspace Name', { exact: true }).fill(`${tag}-a`)
+    await page.getByLabel('Workspace name', { exact: true }).fill(`${tag}-a`)
     await page.getByRole('button', { name: 'Create workspace', exact: true }).click()
     await expect(page).toHaveURL(`${APP}/dashboard`)
     const [workspace] = await request(`/rest/v1/workspaces?name=eq.${tag}-a`, { token: primary.jwt })
@@ -343,7 +343,7 @@ test('Artists directory finds every workspace artist with truthful controls and 
       const renamed = 'Aardvark Updated Synthetic Directory Artist'
       await page.getByLabel('Stage name', { exact: true }).fill(renamed)
       for (let step = 0; step < 3; step++) await page.getByRole('button', { name: 'Continue', exact: true }).click()
-      await page.getByRole('button', { name: 'Save and Complete', exact: true }).click()
+      await page.getByRole('button', { name: 'Save and complete', exact: true }).click()
       await expect.poll(async () => (await request(`/rest/v1/artists?id=eq.${lead.id}&select=stage_name`, { token: primary.jwt }))[0]?.stage_name).toBe(renamed)
       await page.goto(`${APP}/dashboard/artists`)
       await directoryReady(page)

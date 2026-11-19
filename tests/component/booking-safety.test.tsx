@@ -111,7 +111,7 @@ it.each(["returned", "thrown"])(
       .toBe(false)
 
     fireEvent.click(screen.getByRole("button", { name: "Yes, delete" }))
-    await waitFor(() => expect(router.push).toHaveBeenCalledWith("/dashboard"))
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith("/dashboard/bookings"))
     expect(deleteBooking).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole("alert")).toBeNull()
   },
@@ -135,5 +135,5 @@ it("BB-11: rejects duplicate delete activation before the pending render", async
   expect(router.push).not.toHaveBeenCalled()
 
   await act(async () => finish({ success: true }))
-  expect(router.push).toHaveBeenCalledExactlyOnceWith("/dashboard")
+  expect(router.push).toHaveBeenCalledExactlyOnceWith("/dashboard/bookings")
 })

@@ -125,7 +125,7 @@ test('UX-01 artist profiles fit mobile and desktop with reachable actions and ta
           expect.soft(geometry.scroll, `${name} ${width} tab ${i}`).toBeLessThanOrEqual(width + 1)
         }
         await tabs.first().click()
-        const booking = page.getByRole('button', { name: 'New Booking', exact: true })
+        const booking = page.getByRole('button', { name: 'New booking', exact: true })
         const box = await booking.boundingBox()
         expect.soft(box.x).toBeGreaterThanOrEqual(0)
         expect.soft(box.x + box.width).toBeLessThanOrEqual(width + 1)

@@ -11,6 +11,20 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { BackbeatLogoFull } from "@/components/backbeat-logo"
+import { pendingSignupKey, readPendingSignup } from "@/lib/auth/pending-signup"
+
+const unconfirmedEmailMessage = "Confirm your email before logging in."
+
+// Confirmation reads its email from the tab draft: keep a draft for this address, otherwise hand off the email alone.
+// Done before the link renders, so a new-tab open (no click handler) sees the same draft.
+function handOffConfirmationEmail(email: string) {
+  if (readPendingSignup()?.email.toLowerCase() === email.toLowerCase()) return
+  try { sessionStorage.setItem(pendingSignupKey, JSON.stringify({ email, firstName: "", lastName: "" })) }
+  catch {
+    // Without the handoff, confirmation must ask for the address instead of resuming another one.
+    try { sessionStorage.removeItem(pendingSignupKey) } catch { /* Unreadable storage yields no draft. */ }
+  }
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -37,7 +51,16 @@ export default function LoginPage() {
         router.push("/dashboard")
       }, 100)
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred")
+      // Fixed copy only: provider messages are never rendered.
+      const failure = error as { code?: string; status?: number }
+      if (failure?.code === "email_not_confirmed") handOffConfirmationEmail(email.trim())
+      setError(failure?.code === "invalid_credentials"
+        ? "Email or password is incorrect."
+        : failure?.status === 429
+          ? "Too many attempts. Please wait, then try again."
+          : failure?.code === "email_not_confirmed"
+            ? unconfirmedEmailMessage
+            : "Could not log in. Check your connection and try again.")
     } finally {
       setIsLoading(false)
     }
@@ -79,7 +102,10 @@ export default function LoginPage() {
                       onChange={(e) => setPassword(e.target.value)}
                     />
                   </div>
-                  {error && <p className="text-sm text-red-500">{error}</p>}
+                  {error && <p role="alert" className="text-sm text-destructive">
+                    {error}
+                    {error === unconfirmedEmailMessage && <> <Link href="/auth/signup-success" className="underline underline-offset-4">Continue confirmation</Link></>}
+                  </p>}
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? "Logging in..." : "Login"}
                   </Button>

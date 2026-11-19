@@ -8,6 +8,7 @@ import { listEventsInProgress } from "@/lib/actions/events"
 import { getBookings } from "@/lib/actions/bookings"
 import { getCurrentUser } from "@/lib/actions/workspace"
 import { DashboardContent } from "./dashboard-content"
+import { configuredCalendarDay } from "@/lib/calendar-day"
 
 export default async function DashboardPage() {
   const [stats, eventsInProgress, bookings, userData] = await Promise.all([
@@ -28,6 +29,7 @@ export default async function DashboardPage() {
       stats={stats}
       eventsInProgress={eventsInProgress}
       bookings={bookings}
+      calendarToday={configuredCalendarDay()}
     />
   )
 }

@@ -112,7 +112,7 @@ export default function NewEventPage() {
               </div>
             )}
             {error && (
-              <div role="alert" className="p-3 text-sm text-red-500 bg-red-50 border border-red-200 rounded-md">{error}</div>
+              <div role="alert" className="p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md">{error}</div>
             )}
 
             <div className="space-y-2">
@@ -137,7 +137,7 @@ export default function NewEventPage() {
                   <SelectValue placeholder="Select status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="in_progress">In progress</SelectItem>
                   <SelectItem value="confirmed">Confirmed</SelectItem>
                   <SelectItem value="cancelled">Cancelled</SelectItem>
                 </SelectContent>
@@ -154,7 +154,7 @@ export default function NewEventPage() {
                   <SelectItem value="none">None</SelectItem>
                   {artists.map((artist) => (
                     <SelectItem key={artist.id} value={artist.id}>
-                      {artist.name}
+                      {artist.stage_name}
                     </SelectItem>
                   ))}
                 </SelectContent>
