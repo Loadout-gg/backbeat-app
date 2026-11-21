@@ -26,6 +26,16 @@ Explain the decision needed, current contracts, options, recommendation, impacts
 
 Resume only against Alberto's explicit decision for the exact request revision and authorized scope. An experiment PASS, reviewer GO, deadline or silence is not architectural approval. Changed assumptions or scope require a new decision.
 
+## Staging delegation (2026-11-21)
+
+Recorded owner decision: Alberto (`DerekLoadout`) granted Simone full autonomy on `staging` (stated by Simone, 2026-11-21). Staging uses a Supabase database separate from production.
+
+- On `staging`, Simone decides and the agent may implement, **without the architecture stop line or request package**: schema, migrations (additive and destructive), RLS, auth, roles and contracts.
+- Preconditions are unchanged: PR to `staging`, `Quality` green on the current head, Codex review clean, and every migration versioned in the repository and described in the PR body (what, why, rollback).
+- Migrations are applied to the staging Supabase project only, never to production. Production apply and promotion to `main` remain Alberto's alone; he reviews the full diff, migrations included, at release and can require changes before live.
+- The stop line and request package still apply to anything touching `main`, the production database, Vercel/GitHub settings, secrets or billing.
+- This does not weaken branch protection or the live-release rules. Where other text in these instructions reserves schema, RLS, auth, role or destructive-data changes to Alberto, this section overrides it for `staging` only.
+
 ## Non-negotiable boundaries
 
 Preserve tenant isolation, ordinary-session authorization, DTO privacy, validation semantics, data integrity and honest error/unavailable states. Do not weaken tests, security checks or these instructions to obtain approval or a green run.

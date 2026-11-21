@@ -4,6 +4,10 @@
 
 Alberto owns architectural choices. Agents may analyze and recommend, but cannot approve their own proposal. An instruction to implement a feature, a deadline, an automated review or a successful prototype does not grant architectural authority. A task that already names an Alberto-approved plan can proceed only within that plan's exact scope.
 
+## Staging delegation (2026-11-21)
+
+Alberto granted Simone full autonomy on `staging` (stated by Simone, 2026-11-21): schema, migrations (additive and destructive), RLS, auth, roles and contracts that stay on `staging` and the staging Supabase project are decided by Simone and need no stop line or request package. Preconditions: PR to `staging`, `Quality` green on the current head, Codex clean, migrations versioned in the repository and described in the PR body (what, why, rollback). Production apply and promotion to `main` remain Alberto's alone; the stop line and package still apply to anything touching `main`, the production database, Vercel/GitHub settings, secrets or billing. The classification table below describes the default for those cases; see `AGENTS.md` for the full rule.
+
 ## Classification is semantic, not a filename rule
 
 A one-line change can alter a trust boundary. Editing an architecture-related file is not automatically a new architectural decision when it merely implements an already-approved contract. If the needed choice is not determined by an existing contract or Alberto's plan, stop the affected slice.
