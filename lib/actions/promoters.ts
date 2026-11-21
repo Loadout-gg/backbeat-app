@@ -108,3 +108,29 @@ export async function updatePromoter(id: string, input: PromoterInput): Promise<
   revalidatePromoterSurfaces()
   return { success: true, promoter: { id: data[0].id, name: data[0].name, company_name: data[0].company_name } }
 }
+
+export type PromoterDeleteResult = { success: true } | { success: false; error: string }
+
+const DELETE_FAILED = "Unable to delete the promoter. Please try again."
+
+/** Events linked to the promoter are kept; the database clears their promoter reference (ON DELETE SET NULL). */
+export async function deletePromoter(id: string): Promise<PromoterDeleteResult> {
+  if (!z.guid().safeParse(id).success) return { success: false, error: NOT_FOUND }
+
+  const supabase = await createClient()
+  const workspaceId = await getCurrentWorkspaceId()
+  const { data, error } = await supabase
+    .from("promoters")
+    .delete()
+    .eq("workspace_id", workspaceId)
+    .eq("id", id)
+    .select("id")
+
+  if (error) return { success: false, error: DELETE_FAILED }
+  // No provider error is not proof of a delete: require exactly the targeted row back.
+  if (!Array.isArray(data) || data.length !== 1 || data[0].id !== id) return { success: false, error: NOT_FOUND }
+
+  revalidatePromoterSurfaces()
+  revalidatePath("/dashboard")
+  return { success: true }
+}

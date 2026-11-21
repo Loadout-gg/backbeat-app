@@ -1,10 +1,11 @@
 import Link from "next/link"
 import { unstable_rethrow } from "next/navigation"
-import { Mail, Pencil, Phone, Plus } from "lucide-react"
+import { Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { RetryButton } from "@/components/retry-button"
 import { listPromoterDirectory, type PromoterListItem } from "@/lib/actions/promoters"
+import { PromotersListClient } from "./promoters-list-client"
 
 export default async function PromotersPage() {
   let promoters: PromoterListItem[] = []
@@ -49,42 +50,7 @@ export default async function PromotersPage() {
           </CardContent>
         </Card>
       ) : (
-        <ul className="grid gap-3" aria-label="Promoters">
-          {promoters.map((promoter) => (
-            <li key={promoter.id}>
-              <Card>
-                <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4 [overflow-wrap:anywhere]">
-                  <div className="min-w-0">
-                    <h2 className="font-medium">{promoter.name}</h2>
-                    {promoter.company_name && <p className="text-sm text-muted-foreground">{promoter.company_name}</p>}
-                    {(promoter.email || promoter.phone) && (
-                      <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                        {promoter.email && (
-                          <span className="flex items-center gap-1">
-                            <Mail aria-hidden="true" className="h-3 w-3 shrink-0" />
-                            {promoter.email}
-                          </span>
-                        )}
-                        {promoter.phone && (
-                          <span className="flex items-center gap-1">
-                            <Phone aria-hidden="true" className="h-3 w-3 shrink-0" />
-                            {promoter.phone}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href={`/dashboard/promoters/${promoter.id}/edit`} aria-label={`Edit ${promoter.name}`}>
-                      <Pencil aria-hidden="true" className="mr-2 h-4 w-4" />
-                      Edit
-                    </Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            </li>
-          ))}
-        </ul>
+        <PromotersListClient promoters={promoters} />
       )}
     </div>
   )
