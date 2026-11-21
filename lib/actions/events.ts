@@ -165,6 +165,79 @@ export async function createEvent(input: {
   return { success: true, eventId: data.id }
 }
 
+export type EventDetail = Pick<Event, "id" | "title" | "date" | "location" | "status" | "artist_id" | "promoter_id">
+
+export type EventUpdateInput = {
+  title: string
+  date: string
+  location?: string | null
+  status: "in_progress" | "confirmed" | "cancelled"
+  artist_id?: string | null
+  promoter_id?: string | null
+}
+
+const EVENT_SAVE_FAILED = "Unable to save the event. Please try again."
+const EVENT_NOT_FOUND = "Event not found."
+
+// Same field rules as creation; on update every field is stated, and null clears a link.
+const updateEventSchema = z.object({
+  title: createEventSchema.shape.title,
+  date: createEventSchema.shape.date,
+  location: z.string().trim().nullish().transform(value => value || null),
+  status: z.enum(["in_progress", "confirmed", "cancelled"], "Choose a valid status"),
+  artist_id: z.guid("Choose a valid artist").nullish().transform(value => value ?? null),
+  promoter_id: z.guid("Choose a valid promoter").nullish().transform(value => value ?? null),
+})
+
+/** Null means "no such event in this workspace"; a failed read throws. */
+export async function getEvent(id: string): Promise<EventDetail | null> {
+  if (!z.guid().safeParse(id).success) return null
+  const supabase = await createClient()
+  const workspaceId = await getCurrentWorkspaceId()
+  const { data, error } = await supabase
+    .from("events")
+    .select("id,title,date,location,status,artist_id,promoter_id")
+    .eq("workspace_id", workspaceId)
+    .eq("id", id)
+    .maybeSingle()
+  if (error) throw new Error("Unable to load the event.")
+  if (!data) return null
+  const row = data as EventDetail
+  return {
+    id: row.id, title: row.title, date: row.date, location: row.location,
+    status: row.status, artist_id: row.artist_id, promoter_id: row.promoter_id,
+  }
+}
+
+export async function updateEvent(
+  id: string,
+  input: EventUpdateInput,
+): Promise<{ success: true } | { success: false; error: string }> {
+  if (!z.guid().safeParse(id).success) return { success: false, error: EVENT_NOT_FOUND }
+  const validation = updateEventSchema.safeParse(input)
+  if (!validation.success) return { success: false, error: validation.error.issues[0].message }
+
+  const supabase = await createClient()
+  const workspaceId = await getCurrentWorkspaceId()
+  const { data, error } = await supabase
+    .from("events")
+    .update(validation.data)
+    .eq("workspace_id", workspaceId)
+    .eq("id", id)
+    .select("id")
+
+  // The provider message is never shown to the user.
+  if (error) return { success: false, error: EVENT_SAVE_FAILED }
+  // No provider error is not proof of a write: require exactly the targeted row back.
+  if (!Array.isArray(data) || data.length !== 1 || data[0].id !== id) return { success: false, error: EVENT_NOT_FOUND }
+
+  revalidatePath("/dashboard/events")
+  revalidatePath(`/dashboard/events/${id}`)
+  revalidatePath("/dashboard")
+  revalidatePath("/dashboard/artists")
+  return { success: true }
+}
+
 export type PromoterOption = Pick<Promoter, "id" | "name" | "company_name">
 
 // Used by the event selector; never send contacts/notes. The directory and writes live in ./promoters.
