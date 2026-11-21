@@ -84,3 +84,26 @@ it("exposes the current artist section for a nested route without selecting dash
   expect(screen.getByRole("link", { name: "Artists" }).getAttribute("aria-current")).toBe("page")
   expect(screen.getByRole("link", { name: "Dashboard" }).hasAttribute("aria-current")).toBe(false)
 })
+it("lists the main sections in workflow order, with Settings last", () => {
+  state.pathname = "/dashboard"
+  render(<Sidebar />)
+  const links = within(screen.getByRole("navigation", { name: "Main navigation" })).getAllByRole("link")
+  expect(links.map(link => [link.textContent, link.getAttribute("href")])).toEqual([
+    ["Dashboard", "/dashboard"],
+    ["Bookings", "/dashboard/bookings"],
+    ["Events", "/dashboard/events"],
+    ["Artists", "/dashboard/artists"],
+    ["Settings", "/dashboard/settings"],
+  ])
+})
+it.each([
+  ["/dashboard/bookings", "Bookings"],
+  ["/dashboard/bookings/booking-a", "Bookings"],
+  ["/dashboard/events", "Events"],
+  ["/dashboard/events/new", "Events"],
+])("marks only the matching section as current on %s", (pathname, label) => {
+  state.pathname = pathname
+  render(<Sidebar />)
+  const current = screen.getAllByRole("link").filter(link => link.getAttribute("aria-current") === "page")
+  expect(current.map(link => link.textContent)).toEqual([label])
+})
