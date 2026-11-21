@@ -27,6 +27,9 @@ import { NewBookingModal } from "@/components/dashboard/new-booking-modal"
 import { RetryButton } from "@/components/retry-button"
 import { formatArtistBaseRate } from "@/lib/artist-base-rate"
 import { formatBookingTime } from "@/lib/booking-display"
+import { eventDateParts } from "@/lib/event-date-display"
+
+const UPCOMING_EVENTS_LIMIT = 5
 
 // Social icon mapping
 function getSocialIcon(type: string) {
@@ -155,6 +158,12 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
     })),
   ].sort((a, b) => a.date.getTime() - b.date.getTime() || a.time.localeCompare(b.time))
   const hasCalendarItems = calendarEvents.length > 0
+
+  // Overview: the artist's next active events (events only, not bookings), soonest first.
+  const upcomingEvents = events
+    .filter(isUpcomingActive)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
+  const shownUpcomingEvents = upcomingEvents.slice(0, UPCOMING_EVENTS_LIMIT)
 
   return (
     <div className="min-w-0 space-y-6 p-4 sm:p-6 [overflow-wrap:anywhere]">
@@ -434,10 +443,60 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                 </div>
               </section>
 
-              {/* Latest Events Section */}
-              <section>
-                <h3 className="text-xl font-semibold mb-3">Latest events</h3>
-                <p className="text-muted-foreground italic">No events yet.</p>
+              {/* Upcoming Events Section */}
+              <section aria-labelledby="upcoming-events-heading">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <h3 id="upcoming-events-heading" className="text-xl font-semibold">Upcoming events</h3>
+                  {!calendarError && upcomingEvents.length > 0 && (
+                    <Link
+                      href={`${pathname}?tab=calendar`}
+                      scroll={false}
+                      className="rounded-sm text-sm underline underline-offset-4 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      View all in calendar
+                    </Link>
+                  )}
+                </div>
+                {calendarError ? (
+                  <div className="space-y-3">
+                    <p role="alert" className="text-sm text-destructive">
+                      Unable to load this artist’s events. Please refresh to try again.
+                    </p>
+                    <RetryButton label="Retry loading events" />
+                  </div>
+                ) : shownUpcomingEvents.length === 0 ? (
+                  <p className="text-muted-foreground italic">No upcoming events.</p>
+                ) : (
+                  <>
+                    <ul className="space-y-3">
+                      {shownUpcomingEvents.map((event) => {
+                        const { month, day } = eventDateParts(event.date)
+                        return (
+                          <li key={event.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4">
+                            <div className="flex min-w-0 items-center gap-4">
+                              <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded bg-muted text-center">
+                                <span className="text-xs font-medium uppercase text-muted-foreground">{month}</span>
+                                <span className="text-lg font-semibold">{day}</span>
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-medium">{event.title}</p>
+                                {event.location && <p className="text-sm text-muted-foreground">{event.location}</p>}
+                              </div>
+                            </div>
+                            <Badge variant={event.status === "confirmed" ? "default" : "secondary"}>
+                              {event.status === "confirmed" ? "Confirmed" : "In progress"}
+                            </Badge>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                    {upcomingEvents.length > shownUpcomingEvents.length && (
+                      <p className="mt-3 text-sm text-muted-foreground">
+                        Showing the next {shownUpcomingEvents.length} of {upcomingEvents.length} upcoming events.
+                      </p>
+                    )}
+                  </>
+                )}
               </section>
             </TabsContent>
 

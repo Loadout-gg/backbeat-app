@@ -23,7 +23,7 @@ interface Event {
   date: string
   title: string
   location: string | null
-  artists?: { name: string } | null
+  artists?: { name: string; stage_name?: string | null } | null
   promoters?: { name: string; company_name: string | null } | null
 }
 
@@ -98,7 +98,7 @@ export function DashboardContent({
                             .toLocaleDateString("en-US", { month: "short" })
                             .toUpperCase()}
                           day={String(date.getDate())}
-                          artistName={event.artists?.name || event.title}
+                          artistName={event.artists?.stage_name || event.artists?.name || event.title}
                           location={event.location || "TBD"}
                           venue={
                             event.promoters?.company_name ||

@@ -62,3 +62,14 @@ it("re-runs the events read from the error state and restores the list", async (
   expect(screen.queryByRole("button", { name: "Retry loading events" })).toBeNull()
   expect(screen.getByRole("link", { name: "New event" })).toBeTruthy()
 })
+it("shows the artist stage name, falling back to the name when there is none", async () => {
+  const base = { title: "Synthetic Night", date: "2030-03-01", location: null, status: "confirmed", promoters: null }
+  listEvents.mockResolvedValueOnce([
+    { ...base, id: "event-a", artists: { id: "artist-a", name: "Alice Rossi", stage_name: "DJ Alice" } },
+    { ...base, id: "event-b", artists: { id: "artist-b", name: "Bruno Bianchi", stage_name: null } },
+  ])
+  render(await EventsPage())
+  expect(screen.getByText("DJ Alice")).toBeTruthy()
+  expect(screen.queryByText("Alice Rossi")).toBeNull()
+  expect(screen.getByText("Bruno Bianchi")).toBeTruthy()
+})

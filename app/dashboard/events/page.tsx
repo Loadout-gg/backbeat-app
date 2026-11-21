@@ -82,7 +82,7 @@ export default async function EventsPage() {
                   <div>
                     <h3 className="font-medium">{event.title}</h3>
                     <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
-                      {event.artists && <span>{event.artists.name}</span>}
+                      {event.artists && <span>{event.artists.stage_name || event.artists.name}</span>}
                       {event.location && (
                         <span className="flex items-center gap-1">
                           <MapPin className="h-3 w-3" />

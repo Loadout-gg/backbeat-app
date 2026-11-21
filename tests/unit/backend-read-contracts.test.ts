@@ -117,7 +117,7 @@ function makeRow(table: Table, index: number): Row {
       title: "Synthetic event",
       location: null,
       promoter_id: null,
-      artists: { id: ARTIST, name: "Artist" },
+      artists: { id: ARTIST, name: "Artist", stage_name: null },
       promoters: null,
     }
   }
@@ -449,7 +449,7 @@ const readers = [
     run: () => listEvents(),
     order: "date.desc,created_at.desc,id.asc",
     status: null,
-    columns: "*,artists:artist_id(id,name),promoters:promoter_id(id,name,company_name)",
+    columns: "*,artists:artist_id(id,name,stage_name),promoters:promoter_id(id,name,company_name)",
   },
   {
     name: "events in progress",
@@ -457,7 +457,7 @@ const readers = [
     run: () => listEventsInProgress(),
     order: "date.asc,created_at.desc,id.asc",
     status: "eq.in_progress",
-    columns: "*,artists:artist_id(id,name),promoters:promoter_id(id,name,company_name)",
+    columns: "*,artists:artist_id(id,name,stage_name),promoters:promoter_id(id,name,company_name)",
   },
   {
     name: "promoters",
