@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { PromoterForm } from "@/components/dashboard/promoter-form"
 import type { PromoterDetail } from "@/lib/actions/promoters"
+import { DeletePromoter } from "./delete-promoter"
 
 export function PromoterFormPage({ promoter }: { promoter?: PromoterDetail }) {
   const router = useRouter()
@@ -35,6 +36,7 @@ export function PromoterFormPage({ promoter }: { promoter?: PromoterDetail }) {
           <PromoterForm promoter={promoter} onSaved={backToList} onCancel={backToList} />
         </CardContent>
       </Card>
+      {promoter && <DeletePromoter id={promoter.id} name={promoter.name} />}
     </div>
   )
 }

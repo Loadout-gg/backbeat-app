@@ -5,13 +5,13 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { redirect } from "next/navigation"
 
 const mocks = vi.hoisted(() => ({
-  listPromoterDirectory: vi.fn(), getPromoter: vi.fn(), createPromoter: vi.fn(), updatePromoter: vi.fn(),
+  listPromoterDirectory: vi.fn(), getPromoter: vi.fn(), createPromoter: vi.fn(), updatePromoter: vi.fn(), deletePromoter: vi.fn(),
   createEvent: vi.fn(), listPromoters: vi.fn(), getArtists: vi.fn(),
   router: { push: vi.fn(), refresh: vi.fn() },
 }))
 vi.mock("@/lib/actions/promoters", () => ({
   listPromoterDirectory: mocks.listPromoterDirectory, getPromoter: mocks.getPromoter,
-  createPromoter: mocks.createPromoter, updatePromoter: mocks.updatePromoter,
+  createPromoter: mocks.createPromoter, updatePromoter: mocks.updatePromoter, deletePromoter: mocks.deletePromoter,
 }))
 vi.mock("@/lib/actions/events", () => ({ createEvent: mocks.createEvent, listPromoters: mocks.listPromoters }))
 vi.mock("@/lib/actions/artists", () => ({ getArtists: mocks.getArtists }))
@@ -208,4 +208,89 @@ it("lets the dialog be dismissed again after a save that did not confirm", async
   expect((await within(dialog).findByRole("alert")).textContent).toContain("Unable to confirm")
   fireEvent.keyDown(dialog, { key: "Escape" })
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+})
+
+const luca = { id: "p2", name: "Luca Bianchi", company_name: null, email: null, phone: null }
+it("filters the directory as you type and reports how many match", async () => {
+  mocks.listPromoterDirectory.mockResolvedValue([marta, luca])
+  render(await PromotersPage())
+  expect(screen.getByRole("status").textContent).toBe("2 promoters")
+  fireEvent.change(screen.getByRole("searchbox", { name: "Search promoters" }), { target: { value: "nightwave" } })
+  expect(within(screen.getByRole("list", { name: "Promoters" })).getAllByRole("listitem")).toHaveLength(1)
+  expect(screen.getByRole("heading", { name: "Marta Rossi" })).toBeTruthy()
+  expect(screen.queryByRole("heading", { name: "Luca Bianchi" })).toBeNull()
+  expect(screen.getByRole("status").textContent).toBe("1 of 2 promoters")
+})
+
+it("explains an empty search and restores the list on clear", async () => {
+  mocks.listPromoterDirectory.mockResolvedValue([marta, luca])
+  render(await PromotersPage())
+  fireEvent.change(screen.getByRole("searchbox", { name: "Search promoters" }), { target: { value: "nobody" } })
+  expect(screen.getByText("No promoters match your search.")).toBeTruthy()
+  expect(screen.queryByText(/No promoters yet/)).toBeNull()
+  expect(screen.getByRole("status").textContent).toBe("0 of 2 promoters")
+  fireEvent.click(screen.getByRole("button", { name: "Clear search" }))
+  expect(within(screen.getByRole("list", { name: "Promoters" })).getAllByRole("listitem")).toHaveLength(2)
+})
+
+it("does not offer search when there are no promoters, nor delete when adding one", async () => {
+  mocks.listPromoterDirectory.mockResolvedValue([])
+  render(await PromotersPage())
+  expect(screen.queryByRole("searchbox")).toBeNull()
+  cleanup()
+  render(<NewPromoterPage />)
+  expect(screen.queryByRole("button", { name: "Delete promoter" })).toBeNull()
+})
+
+it("deletes a promoter only after confirmation, then returns to the directory", async () => {
+  mocks.getPromoter.mockResolvedValue(marta)
+  mocks.deletePromoter.mockResolvedValue({ success: true })
+  render(await EditPromoterPage({ params: Promise.resolve({ id: ID }) }))
+  expect(screen.getByText(/Events linked to this promoter are kept/)).toBeTruthy()
+  fireEvent.click(screen.getByRole("button", { name: "Delete promoter" }))
+  expect(mocks.deletePromoter).not.toHaveBeenCalled()
+  expect(screen.getByText("Delete Marta Rossi?")).toBeTruthy()
+  fireEvent.click(screen.getByRole("button", { name: "Yes, delete" }))
+  await waitFor(() => expect(mocks.router.push).toHaveBeenCalledWith("/dashboard/promoters"))
+  expect(mocks.deletePromoter).toHaveBeenCalledWith(ID)
+  expect(mocks.updatePromoter).not.toHaveBeenCalled()
+})
+
+it("cancelling the confirmation deletes nothing", async () => {
+  mocks.getPromoter.mockResolvedValue(marta)
+  render(await EditPromoterPage({ params: Promise.resolve({ id: ID }) }))
+  fireEvent.click(screen.getByRole("button", { name: "Delete promoter" }))
+  const confirm = screen.getByText("Delete Marta Rossi?").parentElement as HTMLElement
+  fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }))
+  expect(screen.getByRole("button", { name: "Delete promoter" })).toBeTruthy()
+  expect(mocks.deletePromoter).not.toHaveBeenCalled()
+  expect(mocks.router.push).not.toHaveBeenCalled()
+})
+
+it("shows a refused delete, stays on the page and allows a retry", async () => {
+  mocks.getPromoter.mockResolvedValue(marta)
+  mocks.deletePromoter.mockResolvedValueOnce({ success: false, error: "Unable to delete the promoter. Please try again." })
+  mocks.deletePromoter.mockResolvedValueOnce({ success: true })
+  render(await EditPromoterPage({ params: Promise.resolve({ id: ID }) }))
+  fireEvent.click(screen.getByRole("button", { name: "Delete promoter" }))
+  fireEvent.click(screen.getByRole("button", { name: "Yes, delete" }))
+  expect((await screen.findByRole("alert")).textContent).toBe("Unable to delete the promoter. Please try again.")
+  expect(mocks.router.push).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole("button", { name: "Yes, delete" }))
+  await waitFor(() => expect(mocks.router.push).toHaveBeenCalledWith("/dashboard/promoters"))
+})
+
+it("does not claim a result when the delete call fails, and ignores duplicate clicks while it runs", async () => {
+  mocks.getPromoter.mockResolvedValue(marta)
+  let reject: (error: Error) => void = () => {}
+  mocks.deletePromoter.mockImplementation(() => new Promise((_, fail) => { reject = fail }))
+  render(await EditPromoterPage({ params: Promise.resolve({ id: ID }) }))
+  fireEvent.click(screen.getByRole("button", { name: "Delete promoter" }))
+  fireEvent.click(screen.getByRole("button", { name: "Yes, delete" }))
+  const deleting = await screen.findByRole("button", { name: "Deleting..." })
+  fireEvent.click(deleting)
+  expect(mocks.deletePromoter).toHaveBeenCalledTimes(1)
+  await act(async () => { reject(new Error("network")) })
+  expect((await screen.findByRole("alert")).textContent).toContain("Unable to confirm whether the promoter was deleted")
+  expect(mocks.router.push).not.toHaveBeenCalled()
 })
