@@ -39,7 +39,7 @@ SQLSTATE raised by the trigger: `BB001` initial status, `BB002` transition not i
 | `ops/supabase/booking-lifecycle/restore.sql` | put backed-up values back after 006 is applied again |
 | `tests/sql/` | executed SQL contract test for a throwaway local PostgreSQL 17 |
 
-Both migrations are idempotent and refuse to run without `backbeat.booking_lifecycle_target` set to `development` or `hosted:hupkygptbvnzrihrlcxv` (staging). The setting is an accidental-target guard, not identity proof. Production is not an allowed target; a production apply needs Alberto's decision and a new allowlist entry.
+Both migrations are idempotent and refuse to run without `backbeat.booking_lifecycle_target` set to `development` or `hosted:hupkygptbvnzrihrlcxv` (staging). Both targets also require the synthetic-development marker (`public.runtime_environment`, exact singleton row), the same class as the `development` path of migration 004: staging carries that marker and received 004 that way. Production has no marker (004's hosted branch requires its absence), so these files refuse production whatever the setting says. The setting itself is an accidental-target guard, not identity proof. A production apply needs Alberto's decision and a guard change.
 
 ## Order
 
@@ -47,7 +47,7 @@ Schema first, then code. Current staging code runs unchanged on the migrated sch
 
 1. Preflight (`preflight.sql`) in the staging SQL editor.
 2. Apply 005, then 006: paste `SET backbeat.booking_lifecycle_target = 'hosted:hupkygptbvnzrihrlcxv';` followed by the file content, in one run each.
-3. Run the preflight again, create one test booking in the app, then run `verify.sql` (every row PASS; SKIP means missing test data).
+3. Run the preflight again, create one test booking in the app, then run `verify.sql`. It always ends with an error, which is the report: expect `BOOKING_LIFECYCLE_VERIFY ALL PASS: pass=9 fail=0 skip=0` and nine numbered lines. `INCOMPLETE` means missing test data, `FAILED` means do not merge. It leaves nothing behind.
 4. Merge the PR to `staging`, verify the deployment commit.
 
 ## Rollback

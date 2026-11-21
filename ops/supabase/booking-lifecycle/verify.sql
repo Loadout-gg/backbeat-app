@@ -1,10 +1,14 @@
--- Post-apply verification for migration 006, for the staging SQL editor (run as one paste).
+-- Post-apply verification for migration 006, for the staging SQL editor (one paste).
 -- Acts as two real users through the authenticated role: an active member of one
 -- in_progress booking's workspace, and a user who is not a member of that workspace.
--- Every write happens inside a block that is always rolled back: no row is changed.
--- Needs one in_progress booking (create it in the app first) and a second account in
--- another workspace; otherwise the affected checks report SKIP.
--- Output: one row per check with result PASS, FAIL or SKIP.
+-- Needs one in_progress booking dated at least 2 days ahead (create it in the app first)
+-- and a second account in another workspace; otherwise the affected checks report SKIP.
+--
+-- OUTPUT: this script ALWAYS ends with an error. That error is the report:
+--   ERROR: BOOKING_LIFECYCLE_VERIFY ALL PASS: pass=9 fail=0 skip=0   <- expected
+--   followed by one numbered line per check (PASS | check | detail).
+-- "FAILED" or "INCOMPLETE" in the first line means do not merge.
+-- The final exception rolls everything back: no row is changed and nothing is left behind.
 DO $verify$
 DECLARE
   target record;
@@ -117,11 +121,17 @@ BEGIN
     END IF;
   END;
 
-  DROP TABLE IF EXISTS pg_temp.bb_lifecycle_verify;
-  CREATE TEMP TABLE bb_lifecycle_verify AS
-    SELECT ordinality AS step, split_part(line, '|', 1) AS result,
-           split_part(line, '|', 2) AS check_name, split_part(line, '|', 3) AS detail
-    FROM unnest(results) WITH ORDINALITY AS r(line, ordinality);
+  -- The SQL editor shows only the last statement's result and no notices, so the report is
+  -- the message of this final exception. It also rolls back the whole block.
+  RAISE EXCEPTION E'BOOKING_LIFECYCLE_VERIFY %: pass=% fail=% skip=%\n%',
+    CASE WHEN EXISTS (SELECT 1 FROM unnest(results) AS line WHERE line LIKE 'FAIL|%') THEN 'FAILED'
+         WHEN EXISTS (SELECT 1 FROM unnest(results) AS line WHERE line LIKE 'SKIP|%') THEN 'INCOMPLETE'
+         ELSE 'ALL PASS' END,
+    (SELECT count(*) FROM unnest(results) AS line WHERE line LIKE 'PASS|%'),
+    (SELECT count(*) FROM unnest(results) AS line WHERE line LIKE 'FAIL|%'),
+    (SELECT count(*) FROM unnest(results) AS line WHERE line LIKE 'SKIP|%'),
+    (SELECT string_agg(ordinality || '. ' || replace(line, '|', ' | '), E'\n' ORDER BY ordinality)
+     FROM unnest(results) WITH ORDINALITY AS r(line, ordinality))
+    USING ERRCODE = 'BBV00';
 END
 $verify$;
-SELECT step, result, check_name, detail FROM pg_temp.bb_lifecycle_verify ORDER BY step;

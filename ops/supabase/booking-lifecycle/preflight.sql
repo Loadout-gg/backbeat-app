@@ -11,6 +11,12 @@ SELECT section, item, detail FROM (
   SELECT 2, 'env', 'runtime_environment table',
          coalesce(to_regclass('public.runtime_environment')::text, 'ABSENT')
   UNION ALL
+  SELECT 2, 'env', 'runtime_environment valid synthetic singleton',
+         CASE WHEN to_regclass('public.runtime_environment') IS NULL THEN 'ABSENT'
+              ELSE (xpath('/row/ok/text()', query_to_xml(
+                'SELECT (count(*) = 1 AND bool_and(id = ''backbeat-dev'' AND environment = ''development'' AND synthetic_only IS TRUE)) AS ok FROM public.runtime_environment',
+                false, true, '')))[1]::text END
+  UNION ALL
   SELECT 3, 'env', 'backbeat_is_active_member(uuid)',
          coalesce(to_regprocedure('public.backbeat_is_active_member(uuid)')::text, 'ABSENT')
   UNION ALL

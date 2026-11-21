@@ -12,9 +12,11 @@ const list = (values: readonly string[]) => values.map(value => `'${value}'`).jo
 it("STATIC: every write file needs an explicit development or staging target, never production", () => {
   for (const sql of [key, lifecycle, ops[1], ops[2]]) {
     expect(sql).toContain("current_setting('backbeat.booking_lifecycle_target', true)")
-    expect(sql).toContain("target = 'development'")
-    expect(sql).toContain("target = 'hosted:hupkygptbvnzrihrlcxv'")
+    expect(sql).toContain("target NOT IN ('development', 'hosted:hupkygptbvnzrihrlcxv')")
     expect(sql).toContain("BOOKING_LIFECYCLE_TARGET_NOT_EXPLICIT")
+    // Synthetic marker required for both targets: production has none (see 004's hosted branch).
+    expect(sql).toContain("BOOKING_LIFECYCLE_SYNTHETIC_MARKER_MISSING")
+    expect(sql).toContain("id = 'backbeat-dev' AND environment = 'development' AND synthetic_only IS TRUE")
     expect(sql).toContain("BOOKING_LIFECYCLE_BOOKINGS_RLS_REQUIRED")
     expect(sql).toContain("SET LOCAL lock_timeout")
     expect(sql.trimEnd().endsWith("COMMIT;")).toBe(true)
@@ -55,6 +57,14 @@ it("STATIC: 006 is re-runnable, rewrites no row and leaves RLS, grants and polic
   expect(lifecycle).toContain("DROP TRIGGER IF EXISTS bookings_enforce_status ON public.bookings")
   expect(lifecycle).toContain("REVOKE ALL ON FUNCTION public.backbeat_enforce_booking_status() FROM PUBLIC, anon, authenticated")
   expect(lifecycle).not.toMatch(/UPDATE public\.bookings|DELETE FROM|POLICY|ROW LEVEL SECURITY|GRANT /)
+})
+it("STATIC: verify.sql is one block whose final exception is the report and the rollback", () => {
+  const verify = read("ops/supabase/booking-lifecycle/verify.sql")
+  expect(verify.match(/^DO \$verify\$/gm)).toHaveLength(1)
+  expect(verify.trimEnd().endsWith("$verify$;")).toBe(true)
+  expect(verify).toContain("RAISE EXCEPTION E'BOOKING_LIFECYCLE_VERIFY %")
+  expect(verify).toContain("USING ERRCODE = 'BBV00'")
+  expect(verify).not.toMatch(/CREATE|TEMP|COMMIT/)
 })
 it("STATIC: rollback backs up hold/option rows before rewriting them, and restore drops the backup", () => {
   const [, rollback, restore] = ops

@@ -179,23 +179,32 @@ BEGIN
 END
 $$;
 
--- The staging verification script must report PASS on every check and change no row.
+-- The staging verification script reports through its final exception and changes no row.
 DELETE FROM public.bookings;
 SELECT bb_test.seed(:wa, :aa, 'in_progress', CURRENT_DATE + 30) AS probe \gset
+\set ON_ERROR_STOP off
 \o /dev/null
 \ir ../../ops/supabase/booking-lifecycle/verify.sql
 \o
+\set ON_ERROR_STOP on
+SELECT bb_test.eq('verify.sql: reports through SQLSTATE BBV00', :'LAST_ERROR_SQLSTATE', 'BBV00');
 SELECT bb_test.eq('verify.sql: every check passes',
-  (SELECT string_agg(result, ',' ORDER BY step) FROM pg_temp.bb_lifecycle_verify),
-  'PASS,PASS,PASS,PASS,PASS,PASS,PASS,PASS,PASS');
-SELECT bb_test.eq('verify.sql: no row changed',
-  (SELECT count(*)::text || ':' || min(status) || ':' || coalesce(min(hold_expires_on)::text, '-') FROM public.bookings),
-  '1:in_progress:-');
+  split_part(:'LAST_ERROR_MESSAGE', E'\n', 1), 'BOOKING_LIFECYCLE_VERIFY ALL PASS: pass=9 fail=0 skip=0');
+SELECT bb_test.eq('verify.sql: one line per check',
+  (array_length(string_to_array(:'LAST_ERROR_MESSAGE', E'\n'), 1))::text, '10');
+SELECT bb_test.eq('verify.sql: no row changed, nothing left behind',
+  (SELECT count(*)::text || ':' || min(status) || ':' || coalesce(min(hold_expires_on)::text, '-') FROM public.bookings)
+  || ':' || coalesce(to_regclass('pg_temp.bb_lifecycle_verify')::text, 'no-temp'),
+  '1:in_progress:-:no-temp');
 SELECT bb_test.eq('verify.sql: role restored', current_user::text, 'postgres');
 DELETE FROM public.bookings;
+\set ON_ERROR_STOP off
+\o /dev/null
 \ir ../../ops/supabase/booking-lifecycle/verify.sql
-SELECT bb_test.eq('verify.sql: reports SKIP without data',
-  (SELECT string_agg(result, ',') FROM pg_temp.bb_lifecycle_verify), 'SKIP');
+\o
+\set ON_ERROR_STOP on
+SELECT bb_test.eq('verify.sql: reports INCOMPLETE without data',
+  split_part(:'LAST_ERROR_MESSAGE', E'\n', 1), 'BOOKING_LIFECYCLE_VERIFY INCOMPLETE: pass=0 fail=0 skip=1');
 
 -- Rollback keeps a backup of hold/option rows, then restore puts them back.
 DELETE FROM public.bookings;
@@ -226,4 +235,20 @@ SELECT bb_test.eq('restore: statuses and expiry back',
   'hold:2030-12-01,option:-,confirmed:-');
 SELECT bb_test.eq('restore: backup table dropped',
   coalesce(to_regclass('public.bookings_lifecycle_rollback_backup')::text, 'ABSENT'), 'ABSENT');
+
+-- Production shape (no synthetic marker): refused even with the staging target set.
+\ir ../../ops/supabase/booking-lifecycle/rollback.sql
+ALTER TABLE public.runtime_environment RENAME TO runtime_environment_hidden;
+SET backbeat.booking_lifecycle_target = 'hosted:hupkygptbvnzrihrlcxv';
+\set ON_ERROR_STOP off
+\o /dev/null
+\ir ../../migrations/006_booking_lifecycle.sql
+\o
+\set ON_ERROR_STOP on
+SELECT bb_test.eq('guard: no marker, nothing applied',
+  (SELECT count(*)::text FROM pg_proc WHERE proname = 'backbeat_enforce_booking_status'), '0');
+ALTER TABLE public.runtime_environment_hidden RENAME TO runtime_environment;
+\ir ../../migrations/006_booking_lifecycle.sql
+SELECT bb_test.eq('guard: staging target with the marker applies',
+  (SELECT count(*)::text FROM pg_trigger WHERE tgname = 'bookings_enforce_status'), '1');
 \echo BOOKING_LIFECYCLE_SQL_TESTS_PASSED
