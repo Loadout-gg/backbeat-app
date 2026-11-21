@@ -80,7 +80,11 @@ export default async function EventsPage() {
                     <span className="text-lg font-semibold">{eventDateParts(event.date).day}</span>
                   </div>
                   <div>
-                    <h3 className="font-medium">{event.title}</h3>
+                    <h3 className="font-medium">
+                      <Link href={`/dashboard/events/${event.id}`} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                        {event.title}
+                      </Link>
+                    </h3>
                     <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
                       {event.artists && <span>{event.artists.stage_name || event.artists.name}</span>}
                       {event.location && (
