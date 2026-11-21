@@ -21,6 +21,7 @@ export function DashboardShell({ children, userName, avatarUrl }: DashboardShell
     artists: { title: "Artists", detail: "Artist details" },
     bookings: { title: "Bookings", detail: "Booking details" },
     events: { title: "Events", detail: "Event details" },
+    promoters: { title: "Promoters", detail: "Promoter details" },
     settings: { title: "Settings", detail: "Settings" },
   }
   const [, , section, record] = pathname.split("/")
@@ -28,6 +29,8 @@ export function DashboardShell({ children, userName, avatarUrl }: DashboardShell
   const title = section === "artists" && record === "new" ? "Add artist"
     : section === "artists" && pathname.endsWith("/edit") ? "Edit artist"
     : section === "events" && record === "new" ? "New event"
+    : section === "promoters" && record === "new" ? "Add promoter"
+    : section === "promoters" && pathname.endsWith("/edit") ? "Edit promoter"
     : context ? (record ? context.detail : context.title) : "Dashboard"
 
   return (
