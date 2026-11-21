@@ -112,6 +112,16 @@ Il merge `staging` -> `main` crea un commit su `main` che `staging` deve acquisi
 
 La regola serve anche dopo un hotfix live autorizzato. Nuove attività indipendenti partono dallo `staging` riallineato.
 
+## Delega staging (2026-11-21)
+
+Alberto (`DerekLoadout`) ha dato a Simone piena autonomia su `staging` (dichiarato da Simone, 2026-11-21); lo staging usa un database Supabase separato dalla produzione.
+
+- Su `staging` Simone decide e l'agente può implementare, senza la frase di stop architetturale: schema, migrazioni (additive e distruttive), RLS, auth, ruoli e contratti.
+- Restano invariate le precondizioni: PR verso `staging`, `Quality` verde sulla head corrente, Codex senza rilievi, migrazioni versionate nel repository e descritte nel corpo della PR (cosa, perché, rollback).
+- Le migrazioni si applicano solo al progetto Supabase di staging, mai alla produzione. Applicazione in produzione e promozione a `main` restano solo di Alberto, che rivede il diff completo (migrazioni incluse) al rilascio e può chiedere modifiche prima della live.
+- Frase di stop e pacchetto di richiesta valgono ancora per tutto ciò che tocca `main`, il database di produzione, le impostazioni Vercel/GitHub, i segreti o la fatturazione.
+- Le eccezioni sotto ("Non modificare Auth, … RLS, ruoli…" e "Le modifiche al database…") si leggono alla luce di questa delega per lo staging; branch protection e regole di rilascio non cambiano.
+
 ## Confini che non si aggirano
 
 - Niente push diretto su `main`/`staging`, force push, `reset --hard`, `git clean`, cancellazioni di branch o riscrittura della storia per sbloccare il lavoro.

@@ -1,6 +1,6 @@
 # Backbeat backlog
 
-Single list of known work; listing an item is not authorization to implement or merge it. An item moves to `Ready` only when its "Needs first" is resolved by the responsible owner: Simone for non-security product/UX/copy/visual scope; Alberto for product security and architecture-reserved choices. Recorded decisions remain scoped to their item. Architectural items follow `AGENTS.md` (stop line + request package); integration/release follows [the approved Git and staging workflow](agents/git-workflow.md). Effort and impact are zone estimates from a code read at `7e0db2b`, not measurements.
+Single list of known work; listing an item is not authorization to implement or merge it. An item moves to `Ready` only when its "Needs first" is resolved by the responsible owner: Simone for non-security product/UX/copy/visual scope; Alberto for product security and architecture-reserved choices. Recorded decisions remain scoped to their item. Architectural items follow `AGENTS.md` (stop line + request package), except on `staging` where the 2026-11-21 staging delegation applies; integration/release follows [the approved Git and staging workflow](agents/git-workflow.md). Effort and impact are zone estimates from a code read at `7e0db2b`, not measurements.
 
 Status values: `Proposed` (not yet discussed) · `Needs decision` · `Ready` · `In progress` · `In review` (PR open) · `Done` · `Dropped`.
 
@@ -8,7 +8,7 @@ Status values: `Proposed` (not yet discussed) · `Needs decision` · `Ready` · 
 
 | ID | Item | Effort | Impact | Needs first | Status |
 |---|---|---|---|---|---|
-| F1 | Booking lifecycle: status control in the editor, transition rules, status filter on the list. Wires the unused `updateBookingStatus` (includes R1). The read-only status filter on the bookings list is delivered by `fix/booking-ux-polish`; status control and transitions are P1 of request ARCH-20261114-booking-domain r02 (Simone 2026-11-14: `completed` = show performed, not tied to payment) | Medium | High | Transition graph (or explicit "any transition") | Needs decision |
+| F1 | Booking lifecycle: status control in the editor, transition rules, status filter on the list. Wires the unused `updateBookingStatus` (includes R1). The read-only status filter on the bookings list is delivered by `fix/booking-ux-polish`; status control and transitions are P1 of request ARCH-20261114-booking-domain r02, a reference plan, owner-delegated on staging (2026-11-21); next: D0 + P1 (Simone 2026-11-14: `completed` = show performed, not tied to payment) | Medium | High | Transition graph (or explicit "any transition") | Needs decision |
 | F2 | Promoter directory: list, create, edit pages; Zod schema for `createPromoter`; `updatePromoter`; "Add promoter" from new event (includes R2) | Medium | High | Validation rules, menu placement, person vs company | Needs decision |
 | F3 | Travel and Accommodation tabs: legs and stays as booking child tables. P4 of request ARCH-20261114-booking-domain r02 | High | High | Request package: schema, zoned date/time contract, travellers | Needs decision |
 | F4 | Team and invitations: invite flow, member management, role permission matrix + RLS, multi-workspace selection | Very high | High | Request package: roles, invite channel, production email, data on removal | Needs decision |
