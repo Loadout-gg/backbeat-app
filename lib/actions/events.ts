@@ -167,7 +167,7 @@ export async function createEvent(input: {
 
 export type PromoterOption = Pick<Promoter, "id" | "name" | "company_name">
 
-// The sole production caller is the event selector; never send contacts/notes.
+// Used by the event selector; never send contacts/notes. The directory and writes live in ./promoters.
 export async function listPromoters(): Promise<PromoterOption[]> {
   const supabase = await createClient()
   const workspaceId = await getCurrentWorkspaceId()
@@ -182,36 +182,4 @@ export async function listPromoters(): Promise<PromoterOption[]> {
     return { data: data as PromoterOption[] | null, error, count }
   }, "Promoter options")
   return rows.map(row => ({ id: row.id, name: row.name, company_name: row.company_name }))
-}
-
-export async function createPromoter(input: {
-  name: string
-  company_name?: string
-  email?: string
-  phone?: string
-  notes?: string
-}): Promise<{ success: boolean; promoterId?: string; error?: string }> {
-  const supabase = await createClient()
-  const workspaceId = await getCurrentWorkspaceId()
-
-  const { data, error } = await supabase
-    .from("promoters")
-    .insert({
-      name: input.name,
-      company_name: input.company_name || null,
-      email: input.email || null,
-      phone: input.phone || null,
-      notes: input.notes || null,
-      workspace_id: workspaceId,
-    })
-    .select("id")
-    .single()
-
-  if (error) {
-    return { success: false, error: error.message }
-  }
-
-  revalidatePath("/dashboard/events/new")
-
-  return { success: true, promoterId: data.id }
 }

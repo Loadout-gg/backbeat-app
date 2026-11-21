@@ -57,7 +57,7 @@ Use the existing radius vocabulary: controls use the control radius, navigation 
 
 ## Components
 
-- Navigation lists Dashboard, Bookings, Events and Artists in workflow order, with Settings last and visually separated (Simone, 2026-11-21). Active location is exposed with `aria-current`; mobile navigation supports keyboard dismissal and focus return.
+- Navigation lists Dashboard, Bookings, Events, Artists and Promoters (daily work first, then the two directories), with Settings last and visually separated (Simone, 2026-11-21). Active location is exposed with `aria-current`; mobile navigation supports keyboard dismissal and focus return.
 - Header shows route context and the existing account menu/avatar. Do not present unimplemented notification/close actions as operational controls.
 - Metrics expose three supported concepts: events in progress, bookings in progress and artists. An undefined Performance metric must not duplicate the Event count.
 - Booking rows show stored venue/address when present and retain Continue setup links and record IDs. Event rows must not invent an end time.

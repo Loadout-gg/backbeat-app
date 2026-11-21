@@ -13,6 +13,8 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { createEvent, listPromoters, type PromoterOption } from "@/lib/actions/events"
 import { getArtists, type ArtistOption } from "@/lib/actions/artists"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { PromoterForm } from "@/components/dashboard/promoter-form"
 
 export default function NewEventPage() {
   const router = useRouter()
@@ -25,6 +27,7 @@ export default function NewEventPage() {
   const [selectedStatus, setSelectedStatus] = useState<string>("in_progress")
   const [lookupState, setLookupState] = useState<"loading" | "ready" | "error">("loading")
   const [lookupAttempt, setLookupAttempt] = useState(0)
+  const [promoterDialogOpen, setPromoterDialogOpen] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -162,8 +165,14 @@ export default function NewEventPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="promoter">Promoter</Label>
-              <Select value={selectedPromoter} onValueChange={setSelectedPromoter} disabled={isLoading || lookupState !== "ready"}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label htmlFor="promoter">Promoter</Label>
+                <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={() => setPromoterDialogOpen(true)} disabled={isLoading || lookupState !== "ready"}>
+                  Add promoter
+                </Button>
+              </div>
+              {/* "none" is the explicit empty choice. Radix reports "" while a just-added option is still registering; ignore it. */}
+              <Select value={selectedPromoter} onValueChange={(value) => { if (value) setSelectedPromoter(value) }} disabled={isLoading || lookupState !== "ready"}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select promoter (optional)" />
                 </SelectTrigger>
@@ -189,6 +198,25 @@ export default function NewEventPage() {
           </form>
         </CardContent>
       </Card>
+
+      <Dialog open={promoterDialogOpen} onOpenChange={setPromoterDialogOpen}>
+        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add promoter</DialogTitle>
+            <DialogDescription>The new promoter is selected for this event. Your event details are kept.</DialogDescription>
+          </DialogHeader>
+          <PromoterForm
+            onCancel={() => setPromoterDialogOpen(false)}
+            onSaved={(promoter) => {
+              setPromoters((current) =>
+                [...current.filter((item) => item.id !== promoter.id), promoter]
+                  .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)))
+              setSelectedPromoter(promoter.id)
+              setPromoterDialogOpen(false)
+            }}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

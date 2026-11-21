@@ -50,6 +50,9 @@ it.each([
   ["/dashboard/artists/new", "Add artist"],
   ["/dashboard/artists/artist-a/edit", "Edit artist"],
   ["/dashboard/events/new", "New event"],
+  ["/dashboard/promoters", "Promoters"],
+  ["/dashboard/promoters/new", "Add promoter"],
+  ["/dashboard/promoters/promoter-a/edit", "Edit promoter"],
 ])("gives %s its own header context", async (pathname, title) => {
   state.pathname = pathname
   const { DashboardShell } = await import("@/components/dashboard/dashboard-shell")
@@ -93,6 +96,7 @@ it("lists the main sections in workflow order, with Settings last", () => {
     ["Bookings", "/dashboard/bookings"],
     ["Events", "/dashboard/events"],
     ["Artists", "/dashboard/artists"],
+    ["Promoters", "/dashboard/promoters"],
     ["Settings", "/dashboard/settings"],
   ])
 })
@@ -101,6 +105,8 @@ it.each([
   ["/dashboard/bookings/booking-a", "Bookings"],
   ["/dashboard/events", "Events"],
   ["/dashboard/events/new", "Events"],
+  ["/dashboard/promoters", "Promoters"],
+  ["/dashboard/promoters/promoter-a/edit", "Promoters"],
 ])("marks only the matching section as current on %s", (pathname, label) => {
   state.pathname = pathname
   render(<Sidebar />)
