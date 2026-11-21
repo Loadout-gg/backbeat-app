@@ -8,14 +8,14 @@ const mocks = vi.hoisted(() => {
 vi.mock("@/lib/supabase/server", () => ({ createClient: mocks.createClient }))
 vi.mock("@/lib/actions/workspace", () => ({ getCurrentWorkspaceId: mocks.workspace }))
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }))
-import { createPromoter, getPromoter, listPromoterDirectory, updatePromoter } from "@/lib/actions/promoters"
+import { createPromoter, deletePromoter, getPromoter, listPromoterDirectory, updatePromoter } from "@/lib/actions/promoters"
 
 const ID = "11111111-1111-4111-8111-111111111111"
 const row = { id: ID, name: "Marta Rossi", company_name: "Nightwave Srl" }
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.state.result = { data: null, error: null, count: null }
-  for (const method of ["select", "insert", "update", "eq", "order", "range", "single", "maybeSingle"]) {
+  for (const method of ["select", "insert", "update", "delete", "eq", "order", "range", "single", "maybeSingle"]) {
     mocks.query[method] = vi.fn(() => mocks.query)
   }
   ;(mocks.query as { then: unknown }).then = (resolve: (value: unknown) => unknown) => Promise.resolve(mocks.state.result).then(resolve)
@@ -106,5 +106,28 @@ it("hides the provider message on a failed update and rejects a malformed id ear
   expect(await updatePromoter(ID, { name: "Marta" })).toEqual({ success: false, error: "Unable to save the promoter. Please try again." })
   mocks.createClient.mockClear()
   expect(await updatePromoter("not-a-uuid", { name: "Marta" })).toEqual({ success: false, error: "Promoter not found." })
+  expect(mocks.createClient).not.toHaveBeenCalled()
+})
+
+it("deletes only the targeted row of the selected workspace and requires it back", async () => {
+  mocks.state.result = { data: [{ id: ID }], error: null, count: null }
+  expect(await deletePromoter(ID)).toEqual({ success: true })
+  expect(mocks.from).toHaveBeenCalledWith("promoters")
+  expect(mocks.query.delete).toHaveBeenCalledTimes(1)
+  expect(mocks.query.eq.mock.calls).toEqual([["workspace_id", "selected-workspace"], ["id", ID]])
+  expect(mocks.revalidatePath.mock.calls.map(call => call[0])).toEqual(["/dashboard/promoters", "/dashboard/events/new", "/dashboard/events", "/dashboard"])
+})
+
+it.each([[[]], [null], [[{ id: "22222222-2222-4222-8222-222222222222" }]], [[{ id: ID }, { id: ID }]]])("does not report a delete when the database returns %j", async (data) => {
+  mocks.state.result = { data, error: null, count: null }
+  expect(await deletePromoter(ID)).toEqual({ success: false, error: "Promoter not found." })
+  expect(mocks.revalidatePath).not.toHaveBeenCalled()
+})
+
+it("hides the provider message on a failed delete and rejects a malformed id before backend access", async () => {
+  mocks.state.result = { data: null, error: { message: "private database detail" }, count: null }
+  expect(await deletePromoter(ID)).toEqual({ success: false, error: "Unable to delete the promoter. Please try again." })
+  mocks.createClient.mockClear()
+  expect(await deletePromoter("not-a-uuid")).toEqual({ success: false, error: "Promoter not found." })
   expect(mocks.createClient).not.toHaveBeenCalled()
 })
