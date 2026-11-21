@@ -174,3 +174,38 @@ it("closes the add promoter dialog on cancel without selecting anything", async 
   await waitFor(() => expect(mocks.createEvent).toHaveBeenCalledTimes(1))
   expect(mocks.createEvent.mock.calls[0][0].promoter_id).toBeUndefined()
 })
+
+it("keeps the add promoter dialog open while its save is in flight", async () => {
+  let resolve: (value: unknown) => void = () => {}
+  mocks.createPromoter.mockImplementation(() => new Promise((done) => { resolve = done }))
+  render(<NewEventPage />)
+  const add = screen.getByRole("button", { name: "Add promoter" })
+  await waitFor(() => expect((add as HTMLButtonElement).disabled).toBe(false))
+  fireEvent.click(add)
+  const dialog = await screen.findByRole("dialog", { name: "Add promoter" })
+  expect(within(dialog).getByRole("button", { name: "Close" })).toBeTruthy()
+  fireEvent.change(within(dialog).getByLabelText("Name *"), { target: { value: "Marta Rossi" } })
+  fireEvent.click(within(dialog).getByRole("button", { name: "Add promoter" }))
+  await within(dialog).findByRole("button", { name: "Saving..." })
+  // Escape and the close button cannot dismiss a dialog whose save has not answered yet.
+  expect(within(dialog).queryByRole("button", { name: "Close" })).toBeNull()
+  fireEvent.keyDown(dialog, { key: "Escape" })
+  expect(screen.getByRole("dialog", { name: "Add promoter" })).toBeTruthy()
+  await act(async () => { resolve({ success: true, promoter: { id: ID, name: "Marta Rossi", company_name: null } }) })
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+  expect(mocks.createPromoter).toHaveBeenCalledTimes(1)
+})
+
+it("lets the dialog be dismissed again after a save that did not confirm", async () => {
+  mocks.createPromoter.mockRejectedValue(new Error("network"))
+  render(<NewEventPage />)
+  const add = screen.getByRole("button", { name: "Add promoter" })
+  await waitFor(() => expect((add as HTMLButtonElement).disabled).toBe(false))
+  fireEvent.click(add)
+  const dialog = await screen.findByRole("dialog", { name: "Add promoter" })
+  fireEvent.change(within(dialog).getByLabelText("Name *"), { target: { value: "Marta Rossi" } })
+  fireEvent.click(within(dialog).getByRole("button", { name: "Add promoter" }))
+  expect((await within(dialog).findByRole("alert")).textContent).toContain("Unable to confirm")
+  fireEvent.keyDown(dialog, { key: "Escape" })
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+})

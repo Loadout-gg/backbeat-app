@@ -28,6 +28,7 @@ export default function NewEventPage() {
   const [lookupState, setLookupState] = useState<"loading" | "ready" | "error">("loading")
   const [lookupAttempt, setLookupAttempt] = useState(0)
   const [promoterDialogOpen, setPromoterDialogOpen] = useState(false)
+  const [promoterSaving, setPromoterSaving] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -199,14 +200,16 @@ export default function NewEventPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={promoterDialogOpen} onOpenChange={setPromoterDialogOpen}>
-        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
+      {/* A save in flight owns the dialog: Escape, overlay and close cannot dismiss it, so a late result never lands on a newer draft. */}
+      <Dialog open={promoterDialogOpen} onOpenChange={(open) => { if (!promoterSaving) setPromoterDialogOpen(open) }}>
+        <DialogContent showCloseButton={!promoterSaving} className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Add promoter</DialogTitle>
             <DialogDescription>The new promoter is selected for this event. Your event details are kept.</DialogDescription>
           </DialogHeader>
           <PromoterForm
             onCancel={() => setPromoterDialogOpen(false)}
+            onSavingChange={setPromoterSaving}
             onSaved={(promoter) => {
               setPromoters((current) =>
                 [...current.filter((item) => item.id !== promoter.id), promoter]

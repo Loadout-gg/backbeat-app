@@ -15,11 +15,13 @@ interface PromoterFormProps {
   promoter?: PromoterDetail
   onSaved: (promoter: SavedPromoter) => void
   onCancel: () => void
+  /** Lets a host (for example a dialog) refuse dismissal while a save is in flight. */
+  onSavingChange?: (saving: boolean) => void
 }
 
 const UNCONFIRMED = "Unable to confirm whether the promoter was saved. Check the promoter list before retrying."
 
-export function PromoterForm({ promoter, onSaved, onCancel }: PromoterFormProps) {
+export function PromoterForm({ promoter, onSaved, onCancel, onSavingChange }: PromoterFormProps) {
   const id = useId()
   const [values, setValues] = useState({
     name: promoter?.name ?? "",
@@ -46,6 +48,7 @@ export function PromoterForm({ promoter, onSaved, onCancel }: PromoterFormProps)
     }
     setError(null)
     setIsSaving(true)
+    onSavingChange?.(true)
     try {
       const result = promoter ? await updatePromoter(promoter.id, values) : await createPromoter(values)
       if (result.success) onSaved(result.promoter)
@@ -54,6 +57,7 @@ export function PromoterForm({ promoter, onSaved, onCancel }: PromoterFormProps)
       setError(UNCONFIRMED)
     } finally {
       setIsSaving(false)
+      onSavingChange?.(false)
     }
   }
 
