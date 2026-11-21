@@ -26,13 +26,24 @@ Decision owners (from 2026-10-30): Alberto reviews product security; Simone deci
 - First task: one small PR with R4, R6, R7 and R10?
 - Who reviews PRs, and are there requirements beyond green CI?
 - Order for R1-R3, R5, R8, R9 and for the candidate features in the backlog.
-- Is the hosted Supabase project referenced by migration 004 (`jttrznlbbjyufzyqmzzs`) staging or production?
+- Answered (Simone, 2026-11-21, from the project owner's environment map; not verified by an agent): the project referenced by migration 004 (`jttrznlbbjyufzyqmzzs`) is PRODUCTION. See "Supabase projects" below.
 - Fix V1-V3 now, or leave visual consistency for later?
 - R16 (booking actions return raw provider error messages to the UI): replace with fixed copy while keeping validation messages? Product security decision.
-- `ARCH-20261114-booking-domain` r02 (booking domain P1–P5: lifecycle, finance, contacts/documents, travel/accommodation, booking → event), delivered by Simone outside the repo; supersedes r01 with Simone's answers on the Artist contacts tab and the meaning of `completed`. Reference plan, owner-delegated on staging (2026-11-21); next: D0 + P1. Open: staging backend identity and applied migrations, role visibility for money/documents. Migrations go to the staging Supabase project only; production apply stays Alberto's.
+- `ARCH-20261114-booking-domain` r02 (booking domain P1–P5: lifecycle, finance, contacts/documents, travel/accommodation, booking → event), delivered by Simone outside the repo; supersedes r01 with Simone's answers on the Artist contacts tab and the meaning of `completed`. Reference plan, owner-delegated on staging (2026-11-21); D0.2 + P1 in review in `feat/booking-d0-p1`, next: P2. Staging backend identity: see "Supabase projects" below; staging preflight of 2026-11-21 (run by Simone): 002 and 004 applied, `bookings` empty. Open: role visibility for money/documents. Migrations go to the staging Supabase project only; production apply stays Alberto's.
 
-- Vercel Hobby risk on `backbeat-staging` (hypothesis, not verified): every successful staging merge so far is by `DerekLoadout`; the only merge by `sdemela` (`a8c5e49`, Merge PR #20) failed (`dpl_HofuCsi4rdWQ2kBup2VevvHzXYKH`), and with the staging delegation Simone will perform staging merges. Options: Vercel Pro with Simone in the team, or read the failed deployment log (`npx vercel inspect dpl_HofuCsi4rdWQ2kBup2VevvHzXYKH --logs`) to confirm the cause. No workaround (author/email changes, shared accounts) will be attempted.
+- Vercel Hobby author-block hypothesis on `backbeat-staging`: disproved. The merge `1043ef1` (PR #25) by `sdemela` deployed successfully, so a merge authored by Simone does not by itself block a staging deployment. The earlier failure of `a8c5e49` (Merge PR #20, `dpl_HofuCsi4rdWQ2kBup2VevvHzXYKH`) has an unknown cause: reading that deployment's log is pending with Alberto. No workaround (author/email changes, shared accounts) will be attempted.
 - R16 follow-up: raw provider database errors are surfaced in the booking editor and create modal (already logged as R16). Still needs Alberto's product-security decision.
+
+## Supabase projects
+
+Stated by Simone on 2026-11-21 from the project owner's environment map. Not verified by an agent: the staging site is behind Vercel Authentication and Simone's Vercel login has no access to the Backbeat projects.
+
+| Ref | Meaning | Rule |
+|---|---|---|
+| `hupkygptbvnzrihrlcxv` (supabase-amethyst-nest) | Backbeat STAGING database, used by Vercel `backbeat-staging`, branch `staging` | Only allowed migration target under the staging delegation |
+| `jttrznlbbjyufzyqmzzs` (supabase-violet-school) | Backbeat PRODUCTION database, used by `app.backbeat.show`, branch `main`; the ref in migration 004 | Forbidden for agents; Alberto only |
+
+The local Supabase CLI login on Simone's machine lists only projects of another company, named "Staging" and "Production". They are not Backbeat. Never take a `--project-ref` from `supabase projects list` for Backbeat, and never use `--linked`. Agents have no CLI access to the Backbeat projects: staging database steps are run by Simone in the dashboard SQL editor, after checking the ref in the dashboard URL.
 
 ## Log
 
@@ -47,3 +58,4 @@ Decision owners (from 2026-10-30): Alberto reviews product security; Simone deci
 | 2026-10-30 | #18 | V2: all three unused next/font loaders (Geist, Geist Mono and Source Serif 4) removed; --font-serif now uses the system serif stack, sans unchanged; decided by Simone; author-reported build/preload evidence in PR #18 and 991 unit/component tests |
 | 2026-11-14 | `fix/booking-ux-polish` | F10, R14, R15, V8: booking times as HH:MM on dashboard and artist calendar, dashboard artist-name fallback, bookings list status filter with Upcoming/Past groups and status badges, editor status badge/Close/24-hour end time, create modal labels and past-date hint, same-day notices and multi-booking calendar days; no schema, RLS or action change; decided by Simone. R16 added (raw provider errors, Alberto). Booking domain request `ARCH-20261114-booking-domain` r02 referenced from F1, F3, F5, F6, F7, R1 |
 | 2026-11-21 | `docs/staging-delegation` | Recorded Alberto's staging delegation (schema, migrations, RLS, auth, roles on staging; production and `main` stay Alberto's) in AGENTS.md, git-workflow and architecture-decisions; BACKLOG marks ARCH-20261114-booking-domain r02 as reference plan, owner-delegated on staging, next D0 + P1. Deploy check (GitHub statuses, read-only): `a8c5e49` failure, `257606c` (staging HEAD) success. Docs only, no code change |
+| 2026-11-21 | `feat/booking-d0-p1` | F1, R1, R16 (booking actions): booking lifecycle base, D0.2 + P1 of ARCH-20261114-booking-domain r02 under the staging delegation. Statuses hold and option, transition graph in `lib/booking-status.ts` and in a database trigger, `updateBookingStatus(id, to, expectedFrom)` with compare-and-set, status control with hold expiry and derived hold priority in the editor, Hold/Option list filters, artist calendar counts hold/option as active, fixed error copy in booking actions. Migrations 005 (workspace key) and 006 (lifecycle) with preflight, rollback and restore SQL; staging only, applied by Simone in the SQL editor. No RLS, grant or policy change. Contract and procedure in `docs/booking-lifecycle.md`; decisions in the decision register. Supabase ref map recorded; Vercel Hobby author-block hypothesis disproved by `1043ef1` |

@@ -32,5 +32,7 @@ export const updateBookingSchema = z.object({
   start_time: time.optional(),
   duration_minutes: duration.nullable().optional(),
   notes: z.string().nullable().optional(),
-  status: bookingStatusSchema.optional(),
+  hold_expires_on: z.string().date("Enter a valid hold expiry date").nullable().optional(),
+  // Status changes go through updateBookingStatus only (transition graph + compare-and-set).
+  status: z.undefined("Change the booking status with the status control").optional(),
 }).superRefine(validateBookingFeePair)

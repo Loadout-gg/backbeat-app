@@ -1,5 +1,6 @@
 import { notFound, unstable_rethrow } from "next/navigation";
 import { getBooking, getBookings, type Booking } from "@/lib/actions/bookings";
+import { configuredCalendarDay } from "@/lib/calendar-day";
 import { EventBookingClient } from "./event-booking-client";
 
 interface EventBookingPageProps {
@@ -22,5 +23,5 @@ export default async function EventBookingPage({ params }: EventBookingPageProps
     unstable_rethrow(error);
   }
 
-  return <EventBookingClient booking={booking} artistBookings={artistBookings} />;
+  return <EventBookingClient booking={booking} artistBookings={artistBookings} today={configuredCalendarDay()} />;
 }

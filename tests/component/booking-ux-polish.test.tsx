@@ -83,7 +83,7 @@ it("groups all bookings into upcoming (ascending) and past (most recent first) w
   expect(detailLinks("Upcoming")).toEqual(["/dashboard/bookings/today", "/dashboard/bookings/future-late"])
   expect(detailLinks("Past")).toEqual(["/dashboard/bookings/past-recent", "/dashboard/bookings/past-old"])
   const nav = screen.getByRole("navigation", { name: "Filter bookings by status" })
-  expect(within(nav).getAllByRole("link").map(link => link.textContent)).toEqual(["All", "In progress", "Confirmed", "Cancelled", "Completed"])
+  expect(within(nav).getAllByRole("link").map(link => link.textContent)).toEqual(["All", "In progress", "Hold", "Option", "Confirmed", "Cancelled", "Completed"])
   expect(within(nav).getByRole("link", { name: "All" }).getAttribute("aria-current")).toBe("page")
   expect(within(screen.getByRole("region", { name: "Past" })).getByText("Completed")).toBeTruthy()
 })

@@ -6,7 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { getCurrentWorkspaceId } from "./workspace";
 import type { BookingFeeCurrency } from "@/lib/booking-fee";
-import type { BookingStatus } from "@/lib/booking-status";
+import { bookingTransitionBlock, canTransitionBooking, type BookingStatus, type BookingTransitionBlock } from "@/lib/booking-status";
+import { configuredCalendarDay } from "@/lib/calendar-day";
 import { createBookingSchema, updateBookingSchema, bookingStatusSchema, bookingIdSchema } from "@/lib/booking-validation";
 
 export interface Booking {
@@ -25,6 +26,8 @@ export interface Booking {
   contact_phone_main: string | null;
   contact_email_main: string | null;
   status: BookingStatus;
+  /** Present after migration 006; only meaningful while status is "hold". */
+  hold_expires_on?: string | null;
   created_at: string;
   updated_at: string;
   artist?: {
@@ -50,6 +53,22 @@ export interface BookingWithArtist extends Booking {
     currency: string | null;
     profile_image_url: string | null;
   };
+}
+
+// Fixed user-facing copy: provider/database messages are logged, never returned.
+const TRANSITION_BLOCK_MESSAGES: Record<BookingTransitionBlock, string> = {
+  not_allowed: "This status change is not allowed.",
+  not_performed_yet: "A booking can be marked as completed only on or after its date.",
+};
+const BOOKING_NOT_FOUND = "Booking not found";
+const BOOKING_CHANGED_ELSEWHERE = "This booking was changed elsewhere. Reload and try again.";
+
+type ProviderError = { code?: string | null } | null;
+/** SQLSTATEs raised by backbeat_enforce_booking_status (migration 006). */
+function lifecycleErrorMessage(error: ProviderError): string | null {
+  if (error?.code === "BB002") return TRANSITION_BLOCK_MESSAGES.not_allowed;
+  if (error?.code === "BB003") return "A completed booking cannot be moved to a future date.";
+  return null;
 }
 
 // failOnError is retained for source compatibility only.
@@ -151,7 +170,7 @@ export async function createBooking(formData: {
 
   if (error) {
     console.error("Error creating booking:", error);
-    return { success: false, error: error.message };
+    return { success: false, error: "Unable to create booking. Please try again." };
   }
 
   revalidatePath("/dashboard");
@@ -163,11 +182,17 @@ export async function createBooking(formData: {
 
 export async function updateBookingStatus(
   bookingId: string,
-  status: BookingStatus
+  status: BookingStatus,
+  expectedStatus: BookingStatus
 ): Promise<{ success: boolean; error?: string }> {
   if (!bookingIdSchema.safeParse(bookingId).success) return { success: false, error: "Invalid booking ID" };
-  const validation = bookingStatusSchema.safeParse(status);
-  if (!validation.success) return { success: false, error: "Invalid booking status" };
+  if (!bookingStatusSchema.safeParse(status).success || !bookingStatusSchema.safeParse(expectedStatus).success) {
+    return { success: false, error: "Invalid booking status" };
+  }
+  // Graph check before any backend access; the date rule needs the stored date (below).
+  if (!canTransitionBooking(expectedStatus, status)) {
+    return { success: false, error: TRANSITION_BLOCK_MESSAGES.not_allowed };
+  }
   const supabase = await createClient();
 
   const {
@@ -178,24 +203,49 @@ export async function updateBookingStatus(
   }
 
   const workspaceId = await getCurrentWorkspaceId();
+  const today = configuredCalendarDay();
 
-  const { data: changedBooking, error } = await supabase
+  // Compare-and-set: the write matches only while the stored status is still the one
+  // the user saw. "completed" additionally requires the stored date to be today or earlier.
+  let write = supabase
     .from("bookings")
     .update({ status, updated_at: new Date().toISOString() })
     .eq("id", bookingId)
     .eq("workspace_id", workspaceId)
-    .select("id")
-    .single();
+    .eq("status", expectedStatus);
+  if (status === "completed") write = write.lte("date", today);
+  const { data: changedBooking, error } = await write.select("id").maybeSingle();
 
   if (error) {
-    console.error("Error updating booking:", error);
-    return { success: false, error: error.message };
+    console.error("Error updating booking status:", error);
+    return {
+      success: false,
+      error: lifecycleErrorMessage(error) ?? "Unable to update the booking status. Please try again.",
+    };
   }
-  if (!changedBooking) return { success: false, error: "Booking not found" };
+
+  if (!changedBooking) {
+    // Zero rows: tell a stale status apart from a missing or out-of-workspace booking.
+    const { data: current, error: readError } = await supabase
+      .from("bookings")
+      .select("id, status, date")
+      .eq("id", bookingId)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle();
+    if (readError) {
+      console.error("Error reading booking after a status conflict:", readError);
+      return { success: false, error: "Unable to update the booking status. Please try again." };
+    }
+    if (!current) return { success: false, error: BOOKING_NOT_FOUND };
+    if (current.status !== expectedStatus) return { success: false, error: BOOKING_CHANGED_ELSEWHERE };
+    const block = bookingTransitionBlock(expectedStatus, status, current.date, today);
+    return { success: false, error: block ? TRANSITION_BLOCK_MESSAGES[block] : BOOKING_CHANGED_ELSEWHERE };
+  }
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/bookings");
   revalidatePath("/dashboard/artists");
+  revalidatePath(`/dashboard/bookings/${bookingId}`);
 
   return { success: true };
 }
@@ -221,13 +271,13 @@ export async function deleteBooking(
     .eq("id", bookingId)
     .eq("workspace_id", workspaceId)
     .select("id")
-    .single();
+    .maybeSingle();
 
   if (error) {
     console.error("Error deleting booking:", error);
-    return { success: false, error: error.message };
+    return { success: false, error: "Unable to delete booking. Please try again." };
   }
-  if (!changedBooking) return { success: false, error: "Booking not found" };
+  if (!changedBooking) return { success: false, error: BOOKING_NOT_FOUND };
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/bookings");
@@ -277,7 +327,7 @@ export async function updateBooking(
     start_time?: string;
     duration_minutes?: number | null;
     notes?: string | null;
-    status?: BookingStatus;
+    hold_expires_on?: string | null;
     venue_name?: string | null;
     venue_address?: string | null;
     event_type?: string;
@@ -323,13 +373,20 @@ export async function updateBooking(
     .eq("id", bookingId)
     .eq("workspace_id", workspaceId)
     .select("id")
-    .single();
+    .maybeSingle();
 
   if (error) {
     console.error("Error updating booking:", error);
-    return { success: false, error: error.message };
+    // 23514 with an expiry in the patch = bookings_hold_expires_on_check (status is not "hold").
+    const holdExpiry = error.code === "23514" && validation.data.hold_expires_on != null
+      ? "A hold expiry date can only be set while the booking is on hold."
+      : null;
+    return {
+      success: false,
+      error: lifecycleErrorMessage(error) ?? holdExpiry ?? "Unable to save booking. Please try again.",
+    };
   }
-  if (!changedBooking) return { success: false, error: "Booking not found" };
+  if (!changedBooking) return { success: false, error: BOOKING_NOT_FOUND };
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/bookings");
