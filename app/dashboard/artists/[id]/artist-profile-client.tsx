@@ -131,7 +131,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
   const today = parseISO(calendarToday)
   const isUpcomingActive = (item: Booking | EventWithRelations) =>
     item.artist_id === artist.id &&
-    (item.status === "in_progress" || item.status === "confirmed") &&
+    (item.status === "in_progress" || item.status === "hold" || item.status === "option" || item.status === "confirmed") &&
     parseISO(item.date) >= today
 
   const calendarBookings = bookings.filter(isUpcomingActive)

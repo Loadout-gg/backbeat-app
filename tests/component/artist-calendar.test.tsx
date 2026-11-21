@@ -55,6 +55,8 @@ it("shows only this artist's today/future active entries, sorted by date, with a
     { ...booking, id: "cancelled", status: "cancelled" },
     { ...booking, id: "completed", status: "completed" },
     { ...booking, id: "past", date: "2026-09-28" },
+    { ...booking, id: "held", date: "2027-04-01", status: "hold" },
+    { ...booking, id: "optioned", date: "2027-05-01", status: "option" },
   ])
   mocks.listEvents.mockResolvedValue([
     event, { ...event, id: "today", date: "2026-09-29", title: "Today show", status: "in_progress" },
@@ -66,6 +68,7 @@ it("shows only this artist's today/future active entries, sorted by date, with a
   render(await ArtistPage({ params: Promise.resolve({ id: artist.id }) }))
   expect(screen.getAllByRole("link", { name: /DJ Alice/ }).map(link => link.getAttribute("href"))).toEqual([
     "/dashboard/bookings/booking-a", "/dashboard/bookings/later",
+    "/dashboard/bookings/held", "/dashboard/bookings/optioned",
   ])
   expect(screen.getByText("Today show")).toBeTruthy()
   for (const name of ["Other artist show", "Cancelled show", "Completed show", "Past show"]) expect(screen.queryByText(name)).toBeNull()
