@@ -146,3 +146,14 @@ it.each([
   render(<BookingCard id="synthetic-sparse" month="JAN" day="2" artistName="Synthetic artist" {...details} />)
   expect(screen.getByText(expected, { exact: true })).toBeTruthy()
 })
+it("names an event in progress by the artist stage name, then name, then the event title", () => {
+  const event = { date: "2030-01-02", location: null }
+  render(<DashboardContent {...props} eventsInProgress={[
+    { ...event, id: "e1", title: "First night", artists: { name: "Alice Rossi", stage_name: "DJ Alice" } },
+    { ...event, id: "e2", title: "Second night", artists: { name: "Bruno Bianchi", stage_name: null } },
+    { ...event, id: "e3", title: "Third night", artists: null },
+  ]} />)
+  const section = screen.getByRole("region", { name: "Events in progress" })
+  expect(within(section).getAllByRole("heading").map(el => el.textContent)).toEqual(expect.arrayContaining(["DJ Alice", "Bruno Bianchi", "Third night"]))
+  expect(within(section).queryByText("Alice Rossi")).toBeNull()
+})

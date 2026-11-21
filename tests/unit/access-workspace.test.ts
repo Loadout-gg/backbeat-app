@@ -60,11 +60,42 @@ it("getCurrentUser preserves identity and onboarding shape including separate na
   })
   expect(await getCurrentUser()).toEqual({ user: { id: "actor" }, profile, onboardingStatus, workspace })
 })
-it("updateProfile keeps legacy full name intact, without splitting names (characterization)", async () => {
-  const eq = vi.fn(async () => ({ error: null }))
+function profileUpdate(result: { data: unknown; error: { message: string } | null }) {
+  const select = vi.fn(async () => result)
+  const eq = vi.fn(() => ({ select }))
   const update = vi.fn(() => ({ eq }))
   db.from.mockReturnValue({ update })
+  return { update, eq, select }
+}
+it("updateProfile keeps legacy full name intact, without splitting names (characterization)", async () => {
+  const { update, eq, select } = profileUpdate({ data: [{ id: "actor" }], error: null })
   expect(await updateProfile("Legacy Unsplit Name")).toEqual({ success: true })
+  expect(db.from).toHaveBeenCalledWith("profiles")
   expect(update).toHaveBeenCalledWith({ full_name: "Legacy Unsplit Name" })
   expect(eq).toHaveBeenCalledWith("id", "actor")
+  expect(select).toHaveBeenCalledWith("id")
+})
+it("updateProfile stores the trimmed name", async () => {
+  const { update } = profileUpdate({ data: [{ id: "actor" }], error: null })
+  expect(await updateProfile("  Ada Lovelace  ")).toEqual({ success: true })
+  expect(update).toHaveBeenCalledWith({ full_name: "Ada Lovelace" })
+})
+it.each(["", "   ", "a".repeat(201), "bad\nname", "tab\tname", null, 7])("updateProfile rejects invalid name %j before any write", async (name) => {
+  await expect(updateProfile(name as string)).rejects.toThrow("Full name must be 1–200 characters")
+  expect(db.auth.getUser).not.toHaveBeenCalled()
+  expect(db.from).not.toHaveBeenCalled()
+})
+it("updateProfile accepts a 200-character name", async () => {
+  const { update } = profileUpdate({ data: [{ id: "actor" }], error: null })
+  expect(await updateProfile("a".repeat(200))).toEqual({ success: true })
+  expect(update).toHaveBeenCalledWith({ full_name: "a".repeat(200) })
+})
+it.each([[[]], [null], [[{ id: "someone-else" }]], [[{ id: "actor" }, { id: "actor" }]]])("updateProfile fails when the actor's own row is not returned: %j", async (data) => {
+  profileUpdate({ data, error: null })
+  await expect(updateProfile("Ada Lovelace")).rejects.toThrow("Unable to save your name")
+})
+it("updateProfile rejects when not authenticated", async () => {
+  db.auth.getUser.mockResolvedValue({ data: { user: null } })
+  await expect(updateProfile("Ada Lovelace")).rejects.toThrow("Not authenticated")
+  expect(db.from).not.toHaveBeenCalled()
 })

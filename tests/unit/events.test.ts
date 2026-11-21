@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => {
 vi.mock("@/lib/supabase/server", () => ({ createClient: mocks.createClient }))
 vi.mock("@/lib/actions/workspace", () => ({ getCurrentWorkspaceId: mocks.workspace }))
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))
-import { listEvents } from "@/lib/actions/events"
+import { listEvents, listEventsInProgress } from "@/lib/actions/events"
 const artistId = "11111111-1111-4111-8111-111111111111"
 beforeEach(() => {
   mocks.result.data = [{ id: "event-a" }]
@@ -46,4 +46,14 @@ it("does not query events when authoritative workspace resolution fails (charact
   mocks.workspace.mockRejectedValueOnce(new Error("No active workspace"))
   await expect(listEvents({ artistId })).rejects.toThrow("No active workspace")
   expect(mocks.from).not.toHaveBeenCalled()
+})
+it.each([
+  ["all events", () => listEvents()],
+  ["events in progress", () => listEventsInProgress()],
+])("reads the artist stage name with %s so lists can show it", async (_label, read) => {
+  mocks.query.select.mockClear()
+  await read()
+  const projection = String(mocks.query.select.mock.calls[0][0]).replace(/\s+/g, " ")
+  expect(projection).toContain("artists:artist_id (id, name, stage_name)")
+  expect(projection).toContain("promoters:promoter_id (id, name, company_name)")
 })

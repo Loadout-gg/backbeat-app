@@ -4,6 +4,10 @@ import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 
 export async function updateProfile(fullName: string) {
+  // Same bounds as the workspace name: 1–200 characters, no control characters.
+  if (typeof fullName !== "string" || !fullName.trim() || [...fullName.trim()].length > 200 || /[\u0000-\u001f\u007f]/.test(fullName)) {
+    throw new Error("Full name must be 1–200 characters without control characters.")
+  }
   const supabase = await createClient()
 
   const {
@@ -13,10 +17,18 @@ export async function updateProfile(fullName: string) {
     throw new Error("Not authenticated")
   }
 
-  const { error } = await supabase.from("profiles").update({ full_name: fullName }).eq("id", user.id)
+  const { data, error } = await supabase
+    .from("profiles")
+    .update({ full_name: fullName.trim() })
+    .eq("id", user.id)
+    .select("id")
 
   if (error) {
     throw new Error(error.message)
+  }
+  // No provider error is not proof of a write: require the actor's own row back.
+  if (!Array.isArray(data) || data.length !== 1 || data[0]?.id !== user.id) {
+    throw new Error("Unable to save your name. Please try again.")
   }
 
   return { success: true }

@@ -2,7 +2,9 @@
 
 Read this first when picking up work, then `AGENTS.md` and `docs/agents/README.md`. Update it at the end of every PR.
 
-## Current state (2026-10-28)
+## Current state (2026-10-28, with a 2026-11-21 note)
+
+- 2026-11-21 note (read from GitHub, not re-qualified): PRs #13–#18, #20, #21, #22 and #25 are merged into `staging` (HEAD `1043ef1` before this branch); #23 and release PR #24 were merged into `main` on 2026-11-19. Runtime pin is now Node 26.13.1 (`.node-version`). The bullets below are the 2026-10-28 snapshot and are stale where they name `7e0db2b`, Node 24 or open PRs.
 
 - `main` at `7e0db2b`: Node 24.22.1 runtime (`docs/runtime-node24.md`), pnpm 12.3.4.
 - All CI steps pass locally on Node 24.22.1: install, typecheck, lint, 984 unit/component tests on the #14 head (961 on `7e0db2b`), 28 runtime tests, placeholder build, `next start` smoke test, both dependency audits.
@@ -47,3 +49,4 @@ Decision owners (from 2026-10-30): Alberto reviews product security; Simone deci
 | 2026-10-30 | #18 | V2: all three unused next/font loaders (Geist, Geist Mono and Source Serif 4) removed; --font-serif now uses the system serif stack, sans unchanged; decided by Simone; author-reported build/preload evidence in PR #18 and 991 unit/component tests |
 | 2026-11-14 | `fix/booking-ux-polish` | F10, R14, R15, V8: booking times as HH:MM on dashboard and artist calendar, dashboard artist-name fallback, bookings list status filter with Upcoming/Past groups and status badges, editor status badge/Close/24-hour end time, create modal labels and past-date hint, same-day notices and multi-booking calendar days; no schema, RLS or action change; decided by Simone. R16 added (raw provider errors, Alberto). Booking domain request `ARCH-20261114-booking-domain` r02 referenced from F1, F3, F5, F6, F7, R1 |
 | 2026-11-21 | `docs/staging-delegation` | Recorded Alberto's staging delegation (schema, migrations, RLS, auth, roles on staging; production and `main` stay Alberto's) in AGENTS.md, git-workflow and architecture-decisions; BACKLOG marks ARCH-20261114-booking-domain r02 as reference plan, owner-delegated on staging, next D0 + P1. Deploy check (GitHub statuses, read-only): `a8c5e49` failure, `257606c` (staging HEAD) success. Docs only, no code change |
+| 2026-11-21 | `feat/nav-events-artist-profile` | R3, R5, R8, R11: main navigation lists Dashboard, Bookings, Events, Artists (Settings last); events list and dashboard event cards show the artist stage name (events reads now select `stage_name`); artist profile Overview shows the next 5 upcoming events with a link to the calendar tab; `updateProfile` validates and trims the name and requires the actor's own row back. No schema, RLS or migration change. BACKLOG statuses of work already merged into staging (#13–#18, #20) set to Done. Local checks on Node 22.23.5 (pin is 26.13.1): typecheck, lint, 1069 unit/component tests pass; runtime suite 29/30, the one failure is the exact-Node-version check |
