@@ -184,7 +184,13 @@ $$;
 
 -- The staging verification script reports through its final exception and changes no row.
 DELETE FROM public.bookings;
+-- An older past-dated in_progress booking and one in a workspace without active members
+-- must not be picked over the future-dated test booking (Codex review, PR #29).
+SELECT bb_test.seed(:wa, :aa, 'in_progress', CURRENT_DATE - 10) AS older \gset
+UPDATE public.bookings SET created_at = now() - interval '30 days' WHERE id = :'older';
 SELECT bb_test.seed(:wa, :aa, 'in_progress', CURRENT_DATE + 30) AS probe \gset
+UPDATE public.bookings SET created_at = now() - interval '10 days' WHERE id = :'probe';
+SELECT bb_test.seed(:wa, :aa, 'in_progress', CURRENT_DATE) AS newest \gset
 \set ON_ERROR_STOP off
 \o /dev/null
 \ir ../../ops/supabase/booking-lifecycle/verify.sql
@@ -198,7 +204,7 @@ SELECT bb_test.eq('verify.sql: one line per check',
 SELECT bb_test.eq('verify.sql: no row changed, nothing left behind',
   (SELECT count(*)::text || ':' || min(status) || ':' || coalesce(min(hold_expires_on)::text, '-') FROM public.bookings)
   || ':' || coalesce(to_regclass('pg_temp.bb_lifecycle_verify')::text, 'no-temp'),
-  '1:in_progress:-:no-temp');
+  '3:in_progress:-:no-temp');
 SELECT bb_test.eq('verify.sql: role restored', current_user::text, 'postgres');
 DELETE FROM public.bookings;
 \set ON_ERROR_STOP off

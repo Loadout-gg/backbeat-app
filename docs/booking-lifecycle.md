@@ -49,7 +49,7 @@ Schema first, then code. Current staging code runs unchanged on the migrated sch
 
 1. Preflight (`preflight.sql`) in the staging SQL editor.
 2. Apply 005, then 006: paste `SET backbeat.booking_lifecycle_target = 'hosted:hupkygptbvnzrihrlcxv';` followed by the file content, in one run each.
-3. Run the preflight again, create one test booking in the app, then run `verify.sql`. It always ends with an error, which is the report: expect `BOOKING_LIFECYCLE_VERIFY ALL PASS: pass=9 fail=0 skip=0` and nine numbered lines. `INCOMPLETE` means missing test data, `FAILED` means do not merge. It leaves nothing behind.
+3. Run the preflight again, create one test booking in the app, then run `verify.sql`. It always ends with an error, which is the report: expect `BOOKING_LIFECYCLE_VERIFY ALL PASS: pass=9 fail=0 skip=0` and nine numbered lines. `INCOMPLETE` means missing test data, `FAILED` means do not merge. It leaves nothing behind. It picks the `in_progress` booking dated after tomorrow when one exists (newest first), so older bookings do not hide the test booking.
 4. Merge the PR to `staging`, verify the deployment commit.
 
 ## Rollback

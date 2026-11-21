@@ -18,8 +18,14 @@ DECLARE
   outcome text;
   affected bigint;
 BEGIN
+  -- Prefer a booking dated after tomorrow, so the completion check can run even when
+  -- older in_progress bookings exist; only bookings whose workspace has an active member.
   SELECT b.id, b.workspace_id, b.artist_id, b.date INTO target
-    FROM public.bookings AS b WHERE b.status = 'in_progress' ORDER BY b.created_at LIMIT 1;
+    FROM public.bookings AS b
+    WHERE b.status = 'in_progress' AND EXISTS (
+      SELECT 1 FROM public.workspace_members AS m
+      WHERE m.workspace_id = b.workspace_id AND m.status = 'active')
+    ORDER BY (b.date > CURRENT_DATE + 1) DESC, b.created_at DESC, b.id LIMIT 1;
   IF target.id IS NOT NULL THEN
     SELECT m.user_id INTO member FROM public.workspace_members AS m
       WHERE m.workspace_id = target.workspace_id AND m.status = 'active' LIMIT 1;
