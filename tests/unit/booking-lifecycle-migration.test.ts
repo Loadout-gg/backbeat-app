@@ -12,11 +12,14 @@ const list = (values: readonly string[]) => values.map(value => `'${value}'`).jo
 it("STATIC: every write file needs an explicit development or staging target, never production", () => {
   for (const sql of [key, lifecycle, ops[1], ops[2]]) {
     expect(sql).toContain("current_setting('backbeat.booking_lifecycle_target', true)")
-    expect(sql).toContain("target NOT IN ('development', 'hosted:hupkygptbvnzrihrlcxv')")
+    // Each target is bound to its own marker row; a missing table (production shape) is refused.
+    expect(sql).toContain("IF target = 'development' THEN\n    expected_id := 'backbeat-dev'; expected_environment := 'development';")
+    expect(sql).toContain("ELSIF target = 'hosted:hupkygptbvnzrihrlcxv' THEN\n    expected_id := 'backbeat-staging'; expected_environment := 'staging';")
     expect(sql).toContain("BOOKING_LIFECYCLE_TARGET_NOT_EXPLICIT")
-    // Synthetic marker required for both targets: production has none (see 004's hosted branch).
     expect(sql).toContain("BOOKING_LIFECYCLE_SYNTHETIC_MARKER_MISSING")
-    expect(sql).toContain("id = 'backbeat-dev' AND environment = 'development' AND synthetic_only IS TRUE")
+    expect(sql).toContain("BOOKING_LIFECYCLE_MARKER_DOES_NOT_MATCH_TARGET")
+    expect(sql).toContain("(SELECT pg_catalog.count(*) FROM public.runtime_environment) <> 1")
+    expect(sql).toContain("WHERE id = expected_id AND environment = expected_environment AND synthetic_only IS TRUE")
     expect(sql).toContain("BOOKING_LIFECYCLE_BOOKINGS_RLS_REQUIRED")
     expect(sql).toContain("SET LOCAL lock_timeout")
     expect(sql.trimEnd().endsWith("COMMIT;")).toBe(true)
@@ -27,6 +30,7 @@ it("STATIC: every write file needs an explicit development or staging target, ne
   }
 })
 it("STATIC: the preflight is read-only", () => {
+  for (const marker of ["development", "staging", "invalid", "absent"]) expect(ops[0]).toContain(marker)
   expect(ops[0]).toContain("BEGIN TRANSACTION READ ONLY;")
   expect(ops[0].trimEnd().endsWith("ROLLBACK;")).toBe(true)
   expect(ops[0]).not.toMatch(/\b(?:INSERT|UPDATE|DELETE|ALTER|CREATE|DROP|GRANT|REVOKE|TRUNCATE)\b/)

@@ -4,30 +4,38 @@
 -- Idempotent: safe to re-run. Requires 002, 004 and 005. Prefix with an explicit target:
 --   SET backbeat.booking_lifecycle_target = 'development';                 -- synthetic local
 --   SET backbeat.booking_lifecycle_target = 'hosted:hupkygptbvnzrihrlcxv'; -- staging
--- Both targets require the synthetic-development marker (public.runtime_environment),
--- which production does not have. Production is not an allowed target of this file.
+-- Each target must match its own synthetic marker row in public.runtime_environment;
+-- production has no marker table. Production is not an allowed target of this file.
 -- Rollback: ops/supabase/booking-lifecycle/rollback.sql (see docs/booking-lifecycle.md).
 BEGIN;
 SET LOCAL lock_timeout = '3s';
 SET LOCAL statement_timeout = '15s';
 DO $guard$
-DECLARE target text := pg_catalog.current_setting('backbeat.booking_lifecycle_target', true);
+DECLARE
+  target text := pg_catalog.current_setting('backbeat.booking_lifecycle_target', true);
+  expected_id text;
+  expected_environment text;
 BEGIN
-  -- Two explicit targets, both of the synthetic-development class of migration 004: a local
-  -- development database, or Backbeat staging (which carries the same marker and received
-  -- 004 through its 'development' path). 004's own hosted branch is production: it has no
-  -- marker, so the marker requirement below refuses it whatever the setting says.
-  IF target IS NULL OR target NOT IN ('development', 'hosted:hupkygptbvnzrihrlcxv') THEN
+  -- Each explicit target must match the synthetic marker of the database it names:
+  --   development                  -> backbeat-dev / development (local, migration 001)
+  --   hosted:hupkygptbvnzrihrlcxv  -> backbeat-staging / staging (Backbeat staging)
+  -- A missing marker table (production shape), zero or several rows, other values, or a
+  -- marker that belongs to the other target are all refused.
+  IF target = 'development' THEN
+    expected_id := 'backbeat-dev'; expected_environment := 'development';
+  ELSIF target = 'hosted:hupkygptbvnzrihrlcxv' THEN
+    expected_id := 'backbeat-staging'; expected_environment := 'staging';
+  ELSE
     RAISE EXCEPTION 'BOOKING_LIFECYCLE_TARGET_NOT_EXPLICIT';
   END IF;
   IF pg_catalog.to_regclass('public.runtime_environment') IS NULL THEN
     RAISE EXCEPTION 'BOOKING_LIFECYCLE_SYNTHETIC_MARKER_MISSING';
   END IF;
-  IF NOT EXISTS (
+  IF (SELECT pg_catalog.count(*) FROM public.runtime_environment) <> 1 OR NOT EXISTS (
     SELECT 1 FROM public.runtime_environment
-    WHERE id = 'backbeat-dev' AND environment = 'development' AND synthetic_only IS TRUE
-  ) OR (SELECT pg_catalog.count(*) FROM public.runtime_environment) <> 1 THEN
-    RAISE EXCEPTION 'BOOKING_LIFECYCLE_SYNTHETIC_MARKER_INVALID';
+    WHERE id = expected_id AND environment = expected_environment AND synthetic_only IS TRUE
+  ) THEN
+    RAISE EXCEPTION 'BOOKING_LIFECYCLE_MARKER_DOES_NOT_MATCH_TARGET';
   END IF;
   IF pg_catalog.to_regprocedure('public.backbeat_is_active_member(uuid)') IS NULL THEN
     RAISE EXCEPTION 'BOOKING_LIFECYCLE_SHAPE_MISMATCH';

@@ -44,6 +44,10 @@ Stated by Simone on 2026-11-21 from the project owner's environment map. Not ver
 | `hupkygptbvnzrihrlcxv` (supabase-amethyst-nest) | Backbeat STAGING database, used by Vercel `backbeat-staging`, branch `staging` | Only allowed migration target under the staging delegation |
 | `jttrznlbbjyufzyqmzzs` (supabase-violet-school) | Backbeat PRODUCTION database, used by `app.backbeat.show`, branch `main`; the ref in migration 004 | Forbidden for agents; Alberto only |
 
+Staging marker (read by Simone in the SQL editor, 2026-11-21): `public.runtime_environment` on staging holds exactly one row, `backbeat-staging` / `staging` / `synthetic_only = true`, pinned by CHECK constraints; owner `postgres`, RLS on. Local development databases carry `backbeat-dev` / `development` (migration 001). Migrations 005/006 bind each target to its own marker.
+
+Open question for Alberto (not blocking): migration 004 is applied on staging, but its guard knows only two paths, the `backbeat-dev` marker and the production ref with no marker table. Staging matches neither, so 004 reached staging outside those two guard paths (edited copy or manual statements); how is not recorded.
+
 The local Supabase CLI login on Simone's machine lists only projects of another company, named "Staging" and "Production". They are not Backbeat. Never take a `--project-ref` from `supabase projects list` for Backbeat, and never use `--linked`. Agents have no CLI access to the Backbeat projects: staging database steps are run by Simone in the dashboard SQL editor, after checking the ref in the dashboard URL.
 
 ## Log

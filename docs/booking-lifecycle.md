@@ -39,7 +39,9 @@ SQLSTATE raised by the trigger: `BB001` initial status, `BB002` transition not i
 | `ops/supabase/booking-lifecycle/restore.sql` | put backed-up values back after 006 is applied again |
 | `tests/sql/` | executed SQL contract test for a throwaway local PostgreSQL 17 |
 
-Both migrations are idempotent and refuse to run without `backbeat.booking_lifecycle_target` set to `development` or `hosted:hupkygptbvnzrihrlcxv` (staging). Both targets also require the synthetic-development marker (`public.runtime_environment`, exact singleton row), the same class as the `development` path of migration 004: staging carries that marker and received 004 that way. Production has no marker (004's hosted branch requires its absence), so these files refuse production whatever the setting says. The setting itself is an accidental-target guard, not identity proof. A production apply needs Alberto's decision and a guard change.
+Both migrations are idempotent and refuse to run without `backbeat.booking_lifecycle_target` set to `development` or `hosted:hupkygptbvnzrihrlcxv` (staging). Each target must also match the synthetic marker of the database it names: exactly one row in `public.runtime_environment`, `backbeat-dev` / `development` / `synthetic_only = true` for `development`, `backbeat-staging` / `staging` / `synthetic_only = true` for the staging target. A marker that belongs to the other target, zero or several rows, any other value, or a missing marker table are refused. Production has no marker table (the hosted branch of migration 004 requires its absence), so these files refuse a production-shaped database whatever the setting says. `backbeat_is_active_member(uuid)` and RLS on `bookings` are required as well. The setting is an accidental-target guard, not identity proof. A production apply needs Alberto's decision and a guard change.
+
+The preflight reports the marker class as `development`, `staging`, `invalid` or `absent`; on staging expect `staging`.
 
 ## Order
 

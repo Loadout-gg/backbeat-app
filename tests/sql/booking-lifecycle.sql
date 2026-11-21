@@ -8,6 +8,9 @@
 SET backbeat.booking_fee_target = 'development';
 \ir ../../migrations/004_booking_fee.sql
 
+-- The read-only preflight must execute and classify the local marker.
+\ir ../../ops/supabase/booking-lifecycle/preflight.sql
+
 -- Fixtures: two workspaces, one active member and one artist each.
 INSERT INTO auth.users (id, email, email_confirmed_at) VALUES
   ('a0000000-0000-4000-8000-000000000001', 'a@example.test', now()),
@@ -236,19 +239,226 @@ SELECT bb_test.eq('restore: statuses and expiry back',
 SELECT bb_test.eq('restore: backup table dropped',
   coalesce(to_regclass('public.bookings_lifecycle_rollback_backup')::text, 'ABSENT'), 'ABSENT');
 
--- Production shape (no synthetic marker): refused even with the staging target set.
-\ir ../../ops/supabase/booking-lifecycle/rollback.sql
-ALTER TABLE public.runtime_environment RENAME TO runtime_environment_hidden;
-SET backbeat.booking_lifecycle_target = 'hosted:hupkygptbvnzrihrlcxv';
+-- Guard matrix: marker class x target. Probe = whether 006 (re)creates the trigger.
+-- Scenarios other than the real development marker use an unconstrained stand-in table.
+
+DROP TRIGGER IF EXISTS bookings_enforce_status ON public.bookings;
+SET backbeat.booking_lifecycle_target = 'development';
 \set ON_ERROR_STOP off
 \o /dev/null
+\ir ../../migrations/005_booking_workspace_key.sql
 \ir ../../migrations/006_booking_lifecycle.sql
 \o
 \set ON_ERROR_STOP on
-SELECT bb_test.eq('guard: no marker, nothing applied',
-  (SELECT count(*)::text FROM pg_proc WHERE proname = 'backbeat_enforce_booking_status'), '0');
-ALTER TABLE public.runtime_environment_hidden RENAME TO runtime_environment;
-\ir ../../migrations/006_booking_lifecycle.sql
-SELECT bb_test.eq('guard: staging target with the marker applies',
+SELECT bb_test.eq('guard: dev marker + development target applies',
   (SELECT count(*)::text FROM pg_trigger WHERE tgname = 'bookings_enforce_status'), '1');
+
+DROP TRIGGER IF EXISTS bookings_enforce_status ON public.bookings;
+SET backbeat.booking_lifecycle_target = 'hosted:hupkygptbvnzrihrlcxv';
+\set ON_ERROR_STOP off
+\o /dev/null
+\ir ../../migrations/005_booking_workspace_key.sql
+\ir ../../migrations/006_booking_lifecycle.sql
+\o
+\set ON_ERROR_STOP on
+SELECT bb_test.eq('guard: dev marker + staging target refused',
+  (SELECT count(*)::text FROM pg_trigger WHERE tgname = 'bookings_enforce_status'), '0');
+
+DROP TRIGGER IF EXISTS bookings_enforce_status ON public.bookings;
+SET backbeat.booking_lifecycle_target = 'hosted:jttrznlbbjyufzyqmzzs';
+\set ON_ERROR_STOP off
+\o /dev/null
+\ir ../../migrations/005_booking_workspace_key.sql
+\ir ../../migrations/006_booking_lifecycle.sql
+\o
+\set ON_ERROR_STOP on
+SELECT bb_test.eq('guard: dev marker + production ref refused',
+  (SELECT count(*)::text FROM pg_trigger WHERE tgname = 'bookings_enforce_status'), '0');
+
+DROP TRIGGER IF EXISTS bookings_enforce_status ON public.bookings;
+ALTER TABLE public.runtime_environment RENAME TO runtime_environment_real;
+CREATE TABLE public.runtime_environment (id text, environment text, synthetic_only boolean);
+INSERT INTO public.runtime_environment VALUES ('backbeat-staging', 'staging', true);
+SET backbeat.booking_lifecycle_target = 'hosted:hupkygptbvnzrihrlcxv';
+\set ON_ERROR_STOP off
+\o /dev/null
+\ir ../../migrations/005_booking_workspace_key.sql
+\ir ../../migrations/006_booking_lifecycle.sql
+\o
+\set ON_ERROR_STOP on
+SELECT bb_test.eq('guard: staging marker + staging target applies',
+  (SELECT count(*)::text FROM pg_trigger WHERE tgname = 'bookings_enforce_status'), '1');
+DROP TABLE public.runtime_environment;
+ALTER TABLE public.runtime_environment_real RENAME TO runtime_environment;
+
+DROP TRIGGER IF EXISTS bookings_enforce_status ON public.bookings;
+ALTER TABLE public.runtime_environment RENAME TO runtime_environment_real;
+CREATE TABLE public.runtime_environment (id text, environment text, synthetic_only boolean);
+INSERT INTO public.runtime_environment VALUES ('backbeat-staging', 'staging', true);
+SET backbeat.booking_lifecycle_target = 'development';
+\set ON_ERROR_STOP off
+\o /dev/null
+\ir ../../migrations/005_booking_workspace_key.sql
+\ir ../../migrations/006_booking_lifecycle.sql
+\o
+\set ON_ERROR_STOP on
+SELECT bb_test.eq('guard: staging marker + development target refused',
+  (SELECT count(*)::text FROM pg_trigger WHERE tgname = 'bookings_enforce_status'), '0');
+DROP TABLE public.runtime_environment;
+ALTER TABLE public.runtime_environment_real RENAME TO runtime_environment;
+
+DROP TRIGGER IF EXISTS bookings_enforce_status ON public.bookings;
+ALTER TABLE public.runtime_environment RENAME TO runtime_environment_real;
+SET backbeat.booking_lifecycle_target = 'hosted:hupkygptbvnzrihrlcxv';
+\set ON_ERROR_STOP off
+\o /dev/null
+\ir ../../migrations/005_booking_workspace_key.sql
+\ir ../../migrations/006_booking_lifecycle.sql
+\o
+\set ON_ERROR_STOP on
+SELECT bb_test.eq('guard: absent marker table (production shape) + staging target refused',
+  (SELECT count(*)::text FROM pg_trigger WHERE tgname = 'bookings_enforce_status'), '0');
+ALTER TABLE public.runtime_environment_real RENAME TO runtime_environment;
+
+DROP TRIGGER IF EXISTS bookings_enforce_status ON public.bookings;
+ALTER TABLE public.runtime_environment RENAME TO runtime_environment_real;
+SET backbeat.booking_lifecycle_target = 'development';
+\set ON_ERROR_STOP off
+\o /dev/null
+\ir ../../migrations/005_booking_workspace_key.sql
+\ir ../../migrations/006_booking_lifecycle.sql
+\o
+\set ON_ERROR_STOP on
+SELECT bb_test.eq('guard: absent marker table (production shape) + development target refused',
+  (SELECT count(*)::text FROM pg_trigger WHERE tgname = 'bookings_enforce_status'), '0');
+ALTER TABLE public.runtime_environment_real RENAME TO runtime_environment;
+
+DROP TRIGGER IF EXISTS bookings_enforce_status ON public.bookings;
+ALTER TABLE public.runtime_environment RENAME TO runtime_environment_real;
+CREATE TABLE public.runtime_environment (id text, environment text, synthetic_only boolean);
+SET backbeat.booking_lifecycle_target = 'hosted:hupkygptbvnzrihrlcxv';
+\set ON_ERROR_STOP off
+\o /dev/null
+\ir ../../migrations/005_booking_workspace_key.sql
+\ir ../../migrations/006_booking_lifecycle.sql
+\o
+\set ON_ERROR_STOP on
+SELECT bb_test.eq('guard: empty marker table refused',
+  (SELECT count(*)::text FROM pg_trigger WHERE tgname = 'bookings_enforce_status'), '0');
+DROP TABLE public.runtime_environment;
+ALTER TABLE public.runtime_environment_real RENAME TO runtime_environment;
+
+DROP TRIGGER IF EXISTS bookings_enforce_status ON public.bookings;
+ALTER TABLE public.runtime_environment RENAME TO runtime_environment_real;
+CREATE TABLE public.runtime_environment (id text, environment text, synthetic_only boolean);
+INSERT INTO public.runtime_environment VALUES ('backbeat-staging', 'staging', true);
+INSERT INTO public.runtime_environment VALUES ('backbeat-dev', 'development', true);
+SET backbeat.booking_lifecycle_target = 'hosted:hupkygptbvnzrihrlcxv';
+\set ON_ERROR_STOP off
+\o /dev/null
+\ir ../../migrations/005_booking_workspace_key.sql
+\ir ../../migrations/006_booking_lifecycle.sql
+\o
+\set ON_ERROR_STOP on
+SELECT bb_test.eq('guard: two marker rows refused',
+  (SELECT count(*)::text FROM pg_trigger WHERE tgname = 'bookings_enforce_status'), '0');
+DROP TABLE public.runtime_environment;
+ALTER TABLE public.runtime_environment_real RENAME TO runtime_environment;
+
+DROP TRIGGER IF EXISTS bookings_enforce_status ON public.bookings;
+ALTER TABLE public.runtime_environment RENAME TO runtime_environment_real;
+CREATE TABLE public.runtime_environment (id text, environment text, synthetic_only boolean);
+INSERT INTO public.runtime_environment VALUES ('backbeat-staging', 'staging', true);
+INSERT INTO public.runtime_environment VALUES ('backbeat-dev', 'development', true);
+SET backbeat.booking_lifecycle_target = 'development';
+\set ON_ERROR_STOP off
+\o /dev/null
+\ir ../../migrations/005_booking_workspace_key.sql
+\ir ../../migrations/006_booking_lifecycle.sql
+\o
+\set ON_ERROR_STOP on
+SELECT bb_test.eq('guard: two marker rows refused for development too',
+  (SELECT count(*)::text FROM pg_trigger WHERE tgname = 'bookings_enforce_status'), '0');
+DROP TABLE public.runtime_environment;
+ALTER TABLE public.runtime_environment_real RENAME TO runtime_environment;
+
+DROP TRIGGER IF EXISTS bookings_enforce_status ON public.bookings;
+ALTER TABLE public.runtime_environment RENAME TO runtime_environment_real;
+CREATE TABLE public.runtime_environment (id text, environment text, synthetic_only boolean);
+INSERT INTO public.runtime_environment VALUES ('backbeat-staging', 'production', true);
+SET backbeat.booking_lifecycle_target = 'hosted:hupkygptbvnzrihrlcxv';
+\set ON_ERROR_STOP off
+\o /dev/null
+\ir ../../migrations/005_booking_workspace_key.sql
+\ir ../../migrations/006_booking_lifecycle.sql
+\o
+\set ON_ERROR_STOP on
+SELECT bb_test.eq('guard: staging id with another environment refused',
+  (SELECT count(*)::text FROM pg_trigger WHERE tgname = 'bookings_enforce_status'), '0');
+DROP TABLE public.runtime_environment;
+ALTER TABLE public.runtime_environment_real RENAME TO runtime_environment;
+
+DROP TRIGGER IF EXISTS bookings_enforce_status ON public.bookings;
+ALTER TABLE public.runtime_environment RENAME TO runtime_environment_real;
+CREATE TABLE public.runtime_environment (id text, environment text, synthetic_only boolean);
+INSERT INTO public.runtime_environment VALUES ('backbeat-prod', 'staging', true);
+SET backbeat.booking_lifecycle_target = 'hosted:hupkygptbvnzrihrlcxv';
+\set ON_ERROR_STOP off
+\o /dev/null
+\ir ../../migrations/005_booking_workspace_key.sql
+\ir ../../migrations/006_booking_lifecycle.sql
+\o
+\set ON_ERROR_STOP on
+SELECT bb_test.eq('guard: another id with staging environment refused',
+  (SELECT count(*)::text FROM pg_trigger WHERE tgname = 'bookings_enforce_status'), '0');
+DROP TABLE public.runtime_environment;
+ALTER TABLE public.runtime_environment_real RENAME TO runtime_environment;
+
+DROP TRIGGER IF EXISTS bookings_enforce_status ON public.bookings;
+ALTER TABLE public.runtime_environment RENAME TO runtime_environment_real;
+CREATE TABLE public.runtime_environment (id text, environment text, synthetic_only boolean);
+INSERT INTO public.runtime_environment VALUES ('backbeat-staging', 'staging', false);
+SET backbeat.booking_lifecycle_target = 'hosted:hupkygptbvnzrihrlcxv';
+\set ON_ERROR_STOP off
+\o /dev/null
+\ir ../../migrations/005_booking_workspace_key.sql
+\ir ../../migrations/006_booking_lifecycle.sql
+\o
+\set ON_ERROR_STOP on
+SELECT bb_test.eq('guard: synthetic_only false refused',
+  (SELECT count(*)::text FROM pg_trigger WHERE tgname = 'bookings_enforce_status'), '0');
+DROP TABLE public.runtime_environment;
+ALTER TABLE public.runtime_environment_real RENAME TO runtime_environment;
+
+DROP TRIGGER IF EXISTS bookings_enforce_status ON public.bookings;
+ALTER TABLE public.runtime_environment RENAME TO runtime_environment_real;
+CREATE TABLE public.runtime_environment (id text, environment text, synthetic_only boolean);
+INSERT INTO public.runtime_environment VALUES ('backbeat-staging', 'staging', NULL);
+SET backbeat.booking_lifecycle_target = 'hosted:hupkygptbvnzrihrlcxv';
+\set ON_ERROR_STOP off
+\o /dev/null
+\ir ../../migrations/005_booking_workspace_key.sql
+\ir ../../migrations/006_booking_lifecycle.sql
+\o
+\set ON_ERROR_STOP on
+SELECT bb_test.eq('guard: synthetic_only null refused',
+  (SELECT count(*)::text FROM pg_trigger WHERE tgname = 'bookings_enforce_status'), '0');
+DROP TABLE public.runtime_environment;
+ALTER TABLE public.runtime_environment_real RENAME TO runtime_environment;
+
+-- Rollback and restore carry the same guard: refused on a production-shaped database.
+SET backbeat.booking_lifecycle_target = 'development';
+\ir ../../migrations/006_booking_lifecycle.sql
+ALTER TABLE public.runtime_environment RENAME TO runtime_environment_real;
+SET backbeat.booking_lifecycle_target = 'hosted:hupkygptbvnzrihrlcxv';
+\set ON_ERROR_STOP off
+\o /dev/null
+\ir ../../ops/supabase/booking-lifecycle/rollback.sql
+\ir ../../ops/supabase/booking-lifecycle/restore.sql
+\o
+\set ON_ERROR_STOP on
+ALTER TABLE public.runtime_environment_real RENAME TO runtime_environment;
+SELECT bb_test.eq('guard: rollback refused without a marker, schema intact',
+  (SELECT count(*)::text FROM pg_trigger WHERE tgname = 'bookings_enforce_status')
+  || ':' || coalesce(to_regclass('public.bookings_lifecycle_rollback_backup')::text, 'no-backup'), '1:no-backup');
 \echo BOOKING_LIFECYCLE_SQL_TESTS_PASSED
