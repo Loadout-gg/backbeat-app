@@ -38,7 +38,7 @@ CREATE TABLE bb_test.artists_before AS SELECT id, to_jsonb(a) AS row FROM public
 SELECT bb_test.eq('preflight: ready, nothing applied',
   (SELECT string_agg(detail, ' | ' ORDER BY item) FROM (:preflight) AS p
    WHERE item IN ('ready for 007', '007 objects present', 'runtime_environment marker class')),
-  '0/9 | READY_FOR_007 | development');
+  '0/11 | READY_FOR_007 | development');
 
 -- Guard: no explicit target, the production ref and the lifecycle setting are refused.
 \set ON_ERROR_STOP off
@@ -68,8 +68,9 @@ SELECT bb_test.eq('existing rows: bookings untouched, no backfill',
      AND b.commission_type IS NULL AND b.commission_value IS NULL AND b.commission_mode IS NULL AND b.tax_note IS NULL), '4');
 SELECT bb_test.eq('existing rows: artists untouched, no backfill',
   (SELECT count(*)::text FROM public.artists AS a JOIN bb_test.artists_before AS o USING (id)
-   WHERE to_jsonb(a) - ARRAY['default_commission_type', 'default_commission_value'] = o.row
-     AND a.default_commission_type IS NULL AND a.default_commission_value IS NULL), '2');
+   WHERE to_jsonb(a) - ARRAY['default_commission_type', 'default_commission_value', 'default_commission_mode', 'default_commission_currency'] = o.row
+     AND a.default_commission_type IS NULL AND a.default_commission_value IS NULL
+     AND a.default_commission_mode IS NULL AND a.default_commission_currency IS NULL), '2');
 SELECT bb_test.eq('schema: booking policy set unchanged',
   (SELECT string_agg(policyname || ':' || cmd, ',' ORDER BY policyname) FROM pg_policies
    WHERE schemaname = 'public' AND tablename IN ('bookings', 'artists')), 'artist_access:ALL,booking_access:ALL');
@@ -84,14 +85,16 @@ SELECT bb_test.eq('postflight: no failing row',
 
 -- verify.sql: every check passes and nothing is left behind.
 \ir ../../ops/supabase/booking-finance/verify.sql
-SELECT bb_test.eq('verify.sql: 18 PASS lines, no FAIL or SKIP',
+SELECT bb_test.eq('verify.sql: 22 PASS lines, no FAIL or SKIP',
   (SELECT count(*) FILTER (WHERE line LIKE 'PASS|%')::text || ':' || count(*) FILTER (WHERE line NOT LIKE 'PASS|%')::text
-   FROM unnest(string_to_array(current_setting('backbeat.finance_verify_report'), E'\n')) AS line), '18:0');
+   FROM unnest(string_to_array(current_setting('backbeat.finance_verify_report'), E'\n')) AS line), '22:0');
 SELECT bb_test.eq('verify.sql: leaves no payment and no changed booking',
   (SELECT count(*)::text FROM public.booking_payments) || ':' ||
   (SELECT count(*)::text FROM public.bookings AS b JOIN bb_test.before AS o USING (id)
    WHERE to_jsonb(b) - ARRAY['commission_type', 'commission_value', 'commission_mode', 'tax_note'] = o.row
      AND b.commission_type IS NULL AND b.tax_note IS NULL), '0:4');
+SELECT bb_test.eq('verify.sql: leaves no artist default',
+  (SELECT count(*)::text FROM public.artists WHERE default_commission_type IS NOT NULL OR default_commission_currency IS NOT NULL), '0');
 SELECT bb_test.eq('verify.sql: session role restored', current_user::text, 'postgres');
 
 DO $$
@@ -172,12 +175,24 @@ BEGIN
   PERFORM bb_test.eq('tax note: 2000 characters', bb_test.run_as(ua, format('UPDATE public.bookings SET tax_note = %L WHERE id = %L', repeat('t', 2000), eur)), 'OK:1');
   PERFORM bb_test.eq('tax note: 2001 characters rejected', bb_test.run_as(ua, format('UPDATE public.bookings SET tax_note = %L WHERE id = %L', repeat('t', 2001), eur)), '23514');
 
-  -- Artist default commission: type and value only.
-  PERFORM bb_test.eq('artist default: percent', bb_test.run_as(ua, format('UPDATE public.artists SET default_commission_type = ''percent'', default_commission_value = 1250 WHERE id = %L', aa)), 'OK:1');
+  -- Artist default commission (decisions 5, 12, 13): type, value and mode together;
+  -- a currency of its own exactly when the type is fixed.
+  PERFORM bb_test.eq('artist default: percent with mode', bb_test.run_as(ua, format('UPDATE public.artists SET default_commission_type = ''percent'', default_commission_value = 1250, default_commission_mode = ''included'' WHERE id = %L', aa)), 'OK:1');
   PERFORM bb_test.eq('artist default: above 100 percent rejected', bb_test.run_as(ua, format('UPDATE public.artists SET default_commission_value = 10001 WHERE id = %L', aa)), '23514');
-  PERFORM bb_test.eq('artist default: fixed', bb_test.run_as(ua, format('UPDATE public.artists SET default_commission_type = ''fixed'', default_commission_value = 25000 WHERE id = %L', aa)), 'OK:1');
+  PERFORM bb_test.eq('artist default: percent with a currency rejected', bb_test.run_as(ua, format('UPDATE public.artists SET default_commission_currency = ''EUR'' WHERE id = %L', aa)), '23514');
+  PERFORM bb_test.eq('artist default: mode cleared alone rejected', bb_test.run_as(ua, format('UPDATE public.artists SET default_commission_mode = NULL WHERE id = %L', aa)), '23514');
+  PERFORM bb_test.eq('artist default: unknown mode rejected', bb_test.run_as(ua, format('UPDATE public.artists SET default_commission_mode = ''split'' WHERE id = %L', aa)), '23514');
+  PERFORM bb_test.eq('artist default: fixed without currency rejected', bb_test.run_as(ua, format('UPDATE public.artists SET default_commission_type = ''fixed'', default_commission_value = 25000 WHERE id = %L', aa)), '23514');
+  PERFORM bb_test.eq('artist default: fixed with an unknown currency rejected', bb_test.run_as(ua, format('UPDATE public.artists SET default_commission_type = ''fixed'', default_commission_value = 25000, default_commission_currency = ''CHF'' WHERE id = %L', aa)), '23514');
+  PERFORM bb_test.eq('artist default: fixed in JPY, whole yen', bb_test.run_as(ua, format('UPDATE public.artists SET default_commission_type = ''fixed'', default_commission_value = 30000, default_commission_mode = ''on_top'', default_commission_currency = ''JPY'' WHERE id = %L', aa)), 'OK:1');
+  PERFORM bb_test.eq('artist default: fixed in EUR', bb_test.run_as(ua, format('UPDATE public.artists SET default_commission_value = 25000, default_commission_currency = ''EUR'' WHERE id = %L', aa)), 'OK:1');
+  PERFORM bb_test.eq('artist default: fixed above the maximum rejected', bb_test.run_as(ua, format('UPDATE public.artists SET default_commission_value = 1000000000000 WHERE id = %L', aa)), '23514');
+  PERFORM bb_test.eq('artist default: currency cleared on a fixed default rejected', bb_test.run_as(ua, format('UPDATE public.artists SET default_commission_currency = NULL WHERE id = %L', aa)), '23514');
   PERFORM bb_test.eq('artist default: type without value rejected', bb_test.run_as(ua, format('UPDATE public.artists SET default_commission_value = NULL WHERE id = %L', aa)), '23514');
   PERFORM bb_test.eq('artist default: unknown type rejected', bb_test.run_as(ua, format('UPDATE public.artists SET default_commission_type = ''tiered'' WHERE id = %L', aa)), '23514');
+  PERFORM bb_test.eq('artist default: currency alone rejected', bb_test.run_as(ub, format('UPDATE public.artists SET default_commission_currency = ''EUR'' WHERE id = %L', 'b0000000-0000-4000-8000-00000000b471')), '23514');
+  PERFORM bb_test.eq('artist default: stored row', (SELECT default_commission_type || ':' || default_commission_value || ':' || default_commission_mode || ':' || default_commission_currency FROM public.artists WHERE id = aa), 'fixed:25000:on_top:EUR');
+  PERFORM bb_test.eq('artist default: outsider cannot change it', bb_test.run_as(ub, format('UPDATE public.artists SET default_commission_value = 1 WHERE id = %L', aa)), 'OK:0');
 
   -- Workspace isolation: user B is not a member of workspace A (decision 9, AC4).
   PERFORM bb_test.run_as(ub, 'CREATE TEMP TABLE seen AS SELECT count(*) AS n FROM public.booking_payments');
@@ -245,14 +260,14 @@ UPDATE public.bookings SET commission_type = 'percent', commission_value = 1000,
 SELECT bb_test.eq('rollback: 007 schema removed',
   coalesce(to_regclass('public.booking_payments')::text, 'absent') || ':' ||
   (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name IN ('bookings', 'artists')
-   AND column_name IN ('commission_type', 'commission_value', 'commission_mode', 'tax_note', 'default_commission_type', 'default_commission_value'))::text
+   AND column_name IN ('commission_type', 'commission_value', 'commission_mode', 'tax_note', 'default_commission_type', 'default_commission_value', 'default_commission_mode', 'default_commission_currency'))::text
   || ':' || (SELECT count(*) FROM pg_proc WHERE proname IN ('backbeat_enforce_payment_currency', 'backbeat_enforce_booking_fee_currency'))::text
   || ':' || (SELECT count(*) FROM pg_trigger WHERE tgname = 'bookings_enforce_fee_currency')::text, 'absent:0:0:0');
 SELECT bb_test.eq('rollback: payments backed up',
   (SELECT count(*)::text FROM public.booking_payments_rollback_backup), '2');
 SELECT bb_test.eq('rollback: commission, tax note and artist default backed up',
-  (SELECT string_agg(source || ':' || commission_type || ':' || commission_value || ':' || coalesce(commission_mode, '-') || ':' || coalesce(tax_note, '-'), ',' ORDER BY source)
-   FROM public.booking_finance_rollback_backup), 'artist:fixed:25000:-:-,booking:percent:1000:included:VAT reverse charge');
+  (SELECT string_agg(source || ':' || commission_type || ':' || commission_value || ':' || coalesce(commission_mode, '-') || ':' || coalesce(commission_currency, '-') || ':' || coalesce(tax_note, '-'), ',' ORDER BY source)
+   FROM public.booking_finance_rollback_backup), 'artist:fixed:25000:on_top:EUR:-,booking:percent:1000:included:-:VAT reverse charge');
 SELECT bb_test.eq('rollback: backups invisible to API roles',
   (has_table_privilege('authenticated', 'public.booking_payments_rollback_backup', 'SELECT')
    OR has_table_privilege('authenticated', 'public.booking_finance_rollback_backup', 'SELECT')
@@ -274,10 +289,10 @@ INSERT INTO public.booking_payments (id, workspace_id, booking_id, kind, amount_
   WHERE booking_id = 'a0000000-0000-4000-8000-0000000b0003';
 \ir ../../ops/supabase/booking-finance/rollback.sql
 SELECT bb_test.eq('rollback again: live values replace the older backup, missing rows keep theirs',
-  (SELECT string_agg(source || ':' || commission_type || ':' || commission_value || ':' || coalesce(commission_mode, '-') || ':' || coalesce(tax_note, '-'), ',' ORDER BY source)
+  (SELECT string_agg(source || ':' || commission_type || ':' || commission_value || ':' || coalesce(commission_mode, '-') || ':' || coalesce(commission_currency, '-') || ':' || coalesce(tax_note, '-'), ',' ORDER BY source)
    FROM public.booking_finance_rollback_backup)
   || ' | ' || (SELECT string_agg(amount_minor::text, ',' ORDER BY amount_minor) FROM public.booking_payments_rollback_backup),
-  'artist:fixed:25000:-:-,booking:fixed:2000:on_top:- | 100,777');
+  'artist:fixed:25000:on_top:EUR:-,booking:fixed:2000:on_top:-:- | 100,777');
 
 -- Guard: a production-shaped database (no marker table) refuses 007 whatever the setting.
 ALTER TABLE public.runtime_environment RENAME TO runtime_environment_real;

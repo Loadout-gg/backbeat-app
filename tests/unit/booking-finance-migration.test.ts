@@ -40,7 +40,7 @@ it("STATIC: 007 is additive and re-runnable: no backfill, no row rewrite, no des
   expect(sql).not.toMatch(/\bUPDATE public\.|\bDELETE FROM\b|\bINSERT INTO\b|\bTRUNCATE\b|\bDROP (?:TABLE|COLUMN)\b|\bSECURITY DEFINER\b/)
   expect(sql).toContain("CREATE TABLE IF NOT EXISTS public.booking_payments")
   expect(sql).toContain("CREATE INDEX IF NOT EXISTS booking_payments_workspace_booking_idx")
-  expect(sql.match(/ADD COLUMN IF NOT EXISTS/g)).toHaveLength(6)
+  expect(sql.match(/ADD COLUMN IF NOT EXISTS/g)).toHaveLength(8)
   expect(sql.match(/ADD COLUMN(?! IF NOT EXISTS)/g)).toBeNull()
   expect(sql.match(/CREATE OR REPLACE FUNCTION/g)).toHaveLength(2)
   expect(sql.match(/SET search_path = ''/g)).toHaveLength(2)
@@ -54,6 +54,11 @@ it("STATIC: 007 mirrors the application value sets and limits", () => {
   expect(migration).toContain(`CHECK (commission_type IN (${list(COMMISSION_TYPES)}))`)
   expect(migration).toContain(`CHECK (commission_mode IN (${list(COMMISSION_MODES)}))`)
   expect(migration).toContain(`CHECK (default_commission_type IN (${list(COMMISSION_TYPES)}))`)
+  expect(migration).toContain(`CHECK (default_commission_mode IN (${list(COMMISSION_MODES)}))`)
+  expect(migration).toContain(`CHECK (default_commission_currency IN (${list(BOOKING_FEE_CURRENCIES)}))`)
+  // Decision 13: type, value and mode all-or-none. Decision 12: a currency exactly when fixed.
+  expect(migration).toContain("CHECK ((default_commission_type IS NULL) = (default_commission_value IS NULL)\n       AND (default_commission_type IS NULL) = (default_commission_mode IS NULL))")
+  expect(migration).toContain("CHECK ((default_commission_currency IS NOT NULL)\n       = (default_commission_type IS NOT NULL AND default_commission_type = 'fixed'))")
   expect(migration).toContain(`CHECK (kind IN (${list(PAYMENT_KINDS)}))`)
   expect(migration).toContain(`CHECK (currency IN (${list(BOOKING_FEE_CURRENCIES)}))`)
   expect(migration).toContain(`CHECK (amount_minor BETWEEN 1 AND ${MAX_BOOKING_FEE_MINOR})`)
@@ -81,6 +86,21 @@ it("STATIC: the currency rule raises its own SQLSTATEs and nothing couples payme
   // Derived values are never stored.
   expect(code(migration)).not.toMatch(/promoter_total|paid_total|outstanding|artist_net|commission_amount/)
 })
+it("STATIC: every summary counts the same 11 objects of 007", () => {
+  const columns = [...code(migration).matchAll(/ADD COLUMN IF NOT EXISTS (\w+)/g)].map(match => match[1])
+  expect(columns).toHaveLength(8)
+  for (const column of columns) {
+    expect(preflight).toContain(`'${column}'`)
+    expect(postflight).toContain(`'${column}'`)
+  }
+  expect(preflight).toContain("::text || '/11'")
+  expect(preflight).not.toContain("/9")
+  expect(postflight).toContain("count(*) = 4, count(*)::text || '/4'\n  FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'artists'")
+  expect(postflight).toContain("'artists: default commission CHECKs', count(*) = 6")
+  expect(code(migration).match(/ADD CONSTRAINT artists_default_commission_/g)).toHaveLength(6)
+  expect(verify).toContain("pass=22 fail=0 skip=0")
+  expect(verify.match(/results := results \|\| \(CASE WHEN/g)).toHaveLength(22)
+})
 it("STATIC: preflight and postflight are single read-only SELECT statements", () => {
   for (const sql of [preflight, postflight]) {
     const statements = code(sql).split(";").map(part => part.trim()).filter(Boolean)
@@ -102,7 +122,7 @@ it("STATIC: verify.sql rolls every write back and ends with one summarizing SELE
 })
 it("STATIC: rollback backs up before it removes, and the backups are invisible to API roles", () => {
   const sql = code(rollback)
-  const firstDrop = Math.min(...["DROP TABLE IF EXISTS public.booking_payments;", "DROP COLUMN IF EXISTS commission_type", "DROP COLUMN IF EXISTS default_commission_type"].map(text => {
+  const firstDrop = Math.min(...["DROP TABLE IF EXISTS public.booking_payments;", "DROP COLUMN IF EXISTS commission_type", "DROP COLUMN IF EXISTS default_commission_type", "DROP COLUMN IF EXISTS default_commission_mode", "DROP COLUMN IF EXISTS default_commission_currency"].map(text => {
     expect(sql).toContain(text)
     return sql.indexOf(text)
   }))
@@ -117,6 +137,11 @@ it("STATIC: rollback backs up before it removes, and the backups are invisible t
   // A repeated rollback must not keep stale values for rows that still exist.
   expect(sql.match(/ON CONFLICT \((?:source, )?id\) DO UPDATE SET/g)).toHaveLength(3)
   expect(sql).not.toContain("DO NOTHING")
+  // Every artist constraint and column of 007 is removed, and the default's mode and currency are backed up.
+  for (const name of [...migration.matchAll(/ADD CONSTRAINT (artists_default_commission_\w+)/g)].map(match => match[1])) {
+    expect(sql).toContain(`DROP CONSTRAINT IF EXISTS ${name}`)
+  }
+  expect(sql).toContain("default_commission_mode, default_commission_currency\n      FROM public.artists")
   // The lifecycle schema of 005/006 is left alone.
   expect(sql).not.toMatch(/bookings_enforce_status|bookings_workspace_id_id_key|hold_expires_on/)
 })

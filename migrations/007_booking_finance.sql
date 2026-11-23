@@ -94,23 +94,39 @@ ALTER TABLE public.bookings
   ADD CONSTRAINT bookings_tax_note_check
     CHECK (pg_catalog.char_length(tax_note) <= 2000);
 
--- Artist default commission: prefilled on new bookings by the application. A fixed default
--- has no currency of its own; it applies in the fee currency of each booking.
+-- Artist default commission (decisions 5, 12, 13): prefilled on new bookings by the
+-- application. Type, value and mode are all null or all set. A fixed default carries its own
+-- currency (minor units of that currency) and is prefilled only on a booking whose fee is in
+-- that currency; a percent default has no currency.
 ALTER TABLE public.artists
   ADD COLUMN IF NOT EXISTS default_commission_type text,
-  ADD COLUMN IF NOT EXISTS default_commission_value bigint;
+  ADD COLUMN IF NOT EXISTS default_commission_value bigint,
+  ADD COLUMN IF NOT EXISTS default_commission_mode text,
+  ADD COLUMN IF NOT EXISTS default_commission_currency text;
 ALTER TABLE public.artists
   DROP CONSTRAINT IF EXISTS artists_default_commission_type_check,
+  DROP CONSTRAINT IF EXISTS artists_default_commission_mode_check,
   DROP CONSTRAINT IF EXISTS artists_default_commission_set_check,
-  DROP CONSTRAINT IF EXISTS artists_default_commission_value_check;
+  DROP CONSTRAINT IF EXISTS artists_default_commission_value_check,
+  DROP CONSTRAINT IF EXISTS artists_default_commission_currency_check,
+  DROP CONSTRAINT IF EXISTS artists_default_commission_currency_set_check;
 ALTER TABLE public.artists
   ADD CONSTRAINT artists_default_commission_type_check
     CHECK (default_commission_type IN ('percent', 'fixed')),
+  ADD CONSTRAINT artists_default_commission_mode_check
+    CHECK (default_commission_mode IN ('on_top', 'included')),
   ADD CONSTRAINT artists_default_commission_set_check
-    CHECK ((default_commission_type IS NULL) = (default_commission_value IS NULL)),
+    CHECK ((default_commission_type IS NULL) = (default_commission_value IS NULL)
+       AND (default_commission_type IS NULL) = (default_commission_mode IS NULL)),
   ADD CONSTRAINT artists_default_commission_value_check
     CHECK (default_commission_value BETWEEN 0 AND
-      CASE WHEN default_commission_type = 'percent' THEN 10000 ELSE 999999999999 END);
+      CASE WHEN default_commission_type = 'percent' THEN 10000 ELSE 999999999999 END),
+  ADD CONSTRAINT artists_default_commission_currency_check
+    CHECK (default_commission_currency IN ('EUR', 'USD', 'GBP', 'JPY')),
+  -- Required when the type is fixed, NULL when it is percent or unset.
+  ADD CONSTRAINT artists_default_commission_currency_set_check
+    CHECK ((default_commission_currency IS NOT NULL)
+       = (default_commission_type IS NOT NULL AND default_commission_type = 'fixed'));
 
 -- Payments recorded by the agency (decisions 1, 4, 7). "Paid" is paid_on being set.
 -- No column, CHECK or trigger links a payment to the booking status.

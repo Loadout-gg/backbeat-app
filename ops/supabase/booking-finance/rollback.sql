@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS public.booking_finance_rollback_backup (
   commission_type text,
   commission_value bigint,
   commission_mode text,
+  commission_currency text,
   tax_note text,
   backed_up_at timestamptz NOT NULL DEFAULT pg_catalog.now(),
   PRIMARY KEY (source, id)
@@ -99,11 +100,13 @@ BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
       AND table_name = 'artists' AND column_name = 'default_commission_type') THEN
     INSERT INTO public.booking_finance_rollback_backup
-        (source, id, workspace_id, commission_type, commission_value)
-      SELECT 'artist', id, workspace_id, default_commission_type, default_commission_value
+        (source, id, workspace_id, commission_type, commission_value, commission_mode, commission_currency)
+      SELECT 'artist', id, workspace_id, default_commission_type, default_commission_value,
+        default_commission_mode, default_commission_currency
       FROM public.artists WHERE default_commission_type IS NOT NULL
       ON CONFLICT (source, id) DO UPDATE SET workspace_id = EXCLUDED.workspace_id,
         commission_type = EXCLUDED.commission_type, commission_value = EXCLUDED.commission_value,
+        commission_mode = EXCLUDED.commission_mode, commission_currency = EXCLUDED.commission_currency,
         backed_up_at = pg_catalog.now();
   END IF;
 END
@@ -126,9 +129,14 @@ ALTER TABLE public.bookings
   DROP COLUMN IF EXISTS tax_note;
 ALTER TABLE public.artists
   DROP CONSTRAINT IF EXISTS artists_default_commission_type_check,
+  DROP CONSTRAINT IF EXISTS artists_default_commission_mode_check,
   DROP CONSTRAINT IF EXISTS artists_default_commission_set_check,
   DROP CONSTRAINT IF EXISTS artists_default_commission_value_check,
+  DROP CONSTRAINT IF EXISTS artists_default_commission_currency_check,
+  DROP CONSTRAINT IF EXISTS artists_default_commission_currency_set_check,
   DROP COLUMN IF EXISTS default_commission_type,
-  DROP COLUMN IF EXISTS default_commission_value;
+  DROP COLUMN IF EXISTS default_commission_value,
+  DROP COLUMN IF EXISTS default_commission_mode,
+  DROP COLUMN IF EXISTS default_commission_currency;
 NOTIFY pgrst, 'reload schema';
 COMMIT;

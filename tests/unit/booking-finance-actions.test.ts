@@ -252,17 +252,26 @@ it("returns the fixed has-payments copy when the foreign key blocks a booking de
 })
 
 const create = { artistId: ARTIST, date: "2026-12-12", startTime: "21:00", durationMinutes: 90 }
+const stored = (type: string | null, value: number | null, mode: string | null, currency: string | null = null) =>
+  ({ default_commission_type: type, default_commission_value: value, default_commission_mode: mode, default_commission_currency: currency })
 it.each([
-  [{ default_commission_type: "percent", default_commission_value: 1250 }, { commission_type: "percent", commission_value: 1250, commission_mode: "on_top" }],
-  [{ default_commission_type: "fixed", default_commission_value: 25000 }, { commission_type: "fixed", commission_value: 25000, commission_mode: "on_top" }],
-  [{ default_commission_type: null, default_commission_value: null }, {}],
+  [stored("percent", 1250, "on_top"), { commission_type: "percent", commission_value: 1250, commission_mode: "on_top" }],
+  [stored("percent", 1250, "included"), { commission_type: "percent", commission_value: 1250, commission_mode: "included" }],
+  // A booking is created without a fee: a fixed default (own currency) is never copied here.
+  [stored("fixed", 25000, "on_top", "EUR"), {}],
+  [stored("fixed", 30000, "included", "JPY"), {}],
+  [stored(null, null, null), {}],
   [{}, {}],
-  [{ default_commission_type: "percent", default_commission_value: 10001 }, {}],
-  [{ default_commission_type: "tiered", default_commission_value: 5 }, {}],
+  [stored("percent", 1250, null), {}],
+  [stored("percent", 10001, "on_top"), {}],
+  [stored("percent", 1250, "on_top", "EUR"), {}],
+  [stored("fixed", 25000, "on_top"), {}],
+  [stored("tiered", 5, "on_top"), {}],
 ])("prefills a new booking from the artist default %j", async (artistDefault, commission) => {
   queue("artists", { data: { id: ARTIST, ...artistDefault }, error: null })
   queue("bookings", { data: { id: BOOKING }, error: null })
   expect((await createBooking(create)).success).toBe(true)
+  expect(table("artists").select).toHaveBeenCalledWith("id, default_commission_type, default_commission_value, default_commission_mode, default_commission_currency")
   expect(table("artists").eq.mock.calls).toEqual([["id", ARTIST], ["workspace_id", WORKSPACE]])
   expect(table("bookings").insert).toHaveBeenCalledExactlyOnceWith({
     workspace_id: WORKSPACE, artist_id: ARTIST, date: "2026-12-12", start_time: "21:00", duration_minutes: 90,
@@ -279,24 +288,32 @@ it("does not create a booking for an artist outside the workspace or when the de
 
 // --- artist default commission ---
 it.each([
-  [{ type: "percent", value: 1250 }, { default_commission_type: "percent", default_commission_value: 1250 }],
-  [{ type: "fixed", value: 25000 }, { default_commission_type: "fixed", default_commission_value: 25000 }],
-  [null, { default_commission_type: null, default_commission_value: null }],
-])("saves the artist default commission %j inside the workspace", async (input, stored) => {
+  [{ type: "percent", value: 1250, mode: "included" }, stored("percent", 1250, "included")],
+  [{ type: "percent", value: 1250, mode: "on_top", currency: null }, stored("percent", 1250, "on_top")],
+  [{ type: "fixed", value: 25000, mode: "on_top", currency: "EUR" }, stored("fixed", 25000, "on_top", "EUR")],
+  [{ type: "fixed", value: 30000, mode: "included", currency: "JPY" }, stored("fixed", 30000, "included", "JPY")],
+  [null, stored(null, null, null)],
+] as const)("saves the artist default commission %j inside the workspace", async (input, row) => {
   queue("artists", { data: { id: ARTIST }, error: null })
   expect(await updateArtistDefaultCommission(ARTIST, input)).toEqual({ success: true })
-  expect(table("artists").update).toHaveBeenCalledExactlyOnceWith(stored)
+  expect(table("artists").update).toHaveBeenCalledExactlyOnceWith(row)
   expect(table("artists").eq.mock.calls).toEqual([["id", ARTIST], ["workspace_id", WORKSPACE]])
   expect(mocks.revalidatePath).toHaveBeenCalledWith(`/dashboard/artists/${ARTIST}`)
 })
+
 it("artist default commission: witness, fixed copy, validation before backend access", async () => {
   queue("artists", { data: null, error: null })
   expect(await updateArtistDefaultCommission(ARTIST, null)).toEqual({ success: false, error: "Artist not found" })
   queue("artists", { data: null, error: { message: "secret provider detail" } })
   expect(await updateArtistDefaultCommission(ARTIST, null)).toEqual({ success: false, error: "Unable to save the default commission. Please try again." })
   vi.clearAllMocks()
-  for (const input of [{ type: "percent", value: 10001 }, { type: "tiered", value: 1 }, { type: "fixed", value: -1 }, { type: "fixed", value: 1.5 }]) {
-    expect((await updateArtistDefaultCommission(ARTIST, input)).success).toBe(false)
+  for (const input of [
+    { type: "percent", value: 10001, mode: "on_top" }, { type: "tiered", value: 1, mode: "on_top" },
+    { type: "fixed", value: -1, mode: "on_top", currency: "EUR" }, { type: "fixed", value: 1.5, mode: "on_top", currency: "EUR" },
+    { type: "fixed", value: 25000, mode: "on_top" }, { type: "fixed", value: 25000, mode: "on_top", currency: "CHF" },
+    { type: "percent", value: 1250, mode: "on_top", currency: "EUR" }, { type: "percent", value: 1250 }, { type: "percent", value: 1250, mode: "split" },
+  ]) {
+    expect((await updateArtistDefaultCommission(ARTIST, input as Parameters<typeof updateArtistDefaultCommission>[1])).success).toBe(false)
   }
   expect((await updateArtistDefaultCommission("nope", null)).error).toBe("Invalid artist ID")
   expect(mocks.from).not.toHaveBeenCalled()

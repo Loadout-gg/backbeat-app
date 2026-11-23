@@ -329,6 +329,8 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                 artistId={artist.id}
                 type={artist.default_commission_type}
                 value={artist.default_commission_value}
+                mode={artist.default_commission_mode}
+                currency={artist.default_commission_currency}
               />
             </div>
           </CardContent>

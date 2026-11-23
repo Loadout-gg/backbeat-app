@@ -5,28 +5,38 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { updateArtistDefaultCommission } from "@/lib/actions/artists"
-import { formatBookingFeeInput } from "@/lib/booking-fee"
+import { BOOKING_FEE_CURRENCIES, formatBookingFeeInput, type BookingFeeCurrency } from "@/lib/booking-fee"
 import {
-  COMMISSION_TYPES, formatBasisPoints, formatCommissionValue, parseCommissionPercent, parseMoneyAmount,
-  type CommissionType,
+  COMMISSION_MODES, COMMISSION_MODE_LABELS, DEFAULT_COMMISSION_MODE, artistDefaultCommission, formatArtistDefaultCommission,
+  formatBasisPoints, parseCommissionPercent, parseMoneyAmount,
+  type ArtistDefaultCommissionInput, type CommissionMode, type CommissionType,
 } from "@/lib/booking-finance"
 
 interface ArtistDefaultCommissionProps {
   artistId: string
   type?: string | null
   value?: number | null
+  mode?: string | null
+  currency?: string | null
 }
 
 const selectClass = "h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+const labelClass = "mb-1.5 block text-xs font-medium text-foreground"
+/** Preselected currency of a new fixed default (decision 12). */
+const INITIAL_CURRENCY: BookingFeeCurrency = "EUR"
 
-/** Default agency commission of an artist: type + value, no mode and no currency of its own. */
-export function ArtistDefaultCommission({ artistId, type, value }: ArtistDefaultCommissionProps) {
+/** Default agency commission of an artist: type, value and mode; a fixed amount has its own currency. */
+export function ArtistDefaultCommission({ artistId, type, value, mode, currency }: ArtistDefaultCommissionProps) {
   const router = useRouter()
-  const savedType = COMMISSION_TYPES.find((candidate) => candidate === type) ?? null
-  const saved = savedType && typeof value === "number" ? { type: savedType, value } : null
+  const saved = artistDefaultCommission({
+    default_commission_type: type, default_commission_value: value,
+    default_commission_mode: mode, default_commission_currency: currency,
+  })
   const [editing, setEditing] = useState(false)
   const [draftType, setDraftType] = useState<CommissionType | "">("")
   const [draftValue, setDraftValue] = useState("")
+  const [draftMode, setDraftMode] = useState<CommissionMode>(DEFAULT_COMMISSION_MODE)
+  const [draftCurrency, setDraftCurrency] = useState<BookingFeeCurrency>(INITIAL_CURRENCY)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState("")
   const [saving, setSaving] = useState(false)
@@ -34,7 +44,10 @@ export function ArtistDefaultCommission({ artistId, type, value }: ArtistDefault
 
   const startEdit = () => {
     setDraftType(saved?.type ?? "")
-    setDraftValue(!saved ? "" : saved.type === "percent" ? formatBasisPoints(saved.value) : formatBookingFeeInput(saved.value, "EUR"))
+    setDraftValue(!saved ? "" : saved.type === "percent" || !saved.currency
+      ? formatBasisPoints(saved.value) : formatBookingFeeInput(saved.value, saved.currency))
+    setDraftMode(saved?.mode ?? DEFAULT_COMMISSION_MODE)
+    setDraftCurrency(saved?.currency ?? INITIAL_CURRENCY)
     setError(null)
     setNotice("")
     setEditing(true)
@@ -43,16 +56,16 @@ export function ArtistDefaultCommission({ artistId, type, value }: ArtistDefault
   const save = async () => {
     if (inFlight.current) return
     setError(null)
-    let input: { type: CommissionType; value: number } | null = null
+    let input: ArtistDefaultCommissionInput = null
     if (draftType === "percent") {
       const percent = parseCommissionPercent(draftValue)
       if (!percent.success) { setError(percent.error); return }
-      input = { type: "percent", value: percent.data }
+      input = { type: "percent", value: percent.data, mode: draftMode, currency: null }
     } else if (draftType === "fixed") {
-      // No currency of its own: entered with two decimals, applied in each booking's fee currency.
-      const amount = parseMoneyAmount(draftValue, "EUR", "commission amount")
+      // Minor units of the chosen currency: two decimals for EUR, USD, GBP; whole numbers for JPY.
+      const amount = parseMoneyAmount(draftValue, draftCurrency, "commission amount")
       if (!amount.success) { setError(amount.error); return }
-      input = { type: "fixed", value: amount.data }
+      input = { type: "fixed", value: amount.data, mode: draftMode, currency: draftCurrency }
     }
     inFlight.current = true
     setSaving(true)
@@ -79,11 +92,7 @@ export function ArtistDefaultCommission({ artistId, type, value }: ArtistDefault
       {!editing ? (
         <div className="flex flex-wrap items-center gap-3">
           {saved ? (
-            <p className="font-medium">
-              {saved.type === "percent"
-                ? `${formatCommissionValue("percent", saved.value, null)} of the booking fee`
-                : `${formatCommissionValue("fixed", saved.value, null)} fixed, in each booking's fee currency`}
-            </p>
+            <p className="font-medium">{formatArtistDefaultCommission(saved)}</p>
           ) : (
             <p className="text-muted-foreground italic">Not specified</p>
           )}
@@ -95,7 +104,7 @@ export function ArtistDefaultCommission({ artistId, type, value }: ArtistDefault
         <div className="space-y-3">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="min-w-0">
-              <label htmlFor="artist-commission-type" className="mb-1.5 block text-xs font-medium text-foreground">Default commission type</label>
+              <label htmlFor="artist-commission-type" className={labelClass}>Default commission type</label>
               <select id="artist-commission-type" value={draftType} disabled={saving} className={selectClass}
                 onChange={(event) => { setDraftType(event.target.value as CommissionType | ""); setDraftValue(""); setError(null) }}>
                 <option value="">No default commission</option>
@@ -103,14 +112,32 @@ export function ArtistDefaultCommission({ artistId, type, value }: ArtistDefault
                 <option value="fixed">Fixed amount</option>
               </select>
             </div>
+            {draftType === "fixed" && (
+              <div className="min-w-0">
+                <label htmlFor="artist-commission-currency" className={labelClass}>Default commission currency</label>
+                <select id="artist-commission-currency" value={draftCurrency} disabled={saving} className={selectClass}
+                  onChange={(event) => { setDraftCurrency(event.target.value as BookingFeeCurrency); setError(null) }}>
+                  {BOOKING_FEE_CURRENCIES.map((code) => <option key={code} value={code}>{code}</option>)}
+                </select>
+              </div>
+            )}
             {draftType !== "" && (
               <div className="min-w-0">
-                <label htmlFor="artist-commission-value" className="mb-1.5 block text-xs font-medium text-foreground">
-                  {draftType === "percent" ? "Default commission percentage (%)" : "Default commission amount (booking fee currency)"}
+                <label htmlFor="artist-commission-value" className={labelClass}>
+                  {draftType === "percent" ? "Default commission percentage (%)" : `Default commission amount (${draftCurrency})`}
                 </label>
                 <Input id="artist-commission-value" type="text" inputMode="decimal" autoComplete="off" value={draftValue} disabled={saving}
                   aria-invalid={error !== null} aria-describedby="artist-commission-help"
                   onChange={(event) => { setDraftValue(event.target.value); setError(null) }} className="h-9 min-w-0 text-sm" />
+              </div>
+            )}
+            {draftType !== "" && (
+              <div className="min-w-0 sm:col-span-2">
+                <label htmlFor="artist-commission-mode" className={labelClass}>Default commission mode</label>
+                <select id="artist-commission-mode" value={draftMode} disabled={saving} className={selectClass}
+                  onChange={(event) => { setDraftMode(event.target.value as CommissionMode); setError(null) }}>
+                  {COMMISSION_MODES.map((option) => <option key={option} value={option}>{COMMISSION_MODE_LABELS[option]}</option>)}
+                </select>
               </div>
             )}
           </div>
@@ -125,7 +152,7 @@ export function ArtistDefaultCommission({ artistId, type, value }: ArtistDefault
       )}
       <p id="artist-commission-help" className="text-xs text-muted-foreground">
         Prefilled on new bookings of this artist and editable on each booking; existing bookings are not changed.
-        A fixed amount has no currency of its own: it is applied in the fee currency of each booking.
+        A fixed amount is prefilled only on bookings whose fee is in the same currency; nothing is converted.
       </p>
       {notice && <p role="status" className="text-sm text-foreground">{notice}</p>}
     </section>

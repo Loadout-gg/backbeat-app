@@ -1,7 +1,7 @@
 -- Read-only preflight for migration 007 (booking finance). One pure SELECT: catalog reads and
 -- row counts only, no row content. Run it before applying 007; it changes nothing.
 -- Expected on staging before 007: marker class "staging", 004 and 005 applied,
--- "007 objects present" = 0/9, and the last row READY_FOR_007.
+-- "007 objects present" = 0/11, and the last row READY_FOR_007.
 SELECT section, item, detail FROM (
   SELECT 1 AS ord, 'env' AS section, 'server' AS item,
          current_setting('server_version') || ' | current_date=' || current_date::text AS detail
@@ -39,10 +39,10 @@ SELECT section, item, detail FROM (
   SELECT 14, 'migration', '007 objects present',
          ((SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public'
              AND ((table_name = 'bookings' AND column_name IN ('commission_type', 'commission_value', 'commission_mode', 'tax_note'))
-               OR (table_name = 'artists' AND column_name IN ('default_commission_type', 'default_commission_value'))))
+               OR (table_name = 'artists' AND column_name IN ('default_commission_type', 'default_commission_value', 'default_commission_mode', 'default_commission_currency'))))
           + (CASE WHEN to_regclass('public.booking_payments') IS NULL THEN 0 ELSE 1 END)
           + (CASE WHEN to_regprocedure('public.backbeat_enforce_payment_currency()') IS NULL THEN 0 ELSE 1 END)
-          + (CASE WHEN to_regprocedure('public.backbeat_enforce_booking_fee_currency()') IS NULL THEN 0 ELSE 1 END))::text || '/9'
+          + (CASE WHEN to_regprocedure('public.backbeat_enforce_booking_fee_currency()') IS NULL THEN 0 ELSE 1 END))::text || '/11'
   UNION ALL
   SELECT 15, 'migration', 'rollback backup tables present',
          ((CASE WHEN to_regclass('public.booking_payments_rollback_backup') IS NULL THEN 0 ELSE 1 END)

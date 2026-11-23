@@ -23,7 +23,8 @@ import { allowedBookingTransitions, type BookingStatus } from "@/lib/booking-sta
 import { formatArtistBaseRate } from "@/lib/artist-base-rate";
 import {
   BOOKING_HAS_PAYMENTS_MESSAGE, COMMISSION_MODES, COMMISSION_MODE_LABELS, COMMISSION_WITHIN_FEE_MESSAGE, DEFAULT_COMMISSION_MODE,
-  MAX_TAX_NOTE_LENGTH, bookingCommission, formatBasisPoints, parseCommissionPercent, parseMoneyAmount,
+  MAX_TAX_NOTE_LENGTH, artistDefaultCommission, bookingCommission, defaultCommissionPrefill, formatArtistDefaultCommission,
+  formatBasisPoints, parseCommissionPercent, parseMoneyAmount,
   type BookingPayment, type CommissionMode, type CommissionType,
 } from "@/lib/booking-finance";
 import { BookingPayments, useBookingPaymentsState } from "./booking-payments";
@@ -81,6 +82,46 @@ export function EventBookingClient({ booking, artistBookings, today, payments = 
   const [commissionMode, setCommissionMode] = useState<CommissionMode>(savedCommission?.mode ?? DEFAULT_COMMISSION_MODE);
   const [commissionDirty, setCommissionDirty] = useState(false);
   const [commissionError, setCommissionError] = useState<string | null>(null);
+  // A fixed artist default is in its own currency and a booking is created without a fee, so it
+  // is prefilled here, once, when a booking that never had a fee gets one in that currency.
+  // After the first saved fee the default is never offered again: an emptied commission stays empty.
+  const artistDefault = artistDefaultCommission(booking.artist);
+  const fixedDefaultPending = !savedCommission && booking.fee_currency === null && artistDefault?.type === "fixed";
+  const [commissionPrefilled, setCommissionPrefilled] = useState(false);
+  const applyFixedDefault = (nextCurrency: string) => {
+    if (!fixedDefaultPending || !artistDefault) return false;
+    const prefill = defaultCommissionPrefill(artistDefault, nextCurrency || null);
+    if (prefill.status === "applied" && artistDefault.currency && (commissionPrefilled || (!commissionDirty && commissionType === ""))) {
+      setCommissionType("fixed");
+      setCommissionValue(formatBookingFeeInput(prefill.commission.value, artistDefault.currency));
+      setCommissionMode(prefill.commission.mode);
+      setCommissionDirty(true);
+      setCommissionPrefilled(true);
+      setCommissionError(null);
+      return true;
+    }
+    if (prefill.status !== "applied" && commissionPrefilled) {
+      // The untouched prefill does not follow the fee into another currency.
+      setCommissionType("");
+      setCommissionValue("");
+      setCommissionMode(DEFAULT_COMMISSION_MODE);
+      setCommissionDirty(false);
+      setCommissionPrefilled(false);
+      setCommissionError(null);
+      return true;
+    }
+    return false;
+  };
+  // Neutral notice about the artist's fixed default: prefilled, or not prefilled because the
+  // booking fee is in another currency (no conversion). Nothing is shown once a commission is saved.
+  const feeCurrencyDraft = BOOKING_FEE_CURRENCIES.find((code) => code === feeCurrency);
+  const commissionDefaultNotice = !artistDefault || artistDefault.type !== "fixed" || !artistDefault.currency || savedCommission
+    ? null
+    : commissionPrefilled
+      ? `Prefilled from the artist's default commission (${formatArtistDefaultCommission(artistDefault)}). Saved with Update booking.`
+      : commissionType === "" && feeCurrencyDraft && feeCurrencyDraft !== artistDefault.currency
+        ? `The artist's default commission (${formatArtistDefaultCommission(artistDefault)}) is not prefilled: it is in ${artistDefault.currency} and this booking's fee is in ${feeCurrencyDraft}.`
+        : null;
   const savedTaxNote = booking.tax_note ?? "";
   const [taxNote, setTaxNote] = useState(savedTaxNote);
   const hasPayments = !!payments && payments.length > 0;
@@ -268,6 +309,7 @@ export function EventBookingClient({ booking, artistBookings, today, payments = 
       }
       setFeeDirty(false);
       setCommissionDirty(false);
+      setCommissionPrefilled(false);
       setIsSaved(draftRevision.current === submittedRevision);
       router.refresh();
     } catch {
@@ -850,6 +892,7 @@ export function EventBookingClient({ booking, artistBookings, today, payments = 
                     value={feeCurrency}
                     onChange={(event) => {
                       setFeeCurrency(event.target.value); setFeeDirty(true); setFeeError(null);
+                      if (applyFixedDefault(event.target.value)) return;
                       // A fixed commission is an amount in the fee currency: re-read it in the new one.
                       if (commissionType === "fixed") setCommissionDirty(true);
                     }}
@@ -874,8 +917,8 @@ export function EventBookingClient({ booking, artistBookings, today, payments = 
 
               <h2 className="pt-4 text-base font-medium text-foreground">Agency commission</h2>
               <p id="booking-commission-help" className="text-sm text-muted-foreground">
-                Saved with Update booking. New bookings start from the artist&apos;s default commission, if one is set.
-                A fixed amount is in the booking fee currency.
+                Saved with Update booking. New bookings start from the artist&apos;s default commission, if one is set;
+                a fixed default applies only when the fee is in the same currency. A fixed amount is in the booking fee currency.
               </p>
               <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="min-w-0">
@@ -887,7 +930,7 @@ export function EventBookingClient({ booking, artistBookings, today, payments = 
                     value={commissionType}
                     onChange={(event) => {
                       setCommissionType(event.target.value as CommissionType | "");
-                      setCommissionValue(""); setCommissionDirty(true); setCommissionError(null);
+                      setCommissionValue(""); setCommissionDirty(true); setCommissionError(null); setCommissionPrefilled(false);
                     }}
                     disabled={isSaving}
                     aria-describedby="booking-commission-help"
@@ -909,7 +952,7 @@ export function EventBookingClient({ booking, artistBookings, today, payments = 
                       inputMode="decimal"
                       autoComplete="off"
                       value={commissionValue}
-                      onChange={(event) => { setCommissionValue(event.target.value); setCommissionDirty(true); setCommissionError(null); }}
+                      onChange={(event) => { setCommissionValue(event.target.value); setCommissionDirty(true); setCommissionError(null); setCommissionPrefilled(false); }}
                       disabled={isSaving}
                       aria-invalid={commissionError !== null}
                       aria-describedby={commissionError ? "booking-commission-help booking-commission-error" : "booking-commission-help"}
@@ -925,7 +968,7 @@ export function EventBookingClient({ booking, artistBookings, today, payments = 
                     <select
                       id="booking-commission-mode"
                       value={commissionMode}
-                      onChange={(event) => { setCommissionMode(event.target.value as CommissionMode); setCommissionDirty(true); setCommissionError(null); }}
+                      onChange={(event) => { setCommissionMode(event.target.value as CommissionMode); setCommissionDirty(true); setCommissionError(null); setCommissionPrefilled(false); }}
                       disabled={isSaving}
                       className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                     >
@@ -936,6 +979,9 @@ export function EventBookingClient({ booking, artistBookings, today, payments = 
               </div>
               {commissionError && (
                 <p id="booking-commission-error" role="alert" className="text-sm text-destructive">{commissionError}</p>
+              )}
+              {commissionDefaultNotice && (
+                <p id="booking-commission-default" className="text-sm text-muted-foreground">{commissionDefaultNotice}</p>
               )}
 
               <h2 className="pt-4 text-base font-medium text-foreground">

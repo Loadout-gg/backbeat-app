@@ -5,7 +5,7 @@
 -- outside that workspace; otherwise the affected checks report SKIP.
 -- Every write happens inside a block that is always rolled back: no row is changed and
 -- nothing is left behind. The report is the result of the final SELECT:
---   first row "SUMMARY | ALL PASS | pass=18 fail=0 skip=0", then one row per check.
+--   first row "SUMMARY | ALL PASS | pass=22 fail=0 skip=0", then one row per check.
 -- "FAILED" or "INCOMPLETE" in the summary means do not merge.
 DO $verify$
 DECLARE
@@ -18,7 +18,7 @@ DECLARE
   affected bigint;
 BEGIN
   PERFORM set_config('backbeat.finance_verify_report', '', false);
-  SELECT b.id, b.workspace_id, b.fee_currency INTO target
+  SELECT b.id, b.workspace_id, b.artist_id, b.fee_currency INTO target
     FROM public.bookings AS b
     WHERE EXISTS (SELECT 1 FROM public.workspace_members AS m
         WHERE m.workspace_id = b.workspace_id AND m.status = 'active')
@@ -142,6 +142,40 @@ BEGIN
     END;
     results := results || (CASE WHEN outcome = '23503' THEN 'PASS' ELSE 'FAIL' END
       || '|delete: booking with payments rejected|' || outcome || ' (expected 23503)');
+
+    -- Artist default commission: type, value and mode together; a currency only for fixed.
+    BEGIN
+      UPDATE public.artists SET default_commission_type = 'percent', default_commission_value = 1250,
+        default_commission_mode = 'included', default_commission_currency = NULL WHERE id = target.artist_id;
+      GET DIAGNOSTICS affected = ROW_COUNT;
+      outcome := 'rows=' || affected;
+    EXCEPTION WHEN OTHERS THEN outcome := SQLSTATE;
+    END;
+    results := results || (CASE WHEN outcome = 'rows=1' THEN 'PASS' ELSE 'FAIL' END
+      || '|artist default: percent with a mode and no currency stored|' || outcome);
+    BEGIN
+      UPDATE public.artists SET default_commission_currency = 'EUR' WHERE id = target.artist_id;
+      outcome := 'updated';
+    EXCEPTION WHEN OTHERS THEN outcome := SQLSTATE;
+    END;
+    results := results || (CASE WHEN outcome = '23514' THEN 'PASS' ELSE 'FAIL' END
+      || '|artist default: currency on a percent default rejected|' || outcome || ' (expected 23514)');
+    BEGIN
+      UPDATE public.artists SET default_commission_type = 'fixed', default_commission_value = 25000 WHERE id = target.artist_id;
+      outcome := 'updated';
+    EXCEPTION WHEN OTHERS THEN outcome := SQLSTATE;
+    END;
+    results := results || (CASE WHEN outcome = '23514' THEN 'PASS' ELSE 'FAIL' END
+      || '|artist default: fixed without a currency rejected|' || outcome || ' (expected 23514)');
+    BEGIN
+      UPDATE public.artists SET default_commission_type = 'fixed', default_commission_value = 25000,
+        default_commission_mode = 'on_top', default_commission_currency = 'JPY' WHERE id = target.artist_id;
+      GET DIAGNOSTICS affected = ROW_COUNT;
+      outcome := 'rows=' || affected;
+    EXCEPTION WHEN OTHERS THEN outcome := SQLSTATE;
+    END;
+    results := results || (CASE WHEN outcome = 'rows=1' THEN 'PASS' ELSE 'FAIL' END
+      || '|artist default: fixed with its own currency stored|' || outcome);
     RESET ROLE;
 
     -- Outsider: must neither see nor write payments of the workspace.

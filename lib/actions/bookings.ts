@@ -10,8 +10,8 @@ import { bookingTransitionBlock, canTransitionBooking, type BookingStatus, type 
 import { configuredCalendarDay } from "@/lib/calendar-day";
 import { createBookingSchema, updateBookingSchema, bookingStatusSchema, bookingIdSchema } from "@/lib/booking-validation";
 import {
-  BOOKING_HAS_PAYMENTS_MESSAGE, COMMISSION_TYPES, COMMISSION_WITHIN_FEE_MESSAGE, DEFAULT_COMMISSION_MODE,
-  FEE_CURRENCY_LOCKED_MESSAGE, MAX_COMMISSION_BASIS_POINTS,
+  BOOKING_HAS_PAYMENTS_MESSAGE, COMMISSION_WITHIN_FEE_MESSAGE, FEE_CURRENCY_LOCKED_MESSAGE,
+  artistDefaultCommission, defaultCommissionPrefill,
   type CommissionMode, type CommissionType,
 } from "@/lib/booking-finance";
 
@@ -62,6 +62,11 @@ export interface BookingWithArtist extends Booking {
     fee: number | null;
     currency: string | null;
     profile_image_url: string | null;
+    /** Only on the single-booking read (getBooking), after migration 007. */
+    default_commission_type?: string | null;
+    default_commission_value?: number | null;
+    default_commission_mode?: string | null;
+    default_commission_currency?: string | null;
   };
 }
 
@@ -170,10 +175,12 @@ export async function createBooking(formData: {
   const workspaceId = await getCurrentWorkspaceId();
 
   // The artist default commission is copied once, at creation; later edits of the default do
-  // not rewrite existing bookings. The default has no mode, so the copy starts as "on top".
-  const { data: artistDefault, error: artistError } = await supabase
+  // not rewrite existing bookings. A booking is created without a fee, so only a percent
+  // default can be copied here: a fixed default is in its own currency and is prefilled by
+  // the editor when the booking gets a fee in that currency (defaultCommissionPrefill).
+  const { data: artistRow, error: artistError } = await supabase
     .from("artists")
-    .select("id, default_commission_type, default_commission_value")
+    .select("id, default_commission_type, default_commission_value, default_commission_mode, default_commission_currency")
     .eq("id", formData.artistId)
     .eq("workspace_id", workspaceId)
     .maybeSingle();
@@ -181,12 +188,10 @@ export async function createBooking(formData: {
     console.error("Error reading the artist default commission:", artistError);
     return { success: false, error: "Unable to create booking. Please try again." };
   }
-  if (!artistDefault) return { success: false, error: "Artist not found" };
-  const defaultType = COMMISSION_TYPES.find((type) => type === artistDefault.default_commission_type);
-  const defaultValue: unknown = artistDefault.default_commission_value;
-  const commission = defaultType && typeof defaultValue === "number" && Number.isSafeInteger(defaultValue)
-    && defaultValue >= 0 && (defaultType === "fixed" || defaultValue <= MAX_COMMISSION_BASIS_POINTS)
-    ? { commission_type: defaultType, commission_value: defaultValue, commission_mode: DEFAULT_COMMISSION_MODE }
+  if (!artistRow) return { success: false, error: "Artist not found" };
+  const prefill = defaultCommissionPrefill(artistDefaultCommission(artistRow), null);
+  const commission = prefill.status === "applied"
+    ? { commission_type: prefill.commission.type, commission_value: prefill.commission.value, commission_mode: prefill.commission.mode }
     : {};
 
   const { data: booking, error } = await supabase
@@ -345,7 +350,8 @@ export async function getBooking(
     .select(
       `
       *,
-      artist:artists(id, stage_name, name, surname, location, fee, currency, profile_image_url)
+      artist:artists(id, stage_name, name, surname, location, fee, currency, profile_image_url,
+        default_commission_type, default_commission_value, default_commission_mode, default_commission_currency)
     `
     )
     .eq("id", bookingId)

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest"
 import {
-  MAX_PAYMENT_NOTE_LENGTH, MAX_TAX_NOTE_LENGTH, artistDefaultCommissionSchema, bookingCommission, bookingFinanceTotals,
-  commissionAmountMinor, createPaymentSchema, formatBasisPoints, formatCommissionValue, formatMinorAmount,
+  MAX_PAYMENT_NOTE_LENGTH, MAX_TAX_NOTE_LENGTH, artistDefaultCommission, artistDefaultCommissionSchema, bookingCommission,
+  bookingFinanceTotals, commissionAmountMinor, createPaymentSchema, defaultCommissionPrefill, formatArtistDefaultCommission,
+  formatBasisPoints, formatCommissionValue, formatMinorAmount,
   parseCommissionPercent, parseMoneyAmount, paymentCurrencyMatchesFee, updatePaymentSchema,
   type BookingCommission,
 } from "@/lib/booking-finance"
@@ -214,13 +215,76 @@ describe("validation", () => {
     expect(updateBookingSchema.safeParse({ tax_note: "t".repeat(MAX_TAX_NOTE_LENGTH) }).success).toBe(true)
     expect(updateBookingSchema.safeParse({ tax_note: "t".repeat(MAX_TAX_NOTE_LENGTH + 1) }).success).toBe(false)
   })
-  it("artist default commission: type + value, or null; no mode, no currency", () => {
+  it("artist default commission: type, value and mode together, or null (decision 13)", () => {
     expect(artistDefaultCommissionSchema.parse(null)).toBeNull()
-    expect(artistDefaultCommissionSchema.parse({ type: "percent", value: 1250 })).toEqual({ type: "percent", value: 1250 })
-    expect(artistDefaultCommissionSchema.parse({ type: "fixed", value: 25000 })).toEqual({ type: "fixed", value: 25000 })
+    expect(artistDefaultCommissionSchema.parse({ type: "percent", value: 1250, mode: "included" }))
+      .toEqual({ type: "percent", value: 1250, mode: "included", currency: null })
+    expect(artistDefaultCommissionSchema.parse({ type: "percent", value: 10000, mode: "on_top", currency: null }))
+      .toEqual({ type: "percent", value: 10000, mode: "on_top", currency: null })
     for (const input of [
-      { type: "percent", value: 10001 }, { type: "percent", value: -1 }, { type: "fixed", value: 1.5 }, { type: "tiered", value: 1 },
-      { type: "percent" }, { value: 5 }, { type: "percent", value: 5, mode: "on_top" }, { type: "fixed", value: 5, currency: "EUR" }, undefined,
+      { type: "percent", value: 1250 }, { type: "percent", mode: "on_top" }, { value: 5, mode: "on_top" },
+      { type: "percent", value: 5, mode: "split" }, { type: "tiered", value: 1, mode: "on_top" },
+      { type: "percent", value: 10001, mode: "on_top" }, { type: "percent", value: -1, mode: "on_top" },
+      { type: "percent", value: 12.5, mode: "on_top" }, { type: "percent", value: 5, mode: "on_top", extra: true }, undefined,
     ]) expect(artistDefaultCommissionSchema.safeParse(input).success).toBe(false)
+  })
+  it("artist default commission: a fixed default needs its own currency, a percent default has none (decision 12)", () => {
+    for (const currency of ["EUR", "USD", "GBP", "JPY"]) {
+      expect(artistDefaultCommissionSchema.parse({ type: "fixed", value: 25000, mode: "on_top", currency }))
+        .toEqual({ type: "fixed", value: 25000, mode: "on_top", currency })
+    }
+    expect(artistDefaultCommissionSchema.safeParse({ type: "fixed", value: 25000, mode: "on_top" }).error?.issues[0].message)
+      .toBe("Choose the currency of the fixed default commission")
+    expect(artistDefaultCommissionSchema.safeParse({ type: "percent", value: 1250, mode: "on_top", currency: "EUR" }).error?.issues[0].message)
+      .toBe("A percentage default commission has no currency")
+    for (const input of [
+      { type: "fixed", value: 25000, mode: "on_top", currency: null }, { type: "fixed", value: 25000, mode: "on_top", currency: "CHF" },
+      { type: "fixed", value: 1.5, mode: "on_top", currency: "EUR" }, { type: "fixed", value: MAX_BOOKING_FEE_MINOR + 1, mode: "on_top", currency: "EUR" },
+    ]) expect(artistDefaultCommissionSchema.safeParse(input).success).toBe(false)
+  })
+})
+
+describe("artist default commission and its prefill (decisions 12 and 13)", () => {
+  const row = (type: string | null, value: number | null, mode: string | null, currency: string | null = null) =>
+    ({ default_commission_type: type, default_commission_value: value, default_commission_mode: mode, default_commission_currency: currency })
+  const percentDefault = { type: "percent", value: 1250, mode: "included", currency: null } as const
+  const eurDefault = { type: "fixed", value: 25000, mode: "on_top", currency: "EUR" } as const
+  const jpyDefault = { type: "fixed", value: 30000, mode: "included", currency: "JPY" } as const
+
+  it("reads a complete stored default and treats anything inconsistent as no default", () => {
+    expect(artistDefaultCommission(row("percent", 1250, "included"))).toEqual(percentDefault)
+    expect(artistDefaultCommission(row("fixed", 25000, "on_top", "EUR"))).toEqual(eurDefault)
+    expect(artistDefaultCommission(row("fixed", 30000, "included", "JPY"))).toEqual(jpyDefault)
+    for (const stored of [
+      null, undefined, {}, row(null, null, null), row("percent", 1250, null), row("percent", null, "on_top"),
+      row("percent", 10001, "on_top"), row("percent", 1250, "on_top", "EUR"), row("fixed", 25000, "on_top"),
+      row("fixed", 25000, "on_top", "CHF"), row("fixed", 25000, "split", "EUR"), row("tiered", 1, "on_top"),
+      row("fixed", -1, "on_top", "EUR"), row("fixed", 1.5, "on_top", "EUR"), row(null, null, null, "EUR"),
+    ]) expect(artistDefaultCommission(stored)).toBeNull()
+  })
+  it("a percent default always applies, with the mode chosen on the artist", () => {
+    for (const feeCurrency of [null, undefined, "", "EUR", "JPY"]) {
+      expect(defaultCommissionPrefill(percentDefault, feeCurrency))
+        .toEqual({ status: "applied", commission: { type: "percent", value: 1250, mode: "included" } })
+    }
+  })
+  it("a fixed default applies only when the booking fee is in the default currency", () => {
+    expect(defaultCommissionPrefill(eurDefault, "EUR")).toEqual({ status: "applied", commission: { type: "fixed", value: 25000, mode: "on_top" } })
+    expect(defaultCommissionPrefill(jpyDefault, "JPY")).toEqual({ status: "applied", commission: { type: "fixed", value: 30000, mode: "included" } })
+  })
+  it.each([["EUR", "JPY"], ["EUR", "USD"], ["EUR", "GBP"], ["JPY", "EUR"]] as const)(
+    "a %s fixed default prefills nothing on a %s booking: no conversion, no reinterpretation of minor units", (defaultCurrency, feeCurrency) => {
+      const artistDefault = defaultCurrency === "EUR" ? eurDefault : jpyDefault
+      expect(defaultCommissionPrefill(artistDefault, feeCurrency)).toEqual({ status: "currency_mismatch", currency: defaultCurrency })
+    })
+  it("a fixed default waits for a fee currency, and no default prefills nothing", () => {
+    expect(defaultCommissionPrefill(eurDefault, null)).toEqual({ status: "awaiting_fee_currency", currency: "EUR" })
+    expect(defaultCommissionPrefill(jpyDefault, "")).toEqual({ status: "awaiting_fee_currency", currency: "JPY" })
+    expect(defaultCommissionPrefill(null, "EUR")).toEqual({ status: "none" })
+  })
+  it("describes a default with its own currency and mode; JPY has no decimals", () => {
+    expect(formatArtistDefaultCommission(percentDefault)).toBe("12.5%, included in the fee")
+    expect(formatArtistDefaultCommission(eurDefault)).toBe("EUR 250.00, on top of the fee")
+    expect(formatArtistDefaultCommission(jpyDefault)).toBe("JPY 30,000, included in the fee")
   })
 })

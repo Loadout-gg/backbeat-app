@@ -12,11 +12,11 @@ WITH checks(ord, item, ok, detail) AS (
       'bookings_commission_set_check', 'bookings_commission_value_check',
       'bookings_commission_within_fee_check', 'bookings_tax_note_check')
   UNION ALL
-  SELECT 3, 'artists: default commission columns', count(*) = 2, count(*)::text || '/2'
+  SELECT 3, 'artists: default commission columns', count(*) = 4, count(*)::text || '/4'
   FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'artists'
-    AND column_name IN ('default_commission_type', 'default_commission_value')
+    AND column_name IN ('default_commission_type', 'default_commission_value', 'default_commission_mode', 'default_commission_currency')
   UNION ALL
-  SELECT 4, 'artists: default commission CHECKs', count(*) = 3, count(*)::text || '/3'
+  SELECT 4, 'artists: default commission CHECKs', count(*) = 6, count(*)::text || '/6'
   FROM pg_constraint WHERE conrelid = to_regclass('public.artists') AND contype = 'c'
     AND conname LIKE 'artists\_default\_commission\_%'
   UNION ALL

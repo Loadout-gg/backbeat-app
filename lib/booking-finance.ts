@@ -18,7 +18,7 @@ export type PaymentKind = (typeof PAYMENT_KINDS)[number]
 export const MAX_COMMISSION_BASIS_POINTS = 10000
 export const MAX_TAX_NOTE_LENGTH = 2000
 export const MAX_PAYMENT_NOTE_LENGTH = 500
-/** Mode stored with a commission prefilled from the artist default (the default has no mode). */
+/** Mode preselected when a commission is first entered by hand, on a booking or on an artist. */
 export const DEFAULT_COMMISSION_MODE: CommissionMode = "on_top"
 
 // Fixed user-facing copy shared by server actions and the editor (never a provider message).
@@ -137,8 +137,8 @@ export function formatBasisPoints(basisPoints: number): string {
 
 export function formatCommissionValue(type: CommissionType, value: number, currency: BookingFeeCurrency | null): string {
   if (type === "percent") return `${formatBasisPoints(value)}%`
-  // A fixed artist default has no currency of its own; so does a fixed commission on a booking
-  // that has no fee yet. Both are shown as a plain two-decimal number without a code.
+  // A fixed commission on a booking that has no fee yet has no currency to show: it is
+  // displayed as a plain two-decimal number without a code.
   return currency ? formatMinorAmount(value, currency) : formatBookingFeeInput(value, "EUR")
 }
 
@@ -209,15 +209,92 @@ export function validateBookingCommission(value: CommissionPatch, context: z.Ref
   }
 }
 
-/** Artist default commission: type and value only, or null to clear. */
+export const DEFAULT_CURRENCY_REQUIRED_MESSAGE = "Choose the currency of the fixed default commission"
+export const DEFAULT_CURRENCY_FORBIDDEN_MESSAGE = "A percentage default commission has no currency"
+/**
+ * Artist default commission, or null to clear: type, value and mode together (decision 13).
+ * A fixed default carries its own currency and its value is in minor units of that currency;
+ * a percent default has none (decision 12).
+ */
 export const artistDefaultCommissionSchema = z.object({
   type: z.enum(COMMISSION_TYPES, "Choose a commission type"),
   value: commissionValue,
-}).strict().refine(
-  (value) => value.type !== "percent" || value.value <= MAX_COMMISSION_BASIS_POINTS,
-  { path: ["value"], message: COMMISSION_PERCENT_MESSAGE },
-).nullable()
-export type ArtistDefaultCommission = z.infer<typeof artistDefaultCommissionSchema>
+  mode: z.enum(COMMISSION_MODES, "Choose a commission mode"),
+  currency: z.enum(BOOKING_FEE_CURRENCIES, "Choose a supported currency").nullable().optional(),
+}).strict().superRefine((value, context) => {
+  if (value.type === "percent" && value.value > MAX_COMMISSION_BASIS_POINTS) {
+    context.addIssue({ code: "custom", path: ["value"], message: COMMISSION_PERCENT_MESSAGE })
+  }
+  if (value.type === "fixed" && value.currency == null) {
+    context.addIssue({ code: "custom", path: ["currency"], message: DEFAULT_CURRENCY_REQUIRED_MESSAGE })
+  }
+  if (value.type === "percent" && value.currency != null) {
+    context.addIssue({ code: "custom", path: ["currency"], message: DEFAULT_CURRENCY_FORBIDDEN_MESSAGE })
+  }
+}).transform((value) => ({ ...value, currency: value.currency ?? null })).nullable()
+export type ArtistDefaultCommissionInput = z.input<typeof artistDefaultCommissionSchema>
+export type ArtistDefaultCommission = {
+  type: CommissionType
+  value: number
+  mode: CommissionMode
+  /** Set exactly when the type is fixed. */
+  currency: BookingFeeCurrency | null
+}
+
+type ArtistDefaultRow = {
+  default_commission_type?: string | null
+  default_commission_value?: number | null
+  default_commission_mode?: string | null
+  default_commission_currency?: string | null
+}
+/** Reads the stored default defensively; anything incomplete or inconsistent is "no default". */
+export function artistDefaultCommission(row: ArtistDefaultRow | null | undefined): ArtistDefaultCommission | null {
+  if (!row) return null
+  const type = COMMISSION_TYPES.find((value) => value === row.default_commission_type)
+  const mode = COMMISSION_MODES.find((value) => value === row.default_commission_mode)
+  const value = row.default_commission_value
+  if (!type || !mode || typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) return null
+  if (type === "percent") {
+    return value <= MAX_COMMISSION_BASIS_POINTS && row.default_commission_currency == null
+      ? { type, value, mode, currency: null } : null
+  }
+  const currency = BOOKING_FEE_CURRENCIES.find((code) => code === row.default_commission_currency)
+  return currency && value <= MAX_BOOKING_FEE_MINOR ? { type, value, mode, currency } : null
+}
+
+export type DefaultCommissionPrefill =
+  | { status: "none" }
+  | { status: "applied"; commission: BookingCommission }
+  /** Fixed default, and the booking has no fee currency yet. */
+  | { status: "awaiting_fee_currency"; currency: BookingFeeCurrency }
+  /** Fixed default in another currency than the booking fee: nothing is prefilled. */
+  | { status: "currency_mismatch"; currency: BookingFeeCurrency }
+
+/**
+ * What a new booking takes from the artist default. A percent default always applies.
+ * A fixed default applies only when the booking fee currency equals the default currency:
+ * there is no conversion, so any other currency prefills nothing.
+ */
+export function defaultCommissionPrefill(
+  artistDefault: ArtistDefaultCommission | null,
+  feeCurrency: string | null | undefined,
+): DefaultCommissionPrefill {
+  if (!artistDefault) return { status: "none" }
+  const commission = { type: artistDefault.type, value: artistDefault.value, mode: artistDefault.mode }
+  if (artistDefault.type === "percent" || artistDefault.currency === null) {
+    return artistDefault.type === "percent" ? { status: "applied", commission } : { status: "none" }
+  }
+  if (!feeCurrency) return { status: "awaiting_fee_currency", currency: artistDefault.currency }
+  return feeCurrency === artistDefault.currency
+    ? { status: "applied", commission }
+    : { status: "currency_mismatch", currency: artistDefault.currency }
+}
+
+/** "12.5%, on top of the fee" or "EUR 250.00, included in the fee". */
+export function formatArtistDefaultCommission(artistDefault: ArtistDefaultCommission): string {
+  return `${formatCommissionValue(artistDefault.type, artistDefault.value, artistDefault.currency)}, ${
+    artistDefault.mode === "on_top" ? "on top of the fee" : "included in the fee"}`
+}
 
 const optionalDate = (message: string) => z.string().date(message).nullable().optional()
 const paymentNote = z.string().trim()
