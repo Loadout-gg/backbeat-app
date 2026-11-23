@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { updateEvent, type EventDetail, type EventUpdateInput } from "@/lib/actions/events"
+import { updateEvent, type EventDetail, type EventUpdateInput, type PromoterOption } from "@/lib/actions/events"
 import { DeleteEvent } from "./delete-event"
 
 type Option = { id: string; label: string }
@@ -20,7 +20,47 @@ const STATUSES = [
 ] as const
 const UNCONFIRMED = "Unable to confirm whether the event was saved. Check the event list before retrying."
 
-export function EventEditClient({ event, artists, promoters }: { event: EventDetail; artists: Option[]; promoters: Option[] }) {
+/** The event's saved promoter: a directory entry, none, or a link whose entry is no longer listed. */
+export type LinkedPromoter = PromoterOption | null | "missing"
+
+function EventPromoterCard({ promoter }: { promoter: LinkedPromoter }) {
+  return (
+    <Card className="max-w-2xl">
+      <CardHeader>
+        <h2 className="leading-none font-semibold">Promoter</h2>
+        <CardDescription>The promoter saved on this event, from your promoter directory.</CardDescription>
+      </CardHeader>
+      <CardContent className="[overflow-wrap:anywhere]">
+        {promoter === null ? (
+          <p className="text-sm text-muted-foreground">No promoter is linked to this event.</p>
+        ) : promoter === "missing" ? (
+          <p className="text-sm text-muted-foreground">The linked promoter is no longer in your promoter directory.</p>
+        ) : (
+          <dl className="space-y-3 text-sm">
+            <div>
+              <dt className="text-muted-foreground">Person</dt>
+              <dd className="font-medium">
+                <Link
+                  href={`/dashboard/promoters/${promoter.id}/edit`}
+                  aria-label={`Open ${promoter.name} in the promoter directory`}
+                  className="rounded-sm underline underline-offset-4 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  {promoter.name}
+                </Link>
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Company</dt>
+              <dd>{promoter.company_name ?? "No company recorded"}</dd>
+            </div>
+          </dl>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+export function EventEditClient({ event, linkedPromoter, artists, promoters }: { event: EventDetail; linkedPromoter: LinkedPromoter; artists: Option[]; promoters: Option[] }) {
   const router = useRouter()
   const [title, setTitle] = useState(event.title)
   const [date, setDate] = useState(event.date)
@@ -71,6 +111,8 @@ export function EventEditClient({ event, artists, promoters }: { event: EventDet
           <p className="text-sm text-muted-foreground">View and edit this event</p>
         </div>
       </div>
+
+      <EventPromoterCard promoter={linkedPromoter} />
 
       <Card className="max-w-2xl">
         <CardHeader>
