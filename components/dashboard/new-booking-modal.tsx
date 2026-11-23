@@ -28,6 +28,8 @@ interface NewBookingModalProps {
   existingBookings?: readonly Booking[] | null;
   /** Server "today" (configured calendar zone) for the non-blocking past-date hint. */
   calendarToday?: string;
+  /** Page the modal was opened from; closing the confirmation stays there. */
+  returnTo?: "dashboard" | "artist";
 }
 
 export function NewBookingModal({
@@ -36,6 +38,7 @@ export function NewBookingModal({
   preselectedArtist,
   existingBookings,
   calendarToday,
+  returnTo = "dashboard",
 }: NewBookingModalProps) {
   const router = useRouter();
   const [step, setStep] = useState<ModalStep>(
@@ -243,7 +246,7 @@ export function NewBookingModal({
       if (result.success && result.booking) {
         if (result.booking.artist_id !== submittedArtist.id) {
           setSaveError(
-            "Unable to confirm the saved booking. Check the calendar before retrying."
+            "Unable to confirm the saved booking. Check Bookings before retrying."
           );
           return;
         }
@@ -260,7 +263,7 @@ export function NewBookingModal({
     } catch {
       if (isCurrent()) {
         setSaveError(
-          "Unable to save booking. The result could not be confirmed; check the calendar before retrying."
+          "Unable to save booking. The result could not be confirmed. Your details are still here; check Bookings before saving again."
         );
       }
     } finally {
@@ -276,13 +279,15 @@ export function NewBookingModal({
     isCurrentSession(completion.session) &&
     lifecycle.current.saveRequest === completion.request;
 
-  const handleBackToDashboard = () => {
+  // Return to the page the user started from (dashboard or artist profile) and
+  // refresh its server data so the new booking is listed there.
+  const handleCloseConfirmation = () => {
     if (!hasCurrentCompletion()) return;
     handleOpenChange(false);
-    router.push("/dashboard");
+    router.refresh();
   };
 
-  const handleStartEventSetup = () => {
+  const handleOpenBooking = () => {
     if (!hasCurrentCompletion() || !completion) return;
     const bookingId = completion.booking.id;
     handleOpenChange(false);
@@ -323,6 +328,9 @@ export function NewBookingModal({
   const sameDayNotice = draftArtist && date && existingBookings === null
     ? "Other bookings for this date could not be checked."
     : sameDayCount > 0 ? sameDayWarning(sameDayCount) : null;
+  // Upcoming calendar = today or later in the configured zone; unknown "today" promises neither.
+  const createdIsPast = Boolean(createdBooking && calendarToday && isPastBookingDate(createdBooking.date, calendarToday));
+  const createdIsUpcoming = Boolean(createdBooking && calendarToday && !createdIsPast);
   const dateNoticeIds = [
     isPastDate ? "new-booking-past-date" : "",
     sameDayNotice ? "new-booking-same-day" : "",
@@ -517,7 +525,7 @@ export function NewBookingModal({
                     </div>
                     {isPastDate && (
                       <p id="new-booking-past-date" role="status" className="mt-2 text-sm text-muted-foreground">
-                        This date is in the past. You can still save the booking.
+                        This date is in the past. You can still save the booking; it will be listed in Bookings, not in the upcoming calendar.
                       </p>
                     )}
                     {sameDayNotice && (
@@ -583,7 +591,7 @@ export function NewBookingModal({
               {isSaving && (
                 <p role="status" className="mt-4 text-sm text-muted-foreground">
                   Closing this dialog does not cancel a submitted booking.
-                  Check the calendar before submitting again.
+                  Check Bookings before submitting again.
                 </p>
               )}
               {/* Save button */}
@@ -605,7 +613,7 @@ export function NewBookingModal({
           <div className="px-8 py-10">
             <div className="flex justify-end -mt-4 -mr-2 mb-2">
               <button
-                onClick={handleBackToDashboard}
+                onClick={handleCloseConfirmation}
                 className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                 aria-label="Close"
               >
@@ -628,9 +636,16 @@ export function NewBookingModal({
 
             <div className="border border-border rounded-lg p-8">
               {/* Title */}
-              <h2 className="text-2xl font-semibold text-foreground text-center mb-8 text-balance">
-                {"Booking successfully added to Artist\u2019s calendar!"}
+              <h2 className="text-2xl font-semibold text-foreground text-center mb-3 text-balance">
+                {`Booking saved for ${selectedArtist.stage_name} on ${formatBookingDate(createdBooking.date)}`}
               </h2>
+              <p className="mb-8 text-center text-sm text-muted-foreground">
+                {createdIsPast
+                  ? "This date is in the past, so the booking does not appear in the artist\u2019s upcoming calendar. Find it in Bookings."
+                  : createdIsUpcoming
+                    ? "It appears in the artist\u2019s upcoming calendar and in Bookings."
+                    : "Find it in Bookings."}
+              </p>
 
               <div className="border-t border-border pt-6 pb-6">
                 <div className="grid grid-cols-2 gap-8">
@@ -678,15 +693,15 @@ export function NewBookingModal({
                 <div className="flex items-center justify-center gap-4">
                   <Button
                     variant="outline"
-                    onClick={handleBackToDashboard}
+                    onClick={handleCloseConfirmation}
                   >
-                    Back to dashboard
+                    {returnTo === "artist" ? "Back to artist profile" : "Back to dashboard"}
                   </Button>
                   <Button
-                    onClick={handleStartEventSetup}
+                    onClick={handleOpenBooking}
                     className="bg-foreground text-background hover:bg-foreground/90"
                   >
-                    Start event setup
+                    Open booking
                   </Button>
                 </div>
               </div>

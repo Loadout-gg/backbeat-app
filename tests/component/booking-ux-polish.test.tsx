@@ -224,7 +224,7 @@ it("labels the note and search, and warns without blocking about past dates and 
   expect(screen.getByLabelText("Note").tagName).toBe("TEXTAREA")
   const date = screen.getByLabelText("Select date")
   fireEvent.change(date, { target: { value: "2026-11-10" } })
-  expect(screen.getByText("This date is in the past. You can still save the booking.")).toBeTruthy()
+  expect(screen.getByText("This date is in the past. You can still save the booking; it will be listed in Bookings, not in the upcoming calendar.")).toBeTruthy()
   expect(screen.queryByText(/already has/)).toBeNull()
   expect(date.getAttribute("aria-describedby")).toBe("new-booking-past-date")
   fireEvent.change(date, { target: { value: "2026-11-20" } })
