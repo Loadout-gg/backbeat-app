@@ -5,11 +5,11 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { redirect } from "next/navigation"
 
 const mocks = vi.hoisted(() => ({
-  getEvent: vi.fn(), updateEvent: vi.fn(), listPromoters: vi.fn(), listEvents: vi.fn(), getArtists: vi.fn(),
+  getEvent: vi.fn(), updateEvent: vi.fn(), deleteEvent: vi.fn(), listPromoters: vi.fn(), listEvents: vi.fn(), getArtists: vi.fn(),
   router: { push: vi.fn(), refresh: vi.fn() },
 }))
 vi.mock("@/lib/actions/events", () => ({
-  getEvent: mocks.getEvent, updateEvent: mocks.updateEvent, listPromoters: mocks.listPromoters, listEvents: mocks.listEvents,
+  getEvent: mocks.getEvent, updateEvent: mocks.updateEvent, deleteEvent: mocks.deleteEvent, listPromoters: mocks.listPromoters, listEvents: mocks.listEvents,
 }))
 vi.mock("@/lib/actions/artists", () => ({ getArtists: mocks.getArtists }))
 vi.mock("next/navigation", async (importOriginal) => ({
@@ -136,4 +136,51 @@ it("links each event in the list to its detail page", async () => {
   render(await EventsPage())
   expect(screen.getByRole("heading", { name: "Synthetic Night" })).toBeTruthy()
   expect(screen.getByRole("link", { name: "Synthetic Night" }).getAttribute("href")).toBe(`/dashboard/events/${ID}`)
+})
+
+it("deletes the event only after confirmation, then returns to the list", async () => {
+  mocks.deleteEvent.mockResolvedValue({ success: true })
+  render(await open())
+  expect(screen.getByText(/The artist, the promoter and any bookings are kept/)).toBeTruthy()
+  fireEvent.click(screen.getByRole("button", { name: "Delete event" }))
+  expect(mocks.deleteEvent).not.toHaveBeenCalled()
+  expect(screen.getByText("Delete Synthetic Night?")).toBeTruthy()
+  fireEvent.click(screen.getByRole("button", { name: "Yes, delete" }))
+  await waitFor(() => expect(mocks.router.push).toHaveBeenCalledWith("/dashboard/events"))
+  expect(mocks.deleteEvent).toHaveBeenCalledWith(ID)
+  expect(mocks.updateEvent).not.toHaveBeenCalled()
+})
+
+it("cancelling the delete confirmation deletes nothing", async () => {
+  render(await open())
+  fireEvent.click(screen.getByRole("button", { name: "Delete event" }))
+  const confirm = screen.getByText("Delete Synthetic Night?").parentElement as HTMLElement
+  fireEvent.click(confirm.querySelector("button:last-of-type") as HTMLButtonElement)
+  expect(screen.getByRole("button", { name: "Delete event" })).toBeTruthy()
+  expect(mocks.deleteEvent).not.toHaveBeenCalled()
+})
+
+it("shows a refused delete, stays on the page and allows a retry", async () => {
+  mocks.deleteEvent.mockResolvedValueOnce({ success: false, error: "Unable to delete the event. Please try again." })
+  mocks.deleteEvent.mockResolvedValueOnce({ success: true })
+  render(await open())
+  fireEvent.click(screen.getByRole("button", { name: "Delete event" }))
+  fireEvent.click(screen.getByRole("button", { name: "Yes, delete" }))
+  expect((await screen.findByRole("alert")).textContent).toBe("Unable to delete the event. Please try again.")
+  expect(mocks.router.push).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole("button", { name: "Yes, delete" }))
+  await waitFor(() => expect(mocks.router.push).toHaveBeenCalledWith("/dashboard/events"))
+})
+
+it("does not claim a delete when the call fails, and ignores duplicate clicks while it runs", async () => {
+  let reject: (error: Error) => void = () => {}
+  mocks.deleteEvent.mockImplementation(() => new Promise((_, fail) => { reject = fail }))
+  render(await open())
+  fireEvent.click(screen.getByRole("button", { name: "Delete event" }))
+  fireEvent.click(screen.getByRole("button", { name: "Yes, delete" }))
+  fireEvent.click(await screen.findByRole("button", { name: "Deleting..." }))
+  expect(mocks.deleteEvent).toHaveBeenCalledTimes(1)
+  await act(async () => { reject(new Error("network")) })
+  expect((await screen.findByRole("alert")).textContent).toContain("Unable to confirm whether the event was deleted")
+  expect(mocks.router.push).not.toHaveBeenCalled()
 })
