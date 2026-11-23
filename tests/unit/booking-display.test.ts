@@ -41,7 +41,7 @@ it.each([
 
 it("labels every existing status in sentence case and maps the events-page badge variants", () => {
   expect(BOOKING_STATUS_LABELS).toEqual({
-    in_progress: "In progress", confirmed: "Confirmed", cancelled: "Cancelled", completed: "Completed",
+    in_progress: "In progress", hold: "Hold", option: "Option", confirmed: "Confirmed", cancelled: "Cancelled", completed: "Completed",
   })
   expect(bookingStatusBadgeVariant("confirmed")).toBe("default")
   expect(bookingStatusBadgeVariant("in_progress")).toBe("secondary")

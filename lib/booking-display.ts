@@ -20,6 +20,8 @@ export function bookingArtistName(artist: ArtistNameSource): string {
 
 export const BOOKING_STATUS_LABELS: Record<BookingStatus, string> = {
   in_progress: "In progress",
+  hold: "Hold",
+  option: "Option",
   confirmed: "Confirmed",
   cancelled: "Cancelled",
   completed: "Completed",
@@ -31,6 +33,8 @@ export function bookingStatusBadgeVariant(status: BookingStatus) {
     case "confirmed":
       return "default" as const
     case "in_progress":
+    case "hold":
+    case "option":
       return "secondary" as const
     case "cancelled":
       return "destructive" as const
@@ -82,4 +86,45 @@ export function sameDayWarning(count: number): string {
   return count === 1
     ? "This artist already has another booking on this date."
     : `This artist already has ${count} other bookings on this date.`
+}
+
+/** Button copy for moving a booking to a status. */
+export const BOOKING_TRANSITION_LABELS: Record<BookingStatus, string> = {
+  in_progress: "Reopen as in progress",
+  hold: "Place on hold",
+  option: "Mark as option",
+  confirmed: "Confirm booking",
+  cancelled: "Cancel booking",
+  completed: "Mark as completed",
+}
+
+type HoldCandidate = {
+  id: string; artist_id: string; date: string; status: BookingStatus
+  created_at?: string | null; hold_expires_on?: string | null
+}
+
+/** Derived at read, never stored: a hold whose expiry date is before today. */
+export function isHoldExpired(booking: Pick<HoldCandidate, "status" | "hold_expires_on">, today: string): boolean {
+  return booking.status === "hold" && !!booking.hold_expires_on && booking.hold_expires_on < today
+}
+
+/**
+ * Derived hold priority: position among the holds of the same artist and date,
+ * ordered by creation time then id. Null when the booking is not a hold or is not in the list.
+ */
+export function holdRank<T extends HoldCandidate>(
+  bookings: readonly T[],
+  target: Pick<HoldCandidate, "id" | "artist_id" | "date" | "status">,
+): { rank: number; total: number } | null {
+  if (target.status !== "hold") return null
+  const holds = bookings
+    .filter((booking) => booking.status === "hold" && booking.artist_id === target.artist_id && booking.date === target.date)
+    .sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? "") || a.id.localeCompare(b.id))
+  const index = holds.findIndex((booking) => booking.id === target.id)
+  return index === -1 ? null : { rank: index + 1, total: holds.length }
+}
+
+/** Shown only when more than one hold competes for the same artist and date. */
+export function holdRankLabel(position: { rank: number; total: number } | null): string | null {
+  return position && position.total > 1 ? `Hold priority ${position.rank} of ${position.total}` : null
 }
