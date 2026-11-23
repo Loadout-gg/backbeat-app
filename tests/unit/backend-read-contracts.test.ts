@@ -441,7 +441,7 @@ const readers = [
     run: () => getBookings(),
     order: "date.asc,id.asc",
     status: null,
-    columns: "id,artist_id,date,start_time,status,hold_expires_on,created_at,venue_name,venue_address,artist:artists(stage_name,name)",
+    columns: "id,artist_id,date,start_time,duration_minutes,status,hold_expires_on,created_at,venue_name,venue_address,artist:artists(stage_name,name)",
   },
   {
     name: "dashboard bookings",
@@ -449,7 +449,7 @@ const readers = [
     run: () => getBookings({ fields: "dashboard" }),
     order: "date.asc,id.asc",
     status: null,
-    columns: "id,artist_id,date,start_time,status,venue_name,venue_address,artist:artists(stage_name,name)",
+    columns: "id,artist_id,date,start_time,duration_minutes,status,venue_name,venue_address,artist:artists(stage_name,name)",
   },
   {
     name: "artist calendar bookings",
@@ -457,7 +457,7 @@ const readers = [
     run: () => getBookings({ fields: "calendar" }),
     order: "date.asc,id.asc",
     status: null,
-    columns: "id,artist_id,date,start_time,status",
+    columns: "id,artist_id,date,start_time,duration_minutes,status",
   },
   {
     name: "events",

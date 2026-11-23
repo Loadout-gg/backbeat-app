@@ -92,13 +92,13 @@ beforeEach(() => {
 })
 
 const keys = (value: unknown) => Object.keys(value as object).sort()
-const PRIVATE = /notes|contact_|fee|driver_|workspace_id|event_type|expected_audience|updated_at|duration_minutes|surname|location|currency|profile_image_url/
+const PRIVATE = /notes|contact_|fee|driver_|workspace_id|event_type|expected_audience|updated_at|surname|location|currency|profile_image_url/
 
 describe("booking rows that reach the browser", () => {
   it("dashboard client receives only the card and same-day fields", async () => {
     const element = await DashboardPage() as ReactElement<{ bookings: Record<string, unknown>[] }>
     const [row] = element.props.bookings
-    expect(keys(row)).toEqual(["artist", "artist_id", "date", "id", "start_time", "status", "venue_address", "venue_name"])
+    expect(keys(row)).toEqual(["artist", "artist_id", "date", "duration_minutes", "id", "start_time", "status", "venue_address", "venue_name"])
     expect(keys(row.artist)).toEqual(["name", "stage_name"])
     expect(JSON.stringify(element.props.bookings)).not.toMatch(/private|Private|1234|500000/)
   })
@@ -106,14 +106,14 @@ describe("booking rows that reach the browser", () => {
   it("artist profile client receives only the calendar and same-day fields", async () => {
     const element = await ArtistPage({ params: Promise.resolve({ id: ARTIST }) }) as ReactElement<{ bookings: Record<string, unknown>[] }>
     const [row] = element.props.bookings
-    expect(keys(row)).toEqual(["artist_id", "date", "id", "start_time", "status"])
+    expect(keys(row)).toEqual(["artist_id", "date", "duration_minutes", "id", "start_time", "status"])
     expect(JSON.stringify(element.props.bookings)).not.toMatch(/private|Private|Synthetic venue/)
   })
 
   it("bookings list (server-rendered) reads only the card, badge and hold-rank fields", async () => {
     const [row] = await getBookings()
     expect(keys(row)).toEqual([
-      "artist", "artist_id", "created_at", "date", "hold_expires_on", "id", "start_time", "status", "venue_address", "venue_name",
+      "artist", "artist_id", "created_at", "date", "duration_minutes", "hold_expires_on", "id", "start_time", "status", "venue_address", "venue_name",
     ])
     expect(keys(row.artist)).toEqual(["name", "stage_name"])
   })

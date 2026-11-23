@@ -42,9 +42,9 @@ describe("bookings read projection", () => {
   it("keeps each list projection to the fields its caller renders", () => {
     const list = reads.filter(read => read.fn === "getBookings").map(read => read.columns)
     expect(list).toEqual([
-      "id,artist_id,date,start_time,status",
-      "id,artist_id,date,start_time,status,venue_name,venue_address,artist:artists(stage_name,name)",
-      "id,artist_id,date,start_time,status,hold_expires_on,created_at,venue_name,venue_address,artist:artists(stage_name,name)",
+      "id,artist_id,date,start_time,duration_minutes,status",
+      "id,artist_id,date,start_time,duration_minutes,status,venue_name,venue_address,artist:artists(stage_name,name)",
+      "id,artist_id,date,start_time,duration_minutes,status,hold_expires_on,created_at,venue_name,venue_address,artist:artists(stage_name,name)",
     ])
     expect(reads.find(read => read.fn === "createBooking")?.columns).toBe("id,artist_id,date")
   })

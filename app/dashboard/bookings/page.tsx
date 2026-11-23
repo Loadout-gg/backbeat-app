@@ -10,7 +10,7 @@ import {
   BOOKING_STATUS_LABELS,
   bookingArtistName,
   bookingStatusBadgeVariant,
-  formatBookingTime,
+  formatBookingTimeRange,
   holdRank,
   holdRankLabel,
   isHoldExpired,
@@ -48,7 +48,7 @@ function BookingRow({ booking, all, today }: { booking: BookingListItem; all: re
         artistName={bookingArtistName(booking.artist)}
         venue={booking.venue_name || ""}
         location={booking.venue_address || ""}
-        time={formatBookingTime(booking.start_time)}
+        time={formatBookingTimeRange(booking.start_time, booking.duration_minutes)}
       />
     </li>
   )

@@ -26,7 +26,7 @@ import { parseSocialLinks, parseDocuments, artistMetadataHref } from "@/lib/arti
 import { NewBookingModal } from "@/components/dashboard/new-booking-modal"
 import { RetryButton } from "@/components/retry-button"
 import { formatArtistBaseRate } from "@/lib/artist-base-rate"
-import { formatBookingTime } from "@/lib/booking-display"
+import { bookingTimeSortKey, formatBookingTimeRange } from "@/lib/booking-display"
 import { eventDateParts } from "@/lib/event-date-display"
 
 const UPCOMING_EVENTS_LIMIT = 5
@@ -148,15 +148,20 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
   const calendarEvents = [
     ...calendarBookings.map((booking) => ({
       id: `booking-${booking.id}`, date: parseISO(booking.date),
-      title: `${displayName} · Booking`, location: "", time: formatBookingTime(booking.start_time),
+      title: `${displayName} · Booking`, location: "",
+      time: formatBookingTimeRange(booking.start_time, booking.duration_minutes),
+      sortTime: bookingTimeSortKey(booking.start_time),
       href: `/dashboard/bookings/${booking.id}`,
       sameDayCount: bookingsPerDay.get(booking.date) ?? 1,
     })),
+    // Events store a date only: on a shared day they follow the timed bookings.
     ...events.filter(isUpcomingActive).map((event) => ({
       id: `event-${event.id}`, date: parseISO(event.date), title: event.title,
-      location: event.location || "", time: "", href: `/dashboard/events/${event.id}`, sameDayCount: 0,
+      location: event.location || "", time: "", sortTime: bookingTimeSortKey(null),
+      href: `/dashboard/events/${event.id}`, sameDayCount: 0,
     })),
-  ].sort((a, b) => a.date.getTime() - b.date.getTime() || a.time.localeCompare(b.time))
+  ].sort((a, b) =>
+    a.date.getTime() - b.date.getTime() || a.sortTime - b.sortTime || a.id.localeCompare(b.id))
   const hasCalendarItems = calendarEvents.length > 0
 
   // Overview: the artist's next active events (events only, not bookings), soonest first.
@@ -661,8 +666,9 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                           size="icon"
                           className="text-destructive"
                           disabled
+                          aria-label={`Delete ${doc.name} (not available yet)`}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 aria-hidden="true" className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>

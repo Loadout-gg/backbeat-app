@@ -97,7 +97,7 @@ it("shows persisted booking venue and address without substituting an artist cit
   expect(screen.getByRole("link", { name: "Continue setup" }).getAttribute("href")).toBe("/dashboard/bookings/synthetic-booking")
 })
 const booking = (overrides: Partial<BookingDashboardItem> = {}): BookingDashboardItem => ({
-  id: "synthetic-booking", artist_id: "synthetic-artist", date: "2030-01-02", start_time: "09:45",
+  id: "synthetic-booking", artist_id: "synthetic-artist", date: "2030-01-02", start_time: "09:45", duration_minutes: null,
   status: "in_progress", venue_name: null, venue_address: null, artist: null, ...overrides,
 })
 const props = { welcomeMessage: "Welcome back", stats: { eventsInProgress: 7, bookingsInProgress: 99, totalArtists: 12, totalPromoters: 5 }, eventsInProgress: [], bookings: [], calendarToday: "2026-11-14" }

@@ -56,19 +56,19 @@ export interface BookingWithArtist extends Booking {
 }
 
 // List projections (R17/F19): each caller receives only the fields it renders or
-// computes from. Notes, contacts, fees, workspace_id and the artist's fee never leave
+// computes from (duration_minutes: start–end and "next day" times, F20). Notes, contacts, fees, workspace_id and the artist's fee never leave
 // the server through a list read; the single-booking detail read (getBooking) is the
 // only wide read. Keep these in sync with tests/unit/bookings-read-projection.test.ts.
 const BOOKING_LIST_COLUMNS = {
-  calendar: "id,artist_id,date,start_time,status",
-  dashboard: "id,artist_id,date,start_time,status,venue_name,venue_address,artist:artists(stage_name,name)",
-  list: "id,artist_id,date,start_time,status,hold_expires_on,created_at,venue_name,venue_address,artist:artists(stage_name,name)",
+  calendar: "id,artist_id,date,start_time,duration_minutes,status",
+  dashboard: "id,artist_id,date,start_time,duration_minutes,status,venue_name,venue_address,artist:artists(stage_name,name)",
+  list: "id,artist_id,date,start_time,duration_minutes,status,hold_expires_on,created_at,venue_name,venue_address,artist:artists(stage_name,name)",
 } as const;
 const CREATED_BOOKING_COLUMNS = "id,artist_id,date";
 
 type BookingArtistName = { stage_name: string | null; name: string | null } | null;
 /** Artist profile calendar and the same-day notice of the new booking dialog. */
-export type BookingCalendarItem = Pick<Booking, "id" | "artist_id" | "date" | "start_time" | "status">;
+export type BookingCalendarItem = Pick<Booking, "id" | "artist_id" | "date" | "start_time" | "duration_minutes" | "status">;
 /** Dashboard "Bookings in progress" cards. */
 export type BookingDashboardItem = BookingCalendarItem &
   Pick<Booking, "venue_name" | "venue_address"> & { artist: BookingArtistName };
