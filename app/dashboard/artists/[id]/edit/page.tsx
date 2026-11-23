@@ -393,7 +393,7 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
                               updateField("currency", value)
                             }}
                           >
-                            <SelectTrigger aria-label="Artist currency" className="w-36">
+                            <SelectTrigger id="currency" aria-label="Artist currency" className="w-36">
                               <SelectValue placeholder="Currency unavailable" />
                             </SelectTrigger>
                             <SelectContent>
@@ -420,7 +420,7 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
                       <div>
                         <Label htmlFor="travel_fee">Travel fee</Label>
                         <Select value={formData.travel_fee} onValueChange={(value) => updateField("travel_fee", value)}>
-                          <SelectTrigger>
+                          <SelectTrigger id="travel_fee">
                             <SelectValue placeholder="Select an option" />
                           </SelectTrigger>
                           <SelectContent>
@@ -448,9 +448,9 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
                   <div className="border rounded-lg p-4 sm:p-6 space-y-4">
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 items-end">
                       <div>
-                        <Label>Type of link</Label>
+                        <Label htmlFor="social_link_type">Type of link</Label>
                         <Select value={newLinkType} onValueChange={setNewLinkType}>
-                          <SelectTrigger>
+                          <SelectTrigger id="social_link_type">
                             <SelectValue placeholder="Select an option" />
                           </SelectTrigger>
                           <SelectContent>
@@ -461,8 +461,8 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
                         </Select>
                       </div>
                       <div>
-                        <Label>Link</Label>
-                        <Input placeholder="Link" value={newLinkUrl} onChange={(e) => setNewLinkUrl(e.target.value)} />
+                        <Label htmlFor="social_link_url">Link</Label>
+                        <Input id="social_link_url" placeholder="Link" value={newLinkUrl} onChange={(e) => setNewLinkUrl(e.target.value)} />
                       </div>
                       <div />
                     </div>
@@ -504,8 +504,8 @@ export default function EditArtistPage({ params }: EditArtistPageProps) {
                       />
                     </div>
                     <div>
-                      <Label className="mb-3 block">Music genres</Label>
-                      <div className="grid grid-cols-5 gap-3">
+                      <Label id="genres-label" className="mb-3 block">Music genres</Label>
+                      <div role="group" aria-labelledby="genres-label" className="grid grid-cols-5 gap-3">
                         {MUSIC_GENRES.map((genre) => (
                           <div key={genre} className="flex items-center gap-2 border rounded-lg px-3 py-2">
                             <Checkbox

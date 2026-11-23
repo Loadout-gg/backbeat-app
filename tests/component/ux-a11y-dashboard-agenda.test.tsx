@@ -220,9 +220,12 @@ it.each([
 it("A4: the booking editor delete confirmation manages focus the same way", () => {
   render(<EventBookingClient booking={booking()} />)
   fireEvent.click(screen.getByRole("button", { name: /^Delete$/ }))
-  const group = screen.getByRole("group", { name: "Are you sure?" })
+  const group = screen.getByRole("group", { name: "Delete this booking?" })
+  expect(within(group).getByText("Delete this booking?")).toBeTruthy()
+  expect(within(group).queryByText("Are you sure?")).toBeNull()
   expect(document.activeElement).toBe(within(group).getByRole("button", { name: "Cancel" }))
   fireEvent.click(within(group).getByRole("button", { name: "Cancel" }))
+  expect(screen.queryByRole("group", { name: "Delete this booking?" })).toBeNull()
   expect(document.activeElement).toBe(screen.getByRole("button", { name: /^Delete$/ }))
 })
 
