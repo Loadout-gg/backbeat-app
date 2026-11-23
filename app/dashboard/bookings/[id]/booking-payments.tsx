@@ -9,7 +9,7 @@ import { RetryButton } from "@/components/retry-button";
 import { createBookingPayment, deleteBookingPayment, updateBookingPayment } from "@/lib/actions/booking-payments";
 import { formatBookingFeeInput, type BookingFeeCurrency } from "@/lib/booking-fee";
 import {
-  COMMISSION_MODE_LABELS, MAX_PAYMENT_NOTE_LENGTH, PAYMENT_KINDS, PAYMENT_KIND_LABELS, PAYMENT_NEEDS_FEE_MESSAGE,
+  COMMISSION_MODE_LABELS, MAX_PAYMENT_NOTE_LENGTH, PAYMENT_CURRENCY_PENDING_MESSAGE, PAYMENT_KINDS, PAYMENT_KIND_LABELS, PAYMENT_NEEDS_FEE_MESSAGE,
   bookingFinanceTotals, formatCommissionValue, formatMinorAmount, parseMoneyAmount,
   type BookingCommission, type BookingPayment, type PaymentKind,
 } from "@/lib/booking-finance";
@@ -26,6 +26,11 @@ interface BookingPaymentsProps {
   today?: string;
   /** Editor state owned by the booking editor, so it survives this panel unmounting on a tab change. */
   state: BookingPaymentsState;
+  /**
+   * The fee currency draft differs from the saved currency. A new payment would be recorded in
+   * the saved currency and then lock the fee currency at the unsaved draft, so none is recorded.
+   */
+  currencyChangePending?: boolean;
 }
 
 type Draft = { id: string | null; kind: PaymentKind; amount: string; dueOn: string; paidOn: string; note: string };
@@ -84,7 +89,7 @@ export function useBookingPaymentsState() {
 }
 export type BookingPaymentsState = ReturnType<typeof useBookingPaymentsState>;
 
-export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, payments, today, state }: BookingPaymentsProps) {
+export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, payments, today, state, currencyChangePending = false }: BookingPaymentsProps) {
   const { draft, setDraft, formError, setFormError, rowError, setRowError, notice, busy, confirmDelete, setConfirmDelete, run, unlessBusy } = state;
   const locked = busy !== null;
 
@@ -92,6 +97,7 @@ export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, 
 
   const submitDraft = async () => {
     if (!draft || !feeCurrency) return;
+    if (!draft.id && currencyChangePending) { setFormError(PAYMENT_CURRENCY_PENDING_MESSAGE); return; }
     const amount = parseMoneyAmount(draft.amount, feeCurrency, "payment amount", true);
     if (!amount.success) { setFormError(amount.error); return; }
     if (draft.dueOn && !DATE.test(draft.dueOn)) { setFormError("Enter a valid due date"); return; }
@@ -236,7 +242,10 @@ export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, 
         {payments !== null && !feeCurrency && (
           <p className="text-sm text-muted-foreground">{PAYMENT_NEEDS_FEE_MESSAGE}</p>
         )}
-        {payments !== null && feeCurrency && draft === null && (
+        {payments !== null && feeCurrency && currencyChangePending && (
+          <p className="text-sm text-muted-foreground">{PAYMENT_CURRENCY_PENDING_MESSAGE}</p>
+        )}
+        {payments !== null && feeCurrency && !currencyChangePending && draft === null && (
           <Button type="button" variant="outline" aria-disabled={locked}
             onClick={() => unlessBusy(() => { setFormError(null); setConfirmDelete(null); setDraft(EMPTY_DRAFT); })}>
             Add payment

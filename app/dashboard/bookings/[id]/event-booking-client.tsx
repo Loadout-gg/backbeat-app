@@ -1012,6 +1012,7 @@ export function EventBookingClient({ booking, artistBookings, today, payments = 
                 payments={payments}
                 today={today}
                 state={paymentsState}
+                currencyChangePending={feeCurrency !== (booking.fee_currency ?? "")}
               />
             </div>
           </TabsContent>

@@ -28,6 +28,8 @@ export const FEE_CURRENCY_LOCKED_MESSAGE =
   "The fee currency cannot be changed while payments are recorded for this booking. The fee amount can still be changed."
 export const PAYMENT_NEEDS_FEE_MESSAGE = "Set and save a booking fee before recording payments."
 export const PAYMENT_CURRENCY_MESSAGE = "A payment must be in the booking fee currency."
+export const PAYMENT_CURRENCY_PENDING_MESSAGE =
+  "Save or undo the fee currency change before recording a payment."
 
 export const COMMISSION_MODE_LABELS: Record<CommissionMode, string> = {
   on_top: "On top of the fee (the promoter pays fee + commission)",
