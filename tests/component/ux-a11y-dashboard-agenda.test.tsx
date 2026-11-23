@@ -52,7 +52,7 @@ const option = (id: string, stage_name: string) => ({
   location: null, base_rate: null, currency: null, profile_image_url: null,
 }) as unknown as ArtistOption
 
-function booking(overrides: Partial<Booking> & { stage?: string } = {}): Booking {
+function booking(overrides: Partial<Omit<Booking, "artist">> & { stage?: string } = {}): BookingWithArtist {
   const { stage = "DJ Moon", ...rest } = overrides
   return {
     fee_amount_minor: null, fee_currency: null, id: "booking-a", workspace_id: "workspace-a", artist_id: ARTIST_ID,
@@ -68,7 +68,7 @@ const dashboardProps = {
   welcomeMessage: "Welcome back",
   stats: { eventsInProgress: 0, bookingsInProgress: 0, totalArtists: 1, totalPromoters: 0 },
   eventsInProgress: [] as ReturnType<typeof event>[],
-  bookings: [] as Booking[],
+  bookings: [] as BookingWithArtist[],
   calendarToday: "2030-01-01",
 }
 
@@ -117,7 +117,7 @@ it("A1: names the add-artist close icon and the social-link remove icon", () => 
 })
 
 it("A1: names the booking editor close icon by its destination", () => {
-  render(<EventBookingClient booking={booking() as BookingWithArtist} />)
+  render(<EventBookingClient booking={booking()} />)
   expect(screen.getByRole("link", { name: "Close booking, back to Bookings" }).getAttribute("href")).toBe("/dashboard/bookings")
   expectEveryControlNamed()
 })
@@ -218,7 +218,7 @@ it.each([
 })
 
 it("A4: the booking editor delete confirmation manages focus the same way", () => {
-  render(<EventBookingClient booking={booking() as BookingWithArtist} />)
+  render(<EventBookingClient booking={booking()} />)
   fireEvent.click(screen.getByRole("button", { name: /^Delete$/ }))
   const group = screen.getByRole("group", { name: "Are you sure?" })
   expect(document.activeElement).toBe(within(group).getByRole("button", { name: "Cancel" }))

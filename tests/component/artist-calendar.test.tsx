@@ -139,7 +139,7 @@ it("keeps persisted occupancy separate from selection when occupied and empty da
 })
 it("reads scoped persisted calendar data and links the booking and the event to their own detail pages", async () => {
   render(await ArtistPage({ params: Promise.resolve({ id: artist.id }) }))
-  expect(mocks.getBookings).toHaveBeenCalledWith({ artistId: artist.id, failOnError: true })
+  expect(mocks.getBookings).toHaveBeenCalledWith({ artistId: artist.id, failOnError: true, fields: "calendar" })
   expect(mocks.listEvents).toHaveBeenCalledOnce()
   expect(mocks.listEvents).toHaveBeenCalledWith({ artistId: artist.id })
   expect(screen.getByRole("link", { name: /DJ Alice/ }).getAttribute("href")).toBe("/dashboard/bookings/booking-a")

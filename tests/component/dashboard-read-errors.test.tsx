@@ -18,7 +18,7 @@ beforeEach(() => {
 it("accepts genuinely empty successful reads without changing normal props", async () => {
   const result = await DashboardPage()
   expect(result.props).toEqual({ welcomeMessage: "Welcome back", stats: emptyStats, eventsInProgress: [], bookings: [], calendarToday: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) })
-  expect(bookings).toHaveBeenCalledWith({ failOnError: true })
+  expect(bookings).toHaveBeenCalledWith({ failOnError: true, fields: "dashboard" })
 })
 it.each(["events", "bookings", "stats", "user"] as const)("does not turn %s rejection into a successful dashboard", async name => {
   const failure = new Error("Synthetic reader failure")

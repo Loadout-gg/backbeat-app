@@ -59,7 +59,7 @@ it("shows dashboard booking times as HH:MM and falls back to the artist name", (
     stats={{ eventsInProgress: 0, bookingsInProgress: 0, totalArtists: 1, totalPromoters: 0 }}
     eventsInProgress={[]}
     calendarToday="2026-11-14"
-    bookings={[row({ artist: { ...row().artist!, stage_name: null, name: "Luna" } })]}
+    bookings={[{ id: "booking-a", artist_id: artistId, date: "2026-11-20", start_time: "21:30:00", duration_minutes: 60, status: "in_progress", venue_name: null, venue_address: null, artist: { stage_name: null, name: "Luna" } }]}
   />)
   const section = screen.getByRole("region", { name: "Bookings in progress" })
   expect(within(section).getByRole("heading", { name: "Luna" })).toBeTruthy()

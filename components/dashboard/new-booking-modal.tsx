@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getArtists, type ArtistOption } from "@/lib/actions/artists";
-import { createBooking, type Booking } from "@/lib/actions/bookings";
+import { createBooking, type BookingCalendarItem, type CreatedBooking } from "@/lib/actions/bookings";
 import { formatArtistBaseRate } from "@/lib/artist-base-rate";
 import { findSameDayBookings, isPastBookingDate, sameDayWarning } from "@/lib/booking-display";
 
@@ -25,7 +25,7 @@ interface NewBookingModalProps {
   onOpenChange: (open: boolean) => void;
   preselectedArtist?: ArtistOption | null;
   /** Bookings already loaded by the page; null when that read failed, omitted when not available. */
-  existingBookings?: readonly Booking[] | null;
+  existingBookings?: readonly Pick<BookingCalendarItem, "id" | "artist_id" | "date" | "status">[] | null;
   /** Server "today" (configured calendar zone) for the non-blocking past-date hint. */
   calendarToday?: string;
   /** Page the modal was opened from; closing the confirmation stays there. */
@@ -57,7 +57,7 @@ export function NewBookingModal({
   const [completion, setCompletion] = useState<{
     session: number;
     request: number;
-    booking: Booking;
+    booking: CreatedBooking;
     artist: ArtistOption;
   } | null>(null);
 

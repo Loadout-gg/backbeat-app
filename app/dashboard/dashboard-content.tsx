@@ -9,7 +9,7 @@ import { QuickActions } from "@/components/dashboard/quick-actions"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 import { NewBookingModal } from "@/components/dashboard/new-booking-modal"
-import { type Booking } from "@/lib/actions/bookings"
+import { type BookingDashboardItem } from "@/lib/actions/bookings"
 import { bookingArtistName, compareBookingSchedule, formatBookingTimeRange } from "@/lib/booking-display"
 
 /** The events panel is a short preview, not the full schedule. */
@@ -35,7 +35,7 @@ interface DashboardContentProps {
   welcomeMessage: string
   stats: DashboardStats
   eventsInProgress: Event[]
-  bookings: Booking[]
+  bookings: BookingDashboardItem[]
   calendarToday: string
 }
 
