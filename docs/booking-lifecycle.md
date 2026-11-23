@@ -63,5 +63,5 @@ Without step 3 the backup table stays until dropped by hand: `DROP TABLE public.
 ## Tests
 
 - `pnpm test`: transition matrix (36 pairs), compare-and-set, stale versus not found, fixed error copy, status control, hold expiry and priority, static migration contracts.
-- `PG_BIN=<postgresql-17 bin> sh tests/sql/run-local.sh`: applies 001–006 to a throwaway local cluster and executes the trigger matrix, insert rule, completed-date rule, untouched pre-existing rows, workspace isolation, rollback and restore. The `auth` schema there is a stub, so it does not prove hosted Auth or PostgREST behaviour. Not part of CI.
+- `PG_BIN=<postgresql-17 bin> sh tests/sql/run-local.sh` (it also runs the finance suite, see [booking finance](booking-finance.md)): applies 001–006 to a throwaway local cluster and executes the trigger matrix, insert rule, completed-date rule, untouched pre-existing rows, workspace isolation, rollback and restore. The `auth` schema there is a stub, so it does not prove hosted Auth or PostgREST behaviour. Not part of CI.
 - `tests/integration` and `tests/e2e` need an authorized synthetic stack.

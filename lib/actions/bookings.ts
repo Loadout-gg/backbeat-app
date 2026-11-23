@@ -9,6 +9,11 @@ import type { BookingFeeCurrency } from "@/lib/booking-fee";
 import { bookingTransitionBlock, canTransitionBooking, type BookingStatus, type BookingTransitionBlock } from "@/lib/booking-status";
 import { configuredCalendarDay } from "@/lib/calendar-day";
 import { createBookingSchema, updateBookingSchema, bookingStatusSchema, bookingIdSchema } from "@/lib/booking-validation";
+import {
+  BOOKING_HAS_PAYMENTS_MESSAGE, COMMISSION_TYPES, COMMISSION_WITHIN_FEE_MESSAGE, DEFAULT_COMMISSION_MODE,
+  FEE_CURRENCY_LOCKED_MESSAGE, MAX_COMMISSION_BASIS_POINTS,
+  type CommissionMode, type CommissionType,
+} from "@/lib/booking-finance";
 
 export interface Booking {
   fee_amount_minor: number | null;
@@ -28,6 +33,11 @@ export interface Booking {
   status: BookingStatus;
   /** Present after migration 006; only meaningful while status is "hold". */
   hold_expires_on?: string | null;
+  /** Present after migration 007. Percent values are basis points, fixed values minor units of the fee currency. */
+  commission_type?: CommissionType | null;
+  commission_value?: number | null;
+  commission_mode?: CommissionMode | null;
+  tax_note?: string | null;
   created_at: string;
   updated_at: string;
   artist?: {
@@ -63,7 +73,17 @@ const TRANSITION_BLOCK_MESSAGES: Record<BookingTransitionBlock, string> = {
 const BOOKING_NOT_FOUND = "Booking not found";
 const BOOKING_CHANGED_ELSEWHERE = "This booking was changed elsewhere. Reload and try again.";
 
-type ProviderError = { code?: string | null } | null;
+
+type ProviderError = { code?: string | null; message?: string | null } | null;
+/** Migration 007: BB005 fee currency locked by payments; 23514 on the commission-within-fee CHECK. */
+function financeErrorMessage(error: ProviderError): string | null {
+  if (error?.code === "BB005") return FEE_CURRENCY_LOCKED_MESSAGE;
+  // The provider message is only inspected for the constraint name, never returned.
+  if (error?.code === "23514" && error.message?.includes("bookings_commission_within_fee_check")) {
+    return COMMISSION_WITHIN_FEE_MESSAGE;
+  }
+  return null;
+}
 /** SQLSTATEs raised by backbeat_enforce_booking_status (migration 006). */
 function lifecycleErrorMessage(error: ProviderError): string | null {
   if (error?.code === "BB002") return TRANSITION_BLOCK_MESSAGES.not_allowed;
@@ -149,6 +169,26 @@ export async function createBooking(formData: {
 
   const workspaceId = await getCurrentWorkspaceId();
 
+  // The artist default commission is copied once, at creation; later edits of the default do
+  // not rewrite existing bookings. The default has no mode, so the copy starts as "on top".
+  const { data: artistDefault, error: artistError } = await supabase
+    .from("artists")
+    .select("id, default_commission_type, default_commission_value")
+    .eq("id", formData.artistId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (artistError) {
+    console.error("Error reading the artist default commission:", artistError);
+    return { success: false, error: "Unable to create booking. Please try again." };
+  }
+  if (!artistDefault) return { success: false, error: "Artist not found" };
+  const defaultType = COMMISSION_TYPES.find((type) => type === artistDefault.default_commission_type);
+  const defaultValue: unknown = artistDefault.default_commission_value;
+  const commission = defaultType && typeof defaultValue === "number" && Number.isSafeInteger(defaultValue)
+    && defaultValue >= 0 && (defaultType === "fixed" || defaultValue <= MAX_COMMISSION_BASIS_POINTS)
+    ? { commission_type: defaultType, commission_value: defaultValue, commission_mode: DEFAULT_COMMISSION_MODE }
+    : {};
+
   const { data: booking, error } = await supabase
     .from("bookings")
     .insert({
@@ -159,6 +199,7 @@ export async function createBooking(formData: {
       duration_minutes: formData.durationMinutes || null,
       notes: formData.notes || null,
       status: "in_progress",
+      ...commission,
     })
     .select(
       `
@@ -275,7 +316,8 @@ export async function deleteBooking(
 
   if (error) {
     console.error("Error deleting booking:", error);
-    return { success: false, error: "Unable to delete booking. Please try again." };
+    // 23503 = booking_payments_booking_fkey (ON DELETE RESTRICT, migration 007).
+    return { success: false, error: error.code === "23503" ? BOOKING_HAS_PAYMENTS_MESSAGE : "Unable to delete booking. Please try again." };
   }
   if (!changedBooking) return { success: false, error: BOOKING_NOT_FOUND };
 
@@ -323,6 +365,10 @@ export async function updateBooking(
   patch: {
     fee_amount_minor?: number | null;
     fee_currency?: string | null;
+    commission_type?: string | null;
+    commission_value?: number | null;
+    commission_mode?: string | null;
+    tax_note?: string | null;
     date?: string;
     start_time?: string;
     duration_minutes?: number | null;
@@ -367,6 +413,35 @@ export async function updateBooking(
     if (value !== undefined) dbPatch[field] = value;
   }
 
+  // Decision 6, application side: with payments recorded the fee amount may change but the
+  // currency may not (also not by clearing the fee). The database trigger (BB005) is the
+  // backstop for a payment recorded between this read and the write.
+  if (validation.data.fee_currency !== undefined) {
+    const { data: current, error: currentError } = await supabase
+      .from("bookings")
+      .select("id, fee_currency")
+      .eq("id", bookingId)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle();
+    if (currentError) {
+      console.error("Error reading the booking fee currency:", currentError);
+      return { success: false, error: "Unable to save booking. Please try again." };
+    }
+    if (!current) return { success: false, error: BOOKING_NOT_FOUND };
+    if ((current.fee_currency ?? null) !== validation.data.fee_currency) {
+      const { count, error: countError } = await supabase
+        .from("booking_payments")
+        .select("id", { count: "exact", head: true })
+        .eq("booking_id", bookingId)
+        .eq("workspace_id", workspaceId);
+      if (countError || typeof count !== "number") {
+        console.error("Error counting booking payments:", countError);
+        return { success: false, error: "Unable to save booking. Please try again." };
+      }
+      if (count > 0) return { success: false, error: FEE_CURRENCY_LOCKED_MESSAGE };
+    }
+  }
+
   const { data: changedBooking, error } = await supabase
     .from("bookings")
     .update(dbPatch)
@@ -383,7 +458,7 @@ export async function updateBooking(
       : null;
     return {
       success: false,
-      error: lifecycleErrorMessage(error) ?? holdExpiry ?? "Unable to save booking. Please try again.",
+      error: lifecycleErrorMessage(error) ?? financeErrorMessage(error) ?? holdExpiry ?? "Unable to save booking. Please try again.",
     };
   }
   if (!changedBooking) return { success: false, error: BOOKING_NOT_FOUND };
