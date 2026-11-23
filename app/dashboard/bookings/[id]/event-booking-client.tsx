@@ -939,7 +939,7 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
             {showDeleteConfirm ? (
               <div role="group" aria-labelledby={deleteQuestionId} className="flex flex-wrap items-center gap-2">
                 <span id={deleteQuestionId} className="text-sm text-muted-foreground">
-                  Are you sure?
+                  Delete this booking?
                 </span>
                 <Button
                   variant="destructive"
