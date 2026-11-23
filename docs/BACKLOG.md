@@ -72,7 +72,7 @@ Status values: `Proposed` (not yet discussed) · `Needs decision` · `Ready` · 
 - D0 + P1: done on staging (#29).
 - P2 finance (F14): in review in `feat/booking-p2-finance`; migration 007 to be applied on staging by Simone before the merge. Next after it: payment receipts via Storage (F15), then the remaining r02 phases (contacts/documents, travel/accommodation, booking → event).
 - Answered by Simone (P2, 2026-11-23): a fixed artist default has its own currency (decision 12) and the default carries a mode (decision 13); extra limits, plan differences, no artist delete action and the workspace cascade through payments are accepted.
-- Open for Simone (P2): a fixed artist default is prefilled by the booking editor when the booking's first fee is in the default currency, not at creation, because bookings are created without a fee.
+- Open for Simone (P2): a fixed artist default is prefilled by the booking editor when the booking's first fee is in the default currency, not at creation, because bookings are created without a fee; it is offered again after a fee is cleared and saved. Making it "once per booking" needs a new column on `bookings`.
 - Open for Alberto at release (P2): migration 007 and its production guard; money visible to every active member (r02 U3).
 - Open: production release of migrations 005/006 (Alberto). The 005/006 guard currently allows only development and staging targets.
 - Open: migration 004 applied on staging outside its guard paths (question for Alberto).

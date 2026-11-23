@@ -83,8 +83,11 @@ export function EventBookingClient({ booking, artistBookings, today, payments = 
   const [commissionDirty, setCommissionDirty] = useState(false);
   const [commissionError, setCommissionError] = useState<string | null>(null);
   // A fixed artist default is in its own currency and a booking is created without a fee, so it
-  // is prefilled here, once, when a booking that never had a fee gets one in that currency.
-  // After the first saved fee the default is never offered again: an emptied commission stays empty.
+  // is prefilled here: when a booking that currently has no saved fee and no saved commission
+  // gets a fee in that currency. While a fee is saved the default is not offered, so removing
+  // the commission of a priced booking sticks. Nothing durable records "the default was already
+  // offered": a booking whose fee was cleared and saved is again a booking without a fee, and
+  // the prefill (always visible, with its notice, and editable before saving) is offered again.
   const artistDefault = artistDefaultCommission(booking.artist);
   const fixedDefaultPending = !savedCommission && booking.fee_currency === null && artistDefault?.type === "fixed";
   const [commissionPrefilled, setCommissionPrefilled] = useState(false);

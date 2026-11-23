@@ -544,6 +544,20 @@ it("never prefills a booking that already has a saved fee or a saved commission"
   expect((withCommission.getByLabelText("Commission percentage (%)") as HTMLInputElement).value).toBe("10")
   expect(withCommission.queryByText(MISMATCH)).toBeNull()
 })
+it("offers the prefill by the booking's current state: saved again without a fee, it is offered again, visibly and editable", async () => {
+  // No column records that the default was already offered (docs/booking-finance.md, Known behaviour).
+  const panel = await open({ ...newBooking(eurDefault), updated_at: "2026-11-23T10:00:00Z", notes: "fee and commission were removed earlier" })
+  fireEvent.change(panel.getByLabelText("Booking fee currency"), { target: { value: "EUR" } })
+  expect(panel.getByText(MATCH)).toBeTruthy()
+  // The user can decline it before saving: nothing about a commission is then sent.
+  fireEvent.change(panel.getByLabelText("Commission type"), { target: { value: "" } })
+  expect(panel.queryByText(MATCH)).toBeNull()
+  fireEvent.change(panel.getByLabelText("Booking fee amount"), { target: { value: "1000" } })
+  await save()
+  expect(mocks.updateBooking).toHaveBeenCalledExactlyOnceWith("booking-a", expect.objectContaining({
+    fee_amount_minor: 100000, fee_currency: "EUR", commission_type: null, commission_value: null, commission_mode: null,
+  }))
+})
 it("shows the mismatch notice on a saved booking in another currency that has no commission", async () => {
   const panel = await open({ fee_amount_minor: 500000, fee_currency: "JPY", artist: { ...base.artist, ...eurDefault } })
   expect(panel.getByText(MISMATCH)).toBeTruthy()
