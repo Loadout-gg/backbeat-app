@@ -192,3 +192,43 @@ it("whitespace-only edits to trimmed fields are not sent as changes", async () =
   await save(view)
   expect(mocks.updateBooking.mock.calls[0][1]).toEqual({ start_time: "20:00" })
 })
+
+it("after an unconfirmed save, restoring a field to its loaded value is still sent until a save is confirmed", async () => {
+  const view = render(<EventBookingClient booking={{ ...base, fee_amount_minor: 10000, fee_currency: "EUR" }} today={TODAY} />)
+  const scope = within(view.container)
+  act(() => scope.getByRole("tab", { name: "Financial" }).focus())
+  const amount = await scope.findByLabelText("Booking fee amount")
+  fireEvent.change(amount, { target: { value: "200" } })
+  act(() => scope.getByRole("tab", { name: "Performance" }).focus())
+  fireEvent.change(await scope.findByLabelText("Venue name"), { target: { value: "Maybe Hall" } })
+  // The write may have committed, but its response is lost.
+  mocks.updateBooking.mockRejectedValueOnce(new Error("response lost"))
+  await save(view)
+  expect(mocks.updateBooking.mock.calls[0][1]).toEqual({ fee_amount_minor: 20000, fee_currency: "EUR", venue_name: "Maybe Hall" })
+  expect(scope.getByRole("alert").textContent).toContain("could not be confirmed")
+
+  // The user restores the loaded values: they must be written, not suppressed as "unchanged".
+  fireEvent.change(scope.getByLabelText("Venue name"), { target: { value: "Old Hall" } })
+  act(() => scope.getByRole("tab", { name: "Financial" }).focus())
+  fireEvent.change(await scope.findByLabelText("Booking fee amount"), { target: { value: "100" } })
+  await save(view)
+  expect(mocks.updateBooking.mock.calls[1][1]).toEqual({ fee_amount_minor: 10000, fee_currency: "EUR", venue_name: "Old Hall" })
+  expect(scope.getByRole("status").textContent).toBe("Booking saved.")
+
+  // Confirmed: the uncertainty is cleared and untouched fields are no longer sent.
+  act(() => scope.getByRole("tab", { name: "Performance" }).focus())
+  fireEvent.change(await scope.findByLabelText("Note", { exact: true }), { target: { value: "Only this" } })
+  await save(view)
+  expect(mocks.updateBooking.mock.calls[2][1]).toEqual({ notes: "Only this" })
+})
+
+it("a returned (not committed) failure does not make fields uncertain", async () => {
+  mocks.updateBooking.mockResolvedValueOnce({ success: false, error: "Unable to save booking. Please try again." })
+  const view = render(<EventBookingClient booking={base} today={TODAY} />)
+  fireEvent.change(within(view.container).getByLabelText("Venue name"), { target: { value: "Rejected Hall" } })
+  await save(view)
+  fireEvent.change(within(view.container).getByLabelText("Venue name"), { target: { value: "Old Hall" } })
+  fireEvent.change(within(view.container).getByLabelText("Note", { exact: true }), { target: { value: "New note" } })
+  await save(view)
+  expect(mocks.updateBooking.mock.calls[1][1]).toEqual({ notes: "New note" })
+})

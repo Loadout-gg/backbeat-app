@@ -101,6 +101,9 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
   const [statusChangedTo, setStatusChangedTo] = useState<BookingStatus | null>(null);
   const baseline = useRef<EditBaseline | null>(null);
   if (baseline.current === null) baseline.current = editBaseline(booking);
+  // Fields sent by a save whose outcome was not confirmed: their stored value is unknown,
+  // so they are resent with the current draft until a save is confirmed.
+  const uncertainFields = useRef(new Set<string>());
   const [holdExpiresOn, setHoldExpiresOn] = useState(booking.hold_expires_on ?? "");
 
   // Form state - Performance tab
@@ -227,7 +230,9 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
       setSaveError("Enter a valid booking date");
       return;
     }
-    const holdExpiryChanged = booking.status === "hold" && holdExpiresOn !== savedHoldExpiry;
+    const uncertain = uncertainFields.current;
+    const holdExpiryChanged = booking.status === "hold" &&
+      (holdExpiresOn !== savedHoldExpiry || uncertain.has("hold_expires_on"));
     if (holdExpiryChanged && holdExpiresOn && !createBookingSchema.shape.date.safeParse(holdExpiresOn).success) {
       setSaveError("Enter a valid hold expiry date");
       return;
@@ -246,8 +251,9 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
     // Send only what this editor changed since the values it loaded or last saved,
     // so a concurrent edit to another field is not overwritten with a stale copy.
     const saved = baseline.current ?? editBaseline(booking);
-    const feePatch = feeDirty && fee.success &&
-      (fee.data.fee_amount_minor !== saved.feeAmountMinor || fee.data.fee_currency !== saved.feeCurrency)
+    const send = (field: string, changed: boolean) => changed || uncertain.has(field);
+    const feePatch = feeDirty && fee.success && send("fee_amount_minor",
+      fee.data.fee_amount_minor !== saved.feeAmountMinor || fee.data.fee_currency !== saved.feeCurrency)
       ? fee.data : null;
     const submitted: EditBaseline = {
       date: bookingDate, startTime, durationMinutes, notes,
@@ -256,20 +262,22 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
       feeCurrency: feePatch ? feePatch.fee_currency : saved.feeCurrency,
     };
 
+    const patch = {
+      ...(send("date", bookingDate !== saved.date) ? { date: bookingDate } : {}),
+      ...(feePatch ?? {}),
+      ...(holdExpiryChanged ? { hold_expires_on: holdExpiresOn || null } : {}),
+      ...(send("start_time", startTime !== saved.startTime) ? { start_time: startTime } : {}),
+      ...(send("duration_minutes", durationMinutes !== saved.durationMinutes) ? { duration_minutes: durationMinutes || null } : {}),
+      ...(send("notes", notes !== saved.notes) ? { notes: notes || null } : {}),
+      ...(send("venue_name", !sameText(venueName, saved.venueName)) ? { venue_name: venueName } : {}),
+      ...(send("venue_address", !sameText(venueAddress, saved.venueAddress)) ? { venue_address: venueAddress } : {}),
+      ...(send("contact_name_main", !sameText(contactNameMain, saved.contactNameMain)) ? { contact_name_main: contactNameMain } : {}),
+      ...(send("contact_phone_main", !sameText(contactPhoneMain, saved.contactPhoneMain)) ? { contact_phone_main: contactPhoneMain } : {}),
+      ...(send("contact_email_main", !sameText(contactEmailMain, saved.contactEmailMain)) ? { contact_email_main: contactEmailMain } : {}),
+    };
+
     try {
-      const result = await updateBooking(booking.id, {
-        ...(bookingDate !== saved.date ? { date: bookingDate } : {}),
-        ...(feePatch ?? {}),
-        ...(holdExpiryChanged ? { hold_expires_on: holdExpiresOn || null } : {}),
-        ...(startTime !== saved.startTime ? { start_time: startTime } : {}),
-        ...(durationMinutes !== saved.durationMinutes ? { duration_minutes: durationMinutes || null } : {}),
-        ...(notes !== saved.notes ? { notes: notes || null } : {}),
-        ...(!sameText(venueName, saved.venueName) ? { venue_name: venueName } : {}),
-        ...(!sameText(venueAddress, saved.venueAddress) ? { venue_address: venueAddress } : {}),
-        ...(!sameText(contactNameMain, saved.contactNameMain) ? { contact_name_main: contactNameMain } : {}),
-        ...(!sameText(contactPhoneMain, saved.contactPhoneMain) ? { contact_phone_main: contactPhoneMain } : {}),
-        ...(!sameText(contactEmailMain, saved.contactEmailMain) ? { contact_email_main: contactEmailMain } : {}),
-      });
+      const result = await updateBooking(booking.id, patch);
       if (!result.success) {
         setSaveError(result.error === "Booking not found"
           ? UNAVAILABLE_SAVE
@@ -277,10 +285,13 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
         return;
       }
       baseline.current = submitted;
+      uncertain.clear();
       setFeeDirty(false);
       setIsSaved(draftRevision.current === submittedRevision);
       router.refresh();
     } catch {
+      // The write may have committed: keep these fields in every later save until one is confirmed.
+      for (const field of Object.keys(patch)) uncertain.add(field);
       setSaveError(UNCONFIRMED_SAVE);
     } finally {
       saveInFlight.current = false;
