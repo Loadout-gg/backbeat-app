@@ -53,6 +53,10 @@ export type Artist = {
 }
 
 
+// Explicit profile/list projection. artists.date_of_birth (migration 009) is sensitive and is
+// read only by lib/actions/artist-travel-documents.ts: never add it here, never select "*".
+const ARTIST_COLUMNS = "id,workspace_id,name,email,phone,notes,stage_name,surname,location,travel_fee,pricing_notes,overview,dj_equipment,sound_system,allergies,special_diet,special_needs,genres,fee,currency,social_links,documents,profile_image_url,created_at,updated_at"
+
 export async function listArtists(): Promise<Artist[]> {
   const supabase = await createClient()
   const workspaceId = await getCurrentWorkspaceId()
@@ -60,7 +64,7 @@ export async function listArtists(): Promise<Artist[]> {
   const data = await readCompleteCollection<Artist>(async (from, to) => {
     const { data, error, count } = await supabase
       .from("artists")
-      .select("*", { count: "exact" })
+      .select(ARTIST_COLUMNS, { count: "exact" })
       .eq("workspace_id", workspaceId)
       .order("name", { ascending: true })
       .order("id", { ascending: true })
@@ -141,7 +145,7 @@ export async function getArtist(id: string): Promise<Artist | null> {
 
   const { data, error } = await supabase
     .from("artists")
-    .select("*")
+    .select(ARTIST_COLUMNS)
     .eq("id", id)
     .eq("workspace_id", workspaceId)
     .single()

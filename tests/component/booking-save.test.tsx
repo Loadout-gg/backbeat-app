@@ -109,9 +109,9 @@ it.each([
   expect(screen.queryByText(/^(AM|PM)$/)).toBeNull()
   expect(screen.queryByRole("combobox")).toBeNull()
 })
-it("disables unsaved placeholder inputs, nested buttons and the driver checkbox", () => {
+it("disables unsaved placeholder inputs and nested buttons; driver placeholders moved to travel legs", () => {
   render(<EventBookingClient booking={booking} />)
-  const placeholders = ["Event type", "Expected audience", "Artist name", "Driver name", "Driver phone number", "Distance"]
+  const placeholders = ["Event type", "Expected audience", "Artist name"]
   for (const placeholder of placeholders) {
     for (const input of screen.getAllByPlaceholderText(placeholder)) {
       expect(input.matches(":disabled"), placeholder).toBe(true)
@@ -131,11 +131,9 @@ it("disables unsaved placeholder inputs, nested buttons and the driver checkbox"
   expect(addArtist.matches(":disabled")).toBe(true)
   addArtist.focus()
   expect(document.activeElement).not.toBe(addArtist)
-  const checkbox = screen.getByRole("checkbox", { name: "Same driver Inbound/Outbound" })
-  expect(checkbox.matches(":disabled")).toBe(true)
-  fireEvent.click(checkbox)
-  expect(checkbox.getAttribute("aria-checked")).toBe("true")
-  expect(screen.getByText("Not available yet: event type, expected audience, lineup, driver and secondary contact fields are not saved.")).toBeTruthy()
+  for (const placeholder of ["Driver name", "Driver phone number", "Distance"]) expect(screen.queryByPlaceholderText(placeholder)).toBeNull()
+  expect(screen.queryByRole("checkbox", { name: "Same driver Inbound/Outbound" })).toBeNull()
+  expect(screen.getByText("Not available yet: event type, expected audience, lineup and secondary contact fields are not saved. Drivers are recorded per travel leg in the Travel tab.")).toBeTruthy()
   expect(screen.getByDisplayValue("19:00").matches(":disabled")).toBe(false)
   expect(screen.getByDisplayValue("Original note").matches(":disabled")).toBe(false)
   expect(screen.getByRole("button", { name: "Update booking" }).matches(":disabled")).toBe(false)

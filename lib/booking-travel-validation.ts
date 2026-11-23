@@ -1,0 +1,121 @@
+import { z } from "zod"
+
+// Validation for booking travel legs, stays and artist travel documents (migration 009).
+// Every limit mirrors a CHECK in migrations/009_booking_travel_stays.sql. Inputs are full
+// replacements: a missing or blank optional field is stored as NULL.
+
+export const TRAVEL_DIRECTIONS = ["inbound", "outbound", "other"] as const
+export type TravelDirection = (typeof TRAVEL_DIRECTIONS)[number]
+export const TRAVEL_DIRECTION_LABELS: Record<TravelDirection, string> = {
+  inbound: "Inbound",
+  outbound: "Outbound",
+  other: "Other",
+}
+
+export const TRAVEL_DOCUMENT_TYPES = ["passport", "id_card", "other"] as const
+export type TravelDocumentType = (typeof TRAVEL_DOCUMENT_TYPES)[number]
+export const TRAVEL_DOCUMENT_TYPE_LABELS: Record<TravelDocumentType, string> = {
+  passport: "Passport",
+  id_card: "ID card",
+  other: "Other",
+}
+
+export const travelRecordIdSchema = z.guid("Invalid ID")
+
+const optionalText = (max: number, label: string) => z.string().trim()
+  .max(max, `${label} must be at most ${max} characters`).nullable().optional()
+  .transform(value => value ? value : null)
+const requiredText = (max: number, label: string, missing: string) => z.string(missing).trim()
+  .min(1, missing).max(max, `${label} must be at most ${max} characters`)
+const optionalDate = (message: string) => z.union([z.literal(""), z.string().date(message)], message)
+  .nullable().optional().transform(value => value ? value : null)
+const optionalTime = (message: string) => z.union([
+  z.literal(""), z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, message),
+], message).nullable().optional().transform(value => value ? value : null)
+
+/** Normalized for comparison only: "HH:MM" and "HH:MM:SS" compare as the same instant of day. */
+function clockKey(time: string): string {
+  return time.length === 5 ? `${time}:00` : time
+}
+/** Zone labels are free text; equal labels (ignoring case and spaces at the ends) mean "same clock". */
+function zoneKey(zone: string | null): string {
+  return (zone ?? "").trim().toLowerCase()
+}
+
+export const travelLegSchema = z.object({
+  direction: z.enum(TRAVEL_DIRECTIONS, "Choose a direction"),
+  mode: optionalText(50, "Mode"),
+  carrier: optionalText(200, "Carrier"),
+  reference: optionalText(100, "Reference"),
+  depart_place: optionalText(300, "Departure place"),
+  depart_date: optionalDate("Enter a valid departure date"),
+  depart_time: optionalTime("Enter a valid departure time"),
+  depart_zone: optionalText(64, "Departure time zone"),
+  arrive_place: optionalText(300, "Arrival place"),
+  arrive_date: optionalDate("Enter a valid arrival date"),
+  arrive_time: optionalTime("Enter a valid arrival time"),
+  arrive_zone: optionalText(64, "Arrival time zone"),
+  travellers: optionalText(1000, "Travellers"),
+  driver_name: optionalText(200, "Driver name"),
+  driver_phone: optionalText(100, "Driver phone"),
+  notes: optionalText(2000, "Notes"),
+}).strict().superRefine((leg, ctx) => {
+  if (leg.depart_time && !leg.depart_date) {
+    ctx.addIssue({ code: "custom", path: ["depart_date"], message: "Enter the departure date for the departure time" })
+  }
+  if (leg.arrive_time && !leg.arrive_date) {
+    ctx.addIssue({ code: "custom", path: ["arrive_date"], message: "Enter the arrival date for the arrival time" })
+  }
+  if (leg.depart_date && leg.arrive_date) {
+    if (leg.arrive_date < leg.depart_date) {
+      ctx.addIssue({ code: "custom", path: ["arrive_date"], message: "Arrival cannot be before departure" })
+    } else if (
+      leg.arrive_date === leg.depart_date && leg.depart_time && leg.arrive_time
+      && zoneKey(leg.depart_zone) === zoneKey(leg.arrive_zone)
+      && clockKey(leg.arrive_time) < clockKey(leg.depart_time)
+    ) {
+      // Local times in different zones are not compared: there is no zone policy (decision 2).
+      ctx.addIssue({ code: "custom", path: ["arrive_time"], message: "Arrival cannot be before departure" })
+    }
+  }
+})
+export type TravelLegInput = z.input<typeof travelLegSchema>
+export type TravelLegValues = z.output<typeof travelLegSchema>
+
+export const bookingStaySchema = z.object({
+  name: requiredText(200, "Accommodation name", "Enter the accommodation name"),
+  address: optionalText(1000, "Address"),
+  check_in_on: optionalDate("Enter a valid check-in date"),
+  check_out_on: optionalDate("Enter a valid check-out date"),
+  confirmation_ref: optionalText(100, "Confirmation reference"),
+  notes: optionalText(2000, "Notes"),
+}).strict().superRefine((stay, ctx) => {
+  if (stay.check_in_on && stay.check_out_on && stay.check_out_on < stay.check_in_on) {
+    ctx.addIssue({ code: "custom", path: ["check_out_on"], message: "Check-out cannot be before check-in" })
+  }
+})
+export type BookingStayInput = z.input<typeof bookingStaySchema>
+export type BookingStayValues = z.output<typeof bookingStaySchema>
+
+export const travelDocumentSchema = z.object({
+  doc_type: z.enum(TRAVEL_DOCUMENT_TYPES, "Choose a document type"),
+  number: requiredText(64, "Document number", "Enter the document number"),
+  issuing_country: optionalText(100, "Issuing country"),
+  expires_on: optionalDate("Enter a valid expiry date"),
+  holder_name: optionalText(200, "Name on document"),
+}).strict()
+export type TravelDocumentInput = z.input<typeof travelDocumentSchema>
+export type TravelDocumentValues = z.output<typeof travelDocumentSchema>
+
+export const EARLIEST_DATE_OF_BIRTH = "1900-01-01"
+/** `today` is the configured calendar day; a birth date in the future is rejected. */
+export function dateOfBirthSchema(today: string) {
+  return optionalDate("Enter a valid date of birth")
+    .refine(value => value === null || value >= EARLIEST_DATE_OF_BIRTH, "Enter a date of birth from 1900 onwards")
+    .refine(value => value === null || value <= today, "Date of birth cannot be in the future")
+}
+
+/** First validation message, for the fixed single-line error area of each form. */
+export function firstIssue(error: z.ZodError): string {
+  return error.issues[0]?.message ?? "Check the details and try again."
+}

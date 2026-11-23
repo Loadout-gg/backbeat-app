@@ -276,10 +276,10 @@ test('local operator completes onboarding, artist and booking persistence, and r
         await expect.poll(readDetails).toEqual(empty);
         await page.reload();
         for (const [, placeholder] of fields) await expect(input(placeholder)).toHaveValue('');
-        for (const placeholder of ['Event type', 'Expected audience', 'Driver name', 'Driver phone number', 'Distance']) await expect(page.getByPlaceholder(placeholder, { exact: true })).toBeDisabled();
+        for (const placeholder of ['Event type', 'Expected audience']) await expect(page.getByPlaceholder(placeholder, { exact: true })).toBeDisabled();
         for (const placeholder of ['Contact name', 'Phone number', 'Email']) await expect(page.getByPlaceholder(placeholder, { exact: true }).nth(1)).toBeDisabled();
         await expect(page.getByRole('button', { name: 'Add artist', exact: true })).toBeDisabled();
-        await expect(page.getByRole('checkbox', { name: 'Same driver Inbound/Outbound' })).toBeDisabled();
+        await expect(page.getByRole('checkbox', { name: 'Same driver Inbound/Outbound' })).toHaveCount(0);
       });
       await notes.fill(`${tag} persisted update`)
       await page.getByRole('button', { name: 'Update booking', exact: true }).click()

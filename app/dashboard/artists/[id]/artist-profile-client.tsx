@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback, type ComponentProps } from "react"
+import { useEffect, useState, useCallback, type ComponentProps, type ReactNode } from "react"
 import { useSearchParams, useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { parseISO } from "date-fns"
@@ -69,9 +69,11 @@ interface ArtistProfileClientProps {
   events: EventWithRelations[]
   calendarError?: boolean
   calendarToday: string
+  /** Travel documents section (server-loaded, self-saving); kept outside the tabs so drafts survive. */
+  travelDocuments?: ReactNode
 }
 
-export function ArtistProfileClient({ artist, bookings, events, calendarError = false, calendarToday }: ArtistProfileClientProps) {
+export function ArtistProfileClient({ artist, bookings, events, calendarError = false, calendarToday, travelDocuments }: ArtistProfileClientProps) {
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
@@ -726,6 +728,8 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
           </Tabs>
         </CardContent>
       </Card>
+
+      {travelDocuments}
 
       {/* New Booking Modal */}
       <NewBookingModal

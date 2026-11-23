@@ -1,5 +1,7 @@
 import { notFound, unstable_rethrow } from "next/navigation"
 import { getArtist } from "@/lib/actions/artists"
+import { getArtistTravelProfile, type ArtistTravelProfile } from "@/lib/actions/artist-travel-documents"
+import { ArtistTravelDocumentsSection } from "@/components/dashboard/artist-travel-documents-section"
 import { getBookings } from "@/lib/actions/bookings"
 import { listEvents } from "@/lib/actions/events"
 import { ArtistProfileClient } from "./artist-profile-client"
@@ -35,6 +37,14 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
 
   const calendarToday = configuredCalendarDay()
 
+  // Sensitive travel documents: separate explicit read, null renders an unavailable state.
+  let travelProfile: ArtistTravelProfile | null = null
+  try {
+    travelProfile = await getArtistTravelProfile(id)
+  } catch (error) {
+    unstable_rethrow(error)
+  }
+
   return (
     <ArtistProfileClient
       artist={artist}
@@ -42,6 +52,7 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
       events={events}
       calendarError={calendarError}
       calendarToday={calendarToday}
+      travelDocuments={<ArtistTravelDocumentsSection artistId={artist.id} profile={travelProfile} today={calendarToday} />}
     />
   )
 }

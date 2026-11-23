@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({ getArtist: vi.fn(), getBookings: vi.fn(), list
 vi.mock("@/lib/actions/artists", () => ({ getArtist: mocks.getArtist }))
 vi.mock("@/lib/actions/bookings", () => ({ getBookings: mocks.getBookings }))
 vi.mock("@/lib/actions/events", () => ({ listEvents: mocks.listEvents }))
+vi.mock("@/lib/actions/artist-travel-documents", () => ({ getArtistTravelProfile: vi.fn(async () => ({ artistId: "artist-a", dateOfBirth: null, documents: [] })) }))
 vi.mock("@/components/dashboard/new-booking-modal", () => ({ NewBookingModal: () => null }))
 vi.mock("next/navigation", async (importOriginal) => ({
   ...await importOriginal<typeof import("next/navigation")>(),
