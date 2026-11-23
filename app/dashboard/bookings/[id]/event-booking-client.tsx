@@ -21,6 +21,10 @@ import {
 } from "@/lib/booking-display";
 import { allowedBookingTransitions, type BookingStatus } from "@/lib/booking-status";
 import { formatArtistBaseRate } from "@/lib/artist-base-rate";
+import { BookingPromoterSelect } from "@/components/dashboard/booking-promoter-select";
+import type { PromoterOption } from "@/lib/actions/events";
+import type { BookingEventLink as LinkedEvent } from "@/lib/actions/booking-events";
+import { BookingEventLink } from "./booking-event-link";
 
 interface EventBookingClientProps {
   booking: BookingWithArtist;
@@ -28,6 +32,10 @@ interface EventBookingClientProps {
   artistBookings?: readonly Booking[] | null;
   /** Server "today" (configured calendar zone). Without it, completion is not offered. */
   today?: string;
+  /** Promoter directory options; null when that read failed. Omitted: no promoter selector. */
+  promoters?: readonly PromoterOption[] | null;
+  /** Event created from this booking; null = none, "unavailable" = read failed. Omitted: no event section. */
+  linkedEvent?: LinkedEvent | null | "unavailable";
 }
 
 const TABS = [
@@ -39,7 +47,7 @@ const TABS = [
   "Artist contacts",
 ] as const;
 
-export function EventBookingClient({ booking, artistBookings, today }: EventBookingClientProps) {
+export function EventBookingClient({ booking, artistBookings, today, promoters, linkedEvent }: EventBookingClientProps) {
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
   const saveInFlight = useRef(false);
@@ -97,6 +105,8 @@ export function EventBookingClient({ booking, artistBookings, today }: EventBook
   const [contactNameSecondary, setContactNameSecondary] = useState("");
   const [contactPhoneSecondary, setContactPhoneSecondary] = useState("");
   const [contactEmailSecondary, setContactEmailSecondary] = useState("");
+  const savedPromoterId = booking.promoter_id ?? "";
+  const [promoterId, setPromoterId] = useState(savedPromoterId);
 
   const artist = booking.artist;
   const artistDisplayName = artist.stage_name || artist.name || "Unknown";
@@ -203,6 +213,7 @@ export function EventBookingClient({ booking, artistBookings, today }: EventBook
         ...(bookingDate !== booking.date ? { date: bookingDate } : {}),
         ...(feeDirty && fee.success ? fee.data : {}),
         ...(holdExpiryChanged ? { hold_expires_on: holdExpiresOn || null } : {}),
+        ...(promoterId !== savedPromoterId ? { promoter_id: promoterId || null } : {}),
         start_time: startTime,
         duration_minutes: durationMinutes || null,
         notes: notes || null,
@@ -369,6 +380,10 @@ export function EventBookingClient({ booking, artistBookings, today }: EventBook
           {statusError && <p role="alert" className="text-sm text-destructive">{statusError}</p>}
           {statusNotice && <p role="status" className="text-sm text-foreground">{statusNotice}</p>}
         </section>
+
+        {linkedEvent !== undefined && (
+          <BookingEventLink bookingId={booking.id} status={booking.status} linkedEvent={linkedEvent} />
+        )}
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-0 min-w-0">
           <div className="px-4 py-3 sm:px-6 border-b border-border">
@@ -654,6 +669,16 @@ export function EventBookingClient({ booking, artistBookings, today }: EventBook
                   Contact info
                 </h3>
                 <div className="space-y-4">
+                  {promoters !== undefined && (
+                    <BookingPromoterSelect
+                      id="booking-promoter"
+                      value={promoterId}
+                      onChange={setPromoterId}
+                      options={promoters}
+                      disabled={isSaving}
+                      className="max-w-md"
+                    />
+                  )}
                   {/* Main contact */}
                   <div className="border border-border rounded-lg p-4">
                     <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-3">
@@ -874,14 +899,6 @@ export function EventBookingClient({ booking, artistBookings, today }: EventBook
               className="aria-disabled:cursor-wait aria-disabled:opacity-50"
             >
               {isSaving ? "Saving..." : "Update booking"}
-            </Button>
-            <Button
-              variant="outline"
-              className="whitespace-normal h-auto min-h-9"
-              disabled
-              title="Coming soon"
-            >
-              Complete and create event
             </Button>
           </div>
         </div>

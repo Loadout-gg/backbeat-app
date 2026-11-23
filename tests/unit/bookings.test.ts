@@ -286,3 +286,45 @@ it("explains a hold expiry rejected because the booking is not on hold", async (
     })
   } finally { log.mockRestore() }
 })
+
+// Migration 008: optional promoter from the directory (decision 2).
+const promoter = "33333333-3333-4333-8333-333333333333"
+it("creates a booking with the chosen promoter, and without the column when none is chosen", async () => {
+  await createBooking({ ...input, promoterId: promoter })
+  expect(query.insert).toHaveBeenLastCalledWith(expect.objectContaining({ promoter_id: promoter, workspace_id: "selected-workspace", status: "in_progress" }))
+  await createBooking(input)
+  expect("promoter_id" in (query.insert.mock.calls.at(-1)?.[0] as object)).toBe(false)
+})
+it.each(["", "not-a-uuid"])("rejects a malformed promoter %j on create before backend access", async (promoterId) => {
+  expect(await createBooking({ ...input, promoterId })).toEqual({ success: false, error: "Choose a valid promoter" })
+  expect(db.from).not.toHaveBeenCalled()
+})
+it.each([[promoter], [null]])("persists promoter_id %j through the validated update only", async (promoter_id) => {
+  expect(await updateBooking(id, { promoter_id })).toEqual({ success: true })
+  expect(query.update).toHaveBeenLastCalledWith({ promoter_id, updated_at: expect.any(String) })
+  expect(query.eq).toHaveBeenCalledWith("workspace_id", "selected-workspace")
+})
+it("leaves the promoter out of the write when it is omitted, and rejects a malformed one", async () => {
+  await updateBooking(id, { notes: "x" })
+  expect("promoter_id" in (query.update.mock.calls.at(-1)?.[0] as object)).toBe(false)
+  db.from.mockClear()
+  expect(await updateBooking(id, { promoter_id: "nope" })).toEqual({ success: false, error: "Choose a valid promoter" })
+  expect(db.from).not.toHaveBeenCalled()
+})
+it.each([
+  ["create", () => createBooking({ ...input, promoterId: promoter }), "single"],
+  ["update", () => updateBooking(id, { promoter_id: promoter }), "maybeSingle"],
+] as const)("answers %s with fixed copy when the promoter was deleted or belongs to another workspace", async (_label, action, terminal) => {
+  query[terminal].mockResolvedValueOnce({ data: null, error: { code: "23503", message: 'insert or update on table "bookings" violates foreign key constraint "bookings_promoter_id_fkey"' } })
+  const log = vi.spyOn(console, "error").mockImplementation(() => {})
+  try {
+    expect(await action()).toEqual({ success: false, error: "The selected promoter no longer exists. Choose another promoter." })
+  } finally { log.mockRestore() }
+})
+it("does not blame the promoter for another foreign-key failure", async () => {
+  query.single.mockResolvedValueOnce({ data: null, error: { code: "23503", message: 'violates foreign key constraint "bookings_artist_id_fkey"' } })
+  const log = vi.spyOn(console, "error").mockImplementation(() => {})
+  try {
+    expect(await createBooking({ ...input, promoterId: promoter })).toEqual({ success: false, error: "Unable to create booking. Please try again." })
+  } finally { log.mockRestore() }
+})

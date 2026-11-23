@@ -1,5 +1,7 @@
 import { notFound, unstable_rethrow } from "next/navigation";
 import { getBooking, getBookings, type Booking } from "@/lib/actions/bookings";
+import { getBookingEventLink, type BookingEventLink } from "@/lib/actions/booking-events";
+import { listPromoters, type PromoterOption } from "@/lib/actions/events";
 import { configuredCalendarDay } from "@/lib/calendar-day";
 import { EventBookingClient } from "./event-booking-client";
 
@@ -23,5 +25,28 @@ export default async function EventBookingPage({ params }: EventBookingPageProps
     unstable_rethrow(error);
   }
 
-  return <EventBookingClient booking={booking} artistBookings={artistBookings} today={configuredCalendarDay()} />;
+  // Promoter options and the linked event: a failed read is shown as such in its own
+  // control, never as "no promoters" or "no event".
+  let promoters: PromoterOption[] | null = null;
+  try {
+    promoters = await listPromoters();
+  } catch (error) {
+    unstable_rethrow(error);
+  }
+  let linkedEvent: BookingEventLink | null | "unavailable" = "unavailable";
+  try {
+    linkedEvent = await getBookingEventLink(booking.id);
+  } catch (error) {
+    unstable_rethrow(error);
+  }
+
+  return (
+    <EventBookingClient
+      booking={booking}
+      artistBookings={artistBookings}
+      today={configuredCalendarDay()}
+      promoters={promoters}
+      linkedEvent={linkedEvent}
+    />
+  );
 }

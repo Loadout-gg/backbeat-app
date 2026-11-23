@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server"
 import { getCurrentWorkspaceId } from "./workspace"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
+import { bookingFeeShape, type BookingFeeCurrency } from "@/lib/booking-fee"
 
 // Types derived from Supabase schema
 export type Event = {
@@ -18,6 +19,11 @@ export type Event = {
   promoter_id: string | null
   workspace_id: string
   created_at: string
+  /** Present after migration 008. The booking this event was created from, if any. */
+  booking_id?: string | null
+  start_time?: string | null
+  fee_amount_minor?: number | null
+  fee_currency?: BookingFeeCurrency | null
 }
 
 export type Promoter = {
@@ -165,7 +171,14 @@ export async function createEvent(input: {
   return { success: true, eventId: data.id }
 }
 
-export type EventDetail = Pick<Event, "id" | "title" | "date" | "location" | "status" | "artist_id" | "promoter_id">
+export type EventDetail = Pick<Event, "id" | "title" | "date" | "location" | "status" | "artist_id" | "promoter_id"> & {
+  /** The booking this event was created from; null for events created directly or after that booking was deleted. */
+  booking_id: string | null
+  start_time: string | null
+  /** Snapshot taken at conversion, then edited only here. Same pair rule as the booking fee. */
+  fee_amount_minor: number | null
+  fee_currency: BookingFeeCurrency | null
+}
 
 export type EventUpdateInput = {
   title: string
@@ -174,19 +187,35 @@ export type EventUpdateInput = {
   status: "in_progress" | "confirmed" | "cancelled"
   artist_id?: string | null
   promoter_id?: string | null
+  /** Omitted = unchanged, null = cleared. */
+  start_time?: string | null
+  /** Both omitted = unchanged, both null = cleared; an incomplete pair is rejected. */
+  fee_amount_minor?: number | null
+  fee_currency?: string | null
 }
 
 const EVENT_SAVE_FAILED = "Unable to save the event. Please try again."
 const EVENT_NOT_FOUND = "Event not found."
 
+const EVENT_DETAIL_FIELDS = "id,title,date,location,status,artist_id,promoter_id,booking_id,start_time,fee_amount_minor,fee_currency"
+
 // Same field rules as creation; on update every field is stated, and null clears a link.
+// start_time and the fee pair (migration 008) are optional: omitted stays unchanged.
+// booking_id is not writable here: the link is created only by createEventFromBooking.
 const updateEventSchema = z.object({
+  ...bookingFeeShape,
+  start_time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, "Enter a valid start time").nullable().optional(),
   title: createEventSchema.shape.title,
   date: createEventSchema.shape.date,
   location: z.string().trim().nullish().transform(value => value || null),
   status: z.enum(["in_progress", "confirmed", "cancelled"], "Choose a valid status"),
   artist_id: z.guid("Choose a valid artist").nullish().transform(value => value ?? null),
   promoter_id: z.guid("Choose a valid promoter").nullish().transform(value => value ?? null),
+}).superRefine((value, context) => {
+  if (value.fee_amount_minor === undefined && value.fee_currency === undefined) return
+  if (value.fee_amount_minor === null && value.fee_currency === null) return
+  if (typeof value.fee_amount_minor === "number" && value.fee_currency != null) return
+  context.addIssue({ code: "custom", path: ["fee_amount_minor"], message: "Enter both fee amount and currency, or clear both" })
 })
 
 /** Null means "no such event in this workspace"; a failed read throws. */
@@ -196,16 +225,18 @@ export async function getEvent(id: string): Promise<EventDetail | null> {
   const workspaceId = await getCurrentWorkspaceId()
   const { data, error } = await supabase
     .from("events")
-    .select("id,title,date,location,status,artist_id,promoter_id")
+    .select(EVENT_DETAIL_FIELDS)
     .eq("workspace_id", workspaceId)
     .eq("id", id)
     .maybeSingle()
   if (error) throw new Error("Unable to load the event.")
   if (!data) return null
-  const row = data as EventDetail
+  const row = data as unknown as EventDetail
   return {
     id: row.id, title: row.title, date: row.date, location: row.location,
     status: row.status, artist_id: row.artist_id, promoter_id: row.promoter_id,
+    booking_id: row.booking_id ?? null, start_time: row.start_time ?? null,
+    fee_amount_minor: row.fee_amount_minor ?? null, fee_currency: row.fee_currency ?? null,
   }
 }
 
@@ -219,9 +250,11 @@ export async function updateEvent(
 
   const supabase = await createClient()
   const workspaceId = await getCurrentWorkspaceId()
+  // Omitted optional fields are left out of the write, so they stay unchanged.
+  const patch = Object.fromEntries(Object.entries(validation.data).filter(([, value]) => value !== undefined))
   const { data, error } = await supabase
     .from("events")
-    .update(validation.data)
+    .update(patch)
     .eq("workspace_id", workspaceId)
     .eq("id", id)
     .select("id")

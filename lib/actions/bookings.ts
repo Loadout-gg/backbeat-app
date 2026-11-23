@@ -9,6 +9,7 @@ import type { BookingFeeCurrency } from "@/lib/booking-fee";
 import { bookingTransitionBlock, canTransitionBooking, type BookingStatus, type BookingTransitionBlock } from "@/lib/booking-status";
 import { configuredCalendarDay } from "@/lib/calendar-day";
 import { createBookingSchema, updateBookingSchema, bookingStatusSchema, bookingIdSchema } from "@/lib/booking-validation";
+import { BOOKING_EVENT_COPY, isBookingPromoterViolation } from "@/lib/booking-event";
 
 export interface Booking {
   fee_amount_minor: number | null;
@@ -28,6 +29,8 @@ export interface Booking {
   status: BookingStatus;
   /** Present after migration 006; only meaningful while status is "hold". */
   hold_expires_on?: string | null;
+  /** Present after migration 008. Optional promoter from the directory; the free-text main contact is separate. */
+  promoter_id?: string | null;
   created_at: string;
   updated_at: string;
   artist?: {
@@ -135,6 +138,7 @@ export async function createBooking(formData: {
   startTime: string;
   durationMinutes: number;
   notes?: string;
+  promoterId?: string;
 }): Promise<{ success: boolean; error?: string; booking?: Booking }> {
   const validation = createBookingSchema.safeParse(formData);
   if (!validation.success) return { success: false, error: validation.error.issues[0].message };
@@ -159,6 +163,7 @@ export async function createBooking(formData: {
       duration_minutes: formData.durationMinutes || null,
       notes: formData.notes || null,
       status: "in_progress",
+      ...(validation.data.promoterId ? { promoter_id: validation.data.promoterId } : {}),
     })
     .select(
       `
@@ -170,6 +175,7 @@ export async function createBooking(formData: {
 
   if (error) {
     console.error("Error creating booking:", error);
+    if (isBookingPromoterViolation(error)) return { success: false, error: BOOKING_EVENT_COPY.promoterGone };
     return { success: false, error: "Unable to create booking. Please try again." };
   }
 
@@ -328,6 +334,7 @@ export async function updateBooking(
     duration_minutes?: number | null;
     notes?: string | null;
     hold_expires_on?: string | null;
+    promoter_id?: string | null;
     venue_name?: string | null;
     venue_address?: string | null;
     event_type?: string;
@@ -383,7 +390,9 @@ export async function updateBooking(
       : null;
     return {
       success: false,
-      error: lifecycleErrorMessage(error) ?? holdExpiry ?? "Unable to save booking. Please try again.",
+      error: lifecycleErrorMessage(error) ?? holdExpiry
+        ?? (isBookingPromoterViolation(error) ? BOOKING_EVENT_COPY.promoterGone : null)
+        ?? "Unable to save booking. Please try again.",
     };
   }
   if (!changedBooking) return { success: false, error: BOOKING_NOT_FOUND };

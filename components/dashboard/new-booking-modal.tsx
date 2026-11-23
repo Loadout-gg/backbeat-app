@@ -17,6 +17,7 @@ import { getArtists, type ArtistOption } from "@/lib/actions/artists";
 import { createBooking, type Booking } from "@/lib/actions/bookings";
 import { formatArtistBaseRate } from "@/lib/artist-base-rate";
 import { findSameDayBookings, isPastBookingDate, sameDayWarning } from "@/lib/booking-display";
+import { BookingPromoterSelect } from "@/components/dashboard/booking-promoter-select";
 
 type ModalStep = "select-artist" | "booking-details" | "success";
 
@@ -69,6 +70,7 @@ export function NewBookingModal({
   const [startTime, setStartTime] = useState("10:30");
   const [duration, setDuration] = useState("00:00");
   const [notes, setNotes] = useState("");
+  const [promoterId, setPromoterId] = useState("");
 
   const lifecycle = useRef({
     mounted: false,
@@ -130,6 +132,7 @@ export function NewBookingModal({
     setStartTime("10:30");
     setDuration("00:00");
     setNotes("");
+    setPromoterId("");
   }, [open, preselectedArtist, preselectedArtistId, invalidateSession]);
 
   useEffect(() => {
@@ -218,7 +221,7 @@ export function NewBookingModal({
     const session = current.session;
     const request = ++current.saveRequest;
     const submittedArtist = Object.freeze({ ...draftArtist });
-    const submitted = Object.freeze({ date, startTime, duration, notes });
+    const submitted = Object.freeze({ date, startTime, duration, notes, promoterId });
     current.saving = true;
     setIsSaving(true);
     setSaveError(null);
@@ -236,6 +239,7 @@ export function NewBookingModal({
         startTime: submitted.startTime,
         durationMinutes,
         notes: submitted.notes || undefined,
+        ...(submitted.promoterId ? { promoterId: submitted.promoterId } : {}),
       });
 
       if (!isCurrent()) return;
@@ -562,6 +566,14 @@ export function NewBookingModal({
                       </div>
                     </div>
                   </div>
+
+                  {/* Optional promoter from the directory */}
+                  <BookingPromoterSelect
+                    id="new-booking-promoter"
+                    value={promoterId}
+                    onChange={setPromoterId}
+                    disabled={isSaving}
+                  />
                 </div>
 
                 {/* Right column - Notes */}

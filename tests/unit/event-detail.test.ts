@@ -29,9 +29,12 @@ it("reads one event scoped to the selected workspace with explicit fields only",
     data: { id: ID, title: "Synthetic Night", date: "2030-03-01", location: null, status: "confirmed", artist_id: ARTIST, promoter_id: null, workspace_id: "x", public_token: "secret" },
     error: null,
   }
-  expect(await getEvent(ID)).toEqual({ id: ID, title: "Synthetic Night", date: "2030-03-01", location: null, status: "confirmed", artist_id: ARTIST, promoter_id: null })
+  expect(await getEvent(ID)).toEqual({
+    id: ID, title: "Synthetic Night", date: "2030-03-01", location: null, status: "confirmed", artist_id: ARTIST, promoter_id: null,
+    booking_id: null, start_time: null, fee_amount_minor: null, fee_currency: null,
+  })
   expect(mocks.from).toHaveBeenCalledWith("events")
-  expect(mocks.query.select).toHaveBeenCalledWith("id,title,date,location,status,artist_id,promoter_id")
+  expect(mocks.query.select).toHaveBeenCalledWith("id,title,date,location,status,artist_id,promoter_id,booking_id,start_time,fee_amount_minor,fee_currency")
   expect(mocks.query.eq.mock.calls).toEqual([["workspace_id", "selected-workspace"], ["id", ID]])
 })
 
@@ -112,5 +115,58 @@ it("hides the provider message on a failed delete and rejects a malformed id bef
   expect(await deleteEvent(ID)).toEqual({ success: false, error: "Unable to delete the event. Please try again." })
   mocks.createClient.mockClear()
   expect(await deleteEvent("not-a-uuid")).toEqual({ success: false, error: "Event not found." })
+  expect(mocks.createClient).not.toHaveBeenCalled()
+})
+
+const BOOKING = "44444444-4444-4444-8444-444444444444"
+it("reads the booking link, start time and fee snapshot of a converted event, still without public_token", async () => {
+  mocks.state.result = {
+    data: { id: ID, title: "DJ Alice @ Club", date: "2030-03-01", location: "Club", status: "confirmed", artist_id: ARTIST, promoter_id: PROMOTER,
+      booking_id: BOOKING, start_time: "21:30:00", fee_amount_minor: 150000, fee_currency: "EUR", public_token: "secret", workspace_id: "x" },
+    error: null,
+  }
+  const event = await getEvent(ID)
+  expect(event).toMatchObject({ booking_id: BOOKING, start_time: "21:30:00", fee_amount_minor: 150000, fee_currency: "EUR" })
+  expect(event).not.toHaveProperty("public_token")
+  expect(event).not.toHaveProperty("workspace_id")
+  expect(mocks.query.select.mock.calls[0][0]).not.toMatch(/public_token|\*/)
+})
+
+it("writes start time and fee only when stated, and never the booking link", async () => {
+  mocks.state.result = { data: [{ id: ID }], error: null }
+  expect(await updateEvent(ID, { ...valid, start_time: "21:30", fee_amount_minor: 150000, fee_currency: "EUR", booking_id: BOOKING } as never)).toEqual({ success: true })
+  expect(mocks.query.update).toHaveBeenLastCalledWith({
+    title: "Synthetic Night", date: "2030-03-01", location: null, status: "confirmed", artist_id: null, promoter_id: null,
+    start_time: "21:30", fee_amount_minor: 150000, fee_currency: "EUR",
+  })
+  await updateEvent(ID, valid)
+  const untouched = mocks.query.update.mock.calls.at(-1)?.[0] as Record<string, unknown>
+  for (const field of ["start_time", "fee_amount_minor", "fee_currency", "booking_id"]) expect(field in untouched).toBe(false)
+})
+
+it("clears start time and the fee pair with nulls", async () => {
+  mocks.state.result = { data: [{ id: ID }], error: null }
+  await updateEvent(ID, { ...valid, start_time: null, fee_amount_minor: null, fee_currency: null })
+  expect(mocks.query.update).toHaveBeenLastCalledWith(expect.objectContaining({ start_time: null, fee_amount_minor: null, fee_currency: null }))
+})
+
+it.each([
+  [{ ...valid, start_time: "25:00" }, "Enter a valid start time"],
+  [{ ...valid, start_time: "9pm" }, "Enter a valid start time"],
+  [{ ...valid, fee_amount_minor: 1000 }, "Enter both fee amount and currency, or clear both"],
+  [{ ...valid, fee_currency: "EUR" }, "Enter both fee amount and currency, or clear both"],
+  [{ ...valid, fee_amount_minor: null, fee_currency: "EUR" }, "Enter both fee amount and currency, or clear both"],
+])("rejects the event time or fee %j before any backend access", async (input, error) => {
+  expect(await updateEvent(ID, input as never)).toEqual({ success: false, error })
+  expect(mocks.createClient).not.toHaveBeenCalled()
+})
+
+it.each([
+  { ...valid, fee_amount_minor: 10.5, fee_currency: "EUR" },
+  { ...valid, fee_amount_minor: -1, fee_currency: "EUR" },
+  { ...valid, fee_amount_minor: 1000000000000, fee_currency: "EUR" },
+  { ...valid, fee_amount_minor: 100, fee_currency: "CHF" },
+])("rejects an event fee outside the booking fee rules %j", async (input) => {
+  expect((await updateEvent(ID, input as never)).success).toBe(false)
   expect(mocks.createClient).not.toHaveBeenCalled()
 })
