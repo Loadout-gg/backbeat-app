@@ -60,7 +60,8 @@ export function ArtistTravelDocumentsSection({ artistId, profile, today }: Artis
                 {profile.documents.map(document => (
                   <li key={document.id}>
                     {editingId === document.id ? (
-                      <DocumentForm artistId={artistId} document={document} onDone={() => setEditingId(null)} />
+                      <DocumentForm artistId={artistId} document={document}
+                        onDone={() => setEditingId(current => current === document.id ? null : current)} />
                     ) : (
                       <DocumentCard artistId={artistId} document={document} today={today} onEdit={() => setEditingId(document.id)} />
                     )}

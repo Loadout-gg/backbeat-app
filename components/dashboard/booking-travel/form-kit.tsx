@@ -46,7 +46,7 @@ export function useGuardedAction() {
 const controlClass = "h-9 min-w-0 text-sm"
 export const selectClass = "h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
 
-export function TextField({ id, label, value, onChange, type = "text", maxLength, autoComplete = "off", className }: {
+export function TextField({ id, label, value, onChange, type = "text", maxLength, autoComplete = "off", className, step }: {
   id: string
   label: string
   value: string
@@ -55,11 +55,12 @@ export function TextField({ id, label, value, onChange, type = "text", maxLength
   maxLength?: number
   autoComplete?: string
   className?: string
+  step?: number
 }) {
   return (
     <div className={className ? `min-w-0 ${className}` : "min-w-0"}>
       <label htmlFor={id} className="mb-1.5 block text-xs font-medium text-foreground">{label}</label>
-      <Input id={id} type={type} value={value} maxLength={maxLength} autoComplete={autoComplete}
+      <Input id={id} type={type} value={value} maxLength={maxLength} autoComplete={autoComplete} step={step}
         onChange={event => onChange(event.target.value)} className={controlClass} />
     </div>
   )

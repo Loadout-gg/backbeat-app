@@ -30,7 +30,8 @@ function draftFrom(leg?: TravelLeg): LegDraft {
   const draft = { direction: leg?.direction ?? "inbound" } as LegDraft
   for (const field of LEG_FIELDS) {
     const value = leg?.[field] ?? ""
-    draft[field] = field.endsWith("_time") ? (shortTime(value) ?? "") : value
+    // Whole minutes edit as HH:MM; stored seconds are kept so an unrelated edit never rewrites them.
+    draft[field] = field.endsWith("_time") && value.endsWith(":00") ? (shortTime(value) ?? "") : value
   }
   return draft
 }
@@ -79,7 +80,8 @@ export function BookingTravelPanel({ bookingId, bookingDate, artistId, artistNam
               {legs.map(leg => (
                 <li key={leg.id}>
                   {editingId === leg.id ? (
-                    <LegForm bookingId={bookingId} leg={leg} onDone={() => setEditingId(null)} />
+                    <LegForm bookingId={bookingId} leg={leg}
+                      onDone={() => setEditingId(current => current === leg.id ? null : current)} />
                   ) : (
                     <LegCard bookingId={bookingId} leg={leg} onEdit={() => setEditingId(leg.id)} />
                   )}
@@ -193,7 +195,7 @@ function LegForm({ bookingId, leg, onDone }: { bookingId: string; leg?: TravelLe
         <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-4">
           <TextField id={fieldId("depart-place")} label="Departure place" value={draft.depart_place} onChange={set("depart_place")} maxLength={300} />
           <TextField id={fieldId("depart-date")} label="Departure date" type="date" value={draft.depart_date} onChange={set("depart_date")} />
-          <TextField id={fieldId("depart-time")} label="Departure time (local)" type="time" value={draft.depart_time} onChange={set("depart_time")} />
+          <TextField id={fieldId("depart-time")} label="Departure time (local)" type="time" step={draft.depart_time.length > 5 ? 1 : undefined} value={draft.depart_time} onChange={set("depart_time")} />
           <TextField id={fieldId("depart-zone")} label="Departure time zone (optional label)" value={draft.depart_zone} onChange={set("depart_zone")} maxLength={64} />
         </div>
       </fieldset>
@@ -202,7 +204,7 @@ function LegForm({ bookingId, leg, onDone }: { bookingId: string; leg?: TravelLe
         <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-4">
           <TextField id={fieldId("arrive-place")} label="Arrival place" value={draft.arrive_place} onChange={set("arrive_place")} maxLength={300} />
           <TextField id={fieldId("arrive-date")} label="Arrival date" type="date" value={draft.arrive_date} onChange={set("arrive_date")} />
-          <TextField id={fieldId("arrive-time")} label="Arrival time (local)" type="time" value={draft.arrive_time} onChange={set("arrive_time")} />
+          <TextField id={fieldId("arrive-time")} label="Arrival time (local)" type="time" step={draft.arrive_time.length > 5 ? 1 : undefined} value={draft.arrive_time} onChange={set("arrive_time")} />
           <TextField id={fieldId("arrive-zone")} label="Arrival time zone (optional label)" value={draft.arrive_zone} onChange={set("arrive_zone")} maxLength={64} />
         </div>
       </fieldset>

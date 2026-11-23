@@ -173,3 +173,31 @@ it("replaces the coming-soon Travel and Accommodation panels and keeps a travel 
   expect((await screen.findByRole("tabpanel", { name: "Documents" })).textContent).toContain("This section is coming soon.")
   expect(m.updateBooking).not.toHaveBeenCalled()
 })
+
+it("keeps stored seconds when another field of the leg is edited (Codex review, PR #36)", async () => {
+  m.updateTravelLeg.mockResolvedValueOnce({ success: true })
+  render(travelPanel({ legs: [{ ...leg, depart_time: "08:30:45" }] }))
+  fireEvent.click(screen.getByRole("button", { name: "Edit travel leg: Inbound · flight · Moon Air" }))
+  const form = screen.getByRole("form", { name: "Edit travel leg" })
+  const departure = within(form).getByLabelText("Departure time (local)") as HTMLInputElement
+  expect(departure.value).toBe("08:30:45")
+  expect(departure.getAttribute("step")).toBe("1")
+  fireEvent.change(within(form).getByLabelText("Notes"), { target: { value: "Aisle" } })
+  fireEvent.click(within(form).getByRole("button", { name: "Save travel leg" }))
+  await waitFor(() => expect(m.updateTravelLeg).toHaveBeenCalledWith("booking-a", "leg-1", expect.objectContaining({ depart_time: "08:30:45", arrive_time: "10:15" })))
+})
+
+it("an earlier save does not close an editor opened on another leg meanwhile (Codex review, PR #36)", async () => {
+  const first = deferred<{ success: boolean }>()
+  m.updateTravelLeg.mockReturnValueOnce(first.promise)
+  const other = { ...leg, id: "leg-2", carrier: "Sun Air" }
+  render(travelPanel({ legs: [leg, other] }))
+  fireEvent.click(screen.getByRole("button", { name: "Edit travel leg: Inbound · flight · Moon Air" }))
+  fireEvent.click(within(screen.getByRole("form", { name: "Edit travel leg" })).getByRole("button", { name: "Save travel leg" }))
+  fireEvent.click(screen.getByRole("button", { name: "Edit travel leg: Inbound · flight · Sun Air" }))
+  const otherForm = screen.getByRole("form", { name: "Edit travel leg" })
+  fireEvent.change(within(otherForm).getByLabelText("Notes"), { target: { value: "Unsaved B" } })
+  await act(async () => first.resolve({ success: true }))
+  const still = screen.getByRole("form", { name: "Edit travel leg" })
+  expect((within(still).getByLabelText("Notes") as HTMLTextAreaElement).value).toBe("Unsaved B")
+})

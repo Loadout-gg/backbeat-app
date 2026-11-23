@@ -65,7 +65,8 @@ export function BookingStaysPanel({ bookingId, stays }: BookingStaysPanelProps) 
             {stays.map(stay => (
               <li key={stay.id}>
                 {editingId === stay.id ? (
-                  <StayForm bookingId={bookingId} stay={stay} onDone={() => setEditingId(null)} />
+                  <StayForm bookingId={bookingId} stay={stay}
+                    onDone={() => setEditingId(current => current === stay.id ? null : current)} />
                 ) : (
                   <StayCard bookingId={bookingId} stay={stay} onEdit={() => setEditingId(stay.id)} />
                 )}
