@@ -24,6 +24,8 @@ interface BookingPaymentsProps {
   payments: readonly BookingPayment[] | null;
   /** Server "today" (configured calendar zone); without it there is no overdue flag or quick "paid today". */
   today?: string;
+  /** Editor state owned by the booking editor, so it survives this panel unmounting on a tab change. */
+  state: BookingPaymentsState;
 }
 
 type Draft = { id: string | null; kind: PaymentKind; amount: string; dueOn: string; paidOn: string; note: string };
@@ -33,7 +35,12 @@ const fieldClass = "h-9 min-w-0 text-sm";
 const selectClass = "h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50";
 const labelClass = "mb-1.5 block text-xs font-medium text-foreground";
 
-export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, payments, today }: BookingPaymentsProps) {
+/**
+ * Draft, in-flight and feedback state of the payments panel. The booking editor calls this
+ * hook and hands the result down: the Financial tab panel unmounts when another tab is
+ * selected, and neither an unsaved payment draft nor a pending request may be lost with it.
+ */
+export function useBookingPaymentsState() {
   const router = useRouter();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -43,9 +50,9 @@ export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, 
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const inFlight = useRef(false);
 
-  const totals = payments ? bookingFinanceTotals({ feeMinor, currency: feeCurrency, commission, payments }) : null;
-
   // One mutation at a time; a thrown action is reported as unconfirmed, never as success.
+  // While it runs the editor cannot be opened, replaced or closed (see `locked` below), so
+  // a completion always belongs to the editor that is still on screen.
   const run = async (key: string, action: () => Promise<{ success: boolean; error?: string }>, done: string, onError: (message: string) => void) => {
     if (inFlight.current) return false;
     inFlight.current = true;
@@ -70,6 +77,18 @@ export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, 
       setBusy(null);
     }
   };
+  /** Runs an editor change only when no request is pending. */
+  const unlessBusy = (change: () => void) => { if (!inFlight.current) change(); };
+
+  return { draft, setDraft, formError, setFormError, rowError, setRowError, notice, busy, confirmDelete, setConfirmDelete, run, unlessBusy };
+}
+export type BookingPaymentsState = ReturnType<typeof useBookingPaymentsState>;
+
+export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, payments, today, state }: BookingPaymentsProps) {
+  const { draft, setDraft, formError, setFormError, rowError, setRowError, notice, busy, confirmDelete, setConfirmDelete, run, unlessBusy } = state;
+  const locked = busy !== null;
+
+  const totals = payments ? bookingFinanceTotals({ feeMinor, currency: feeCurrency, commission, payments }) : null;
 
   const submitDraft = async () => {
     if (!draft || !feeCurrency) return;
@@ -91,14 +110,14 @@ export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, 
     if (saved) setDraft(null);
   };
 
-  const startEdit = (payment: BookingPayment) => {
+  const startEdit = (payment: BookingPayment) => unlessBusy(() => {
     setFormError(null);
     setConfirmDelete(null);
     setDraft({
       id: payment.id, kind: payment.kind, amount: formatBookingFeeInput(payment.amount_minor, payment.currency),
       dueOn: payment.due_on ?? "", paidOn: payment.paid_on ?? "", note: payment.note ?? "",
     });
-  };
+  });
 
   const commissionSummary = commission
     ? `${formatCommissionValue(commission.type, commission.value, feeCurrency)}, ${commission.mode === "on_top" ? "on top of the fee" : "included in the fee"}`
@@ -180,7 +199,7 @@ export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, 
                           onClick={async () => { if (await run(payment.id, () => deleteBookingPayment(payment.id), "Payment deleted.", setRowError)) setConfirmDelete(null); }}>
                           {busy === payment.id ? "Deleting..." : "Yes, delete"}
                         </Button>
-                        <Button type="button" size="sm" variant="outline" onClick={() => setConfirmDelete(null)}>Keep</Button>
+                        <Button type="button" size="sm" variant="outline" aria-disabled={locked} onClick={() => unlessBusy(() => setConfirmDelete(null))}>Keep</Button>
                       </>
                     ) : (
                       <>
@@ -195,9 +214,9 @@ export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, 
                             Mark as paid today
                           </Button>
                         ))}
-                        <Button type="button" size="sm" variant="outline" aria-label={`Edit ${name}`} onClick={() => startEdit(payment)}>Edit</Button>
-                        <Button type="button" size="sm" variant="outline" aria-label={`Delete ${name}`}
-                          onClick={() => { setRowError(null); setDraft(null); setConfirmDelete(payment.id); }}>
+                        <Button type="button" size="sm" variant="outline" aria-disabled={locked} aria-label={`Edit ${name}`} onClick={() => startEdit(payment)}>Edit</Button>
+                        <Button type="button" size="sm" variant="outline" aria-disabled={locked} aria-label={`Delete ${name}`}
+                          onClick={() => unlessBusy(() => { setRowError(null); setDraft(null); setConfirmDelete(payment.id); })}>
                           Delete
                         </Button>
                       </>
@@ -215,7 +234,8 @@ export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, 
           <p className="text-sm text-muted-foreground">{PAYMENT_NEEDS_FEE_MESSAGE}</p>
         )}
         {payments !== null && feeCurrency && draft === null && (
-          <Button type="button" variant="outline" onClick={() => { setFormError(null); setConfirmDelete(null); setDraft(EMPTY_DRAFT); }}>
+          <Button type="button" variant="outline" aria-disabled={locked}
+            onClick={() => unlessBusy(() => { setFormError(null); setConfirmDelete(null); setDraft(EMPTY_DRAFT); })}>
             Add payment
           </Button>
         )}
@@ -224,30 +244,30 @@ export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, 
             <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="min-w-0">
                 <label htmlFor="payment-kind" className={labelClass}>Payment type</label>
-                <select id="payment-kind" value={draft.kind} className={selectClass}
+                <select id="payment-kind" value={draft.kind} disabled={locked} className={selectClass}
                   onChange={(event) => setDraft({ ...draft, kind: event.target.value as PaymentKind })}>
                   {PAYMENT_KINDS.map((kind) => <option key={kind} value={kind}>{PAYMENT_KIND_LABELS[kind]}</option>)}
                 </select>
               </div>
               <div className="min-w-0">
                 <label htmlFor="payment-amount" className={labelClass}>Payment amount ({feeCurrency})</label>
-                <Input id="payment-amount" type="text" inputMode="decimal" autoComplete="off" value={draft.amount} className={fieldClass}
+                <Input id="payment-amount" disabled={locked} type="text" inputMode="decimal" autoComplete="off" value={draft.amount} className={fieldClass}
                   aria-describedby={formError ? "payment-form-error" : undefined}
                   onChange={(event) => setDraft({ ...draft, amount: event.target.value })} />
               </div>
               <div className="min-w-0">
                 <label htmlFor="payment-due-on" className={labelClass}>Due date (optional)</label>
-                <Input id="payment-due-on" type="date" value={draft.dueOn} className={fieldClass}
+                <Input id="payment-due-on" disabled={locked} type="date" value={draft.dueOn} className={fieldClass}
                   onChange={(event) => setDraft({ ...draft, dueOn: event.target.value })} />
               </div>
               <div className="min-w-0">
                 <label htmlFor="payment-paid-on" className={labelClass}>Paid date (leave empty if not paid)</label>
-                <Input id="payment-paid-on" type="date" value={draft.paidOn} className={fieldClass}
+                <Input id="payment-paid-on" disabled={locked} type="date" value={draft.paidOn} className={fieldClass}
                   onChange={(event) => setDraft({ ...draft, paidOn: event.target.value })} />
               </div>
               <div className="min-w-0 sm:col-span-2">
                 <label htmlFor="payment-note" className={labelClass}>Payment note (optional)</label>
-                <Input id="payment-note" type="text" value={draft.note} maxLength={MAX_PAYMENT_NOTE_LENGTH} className={fieldClass}
+                <Input id="payment-note" disabled={locked} type="text" value={draft.note} maxLength={MAX_PAYMENT_NOTE_LENGTH} className={fieldClass}
                   onChange={(event) => setDraft({ ...draft, note: event.target.value })} />
               </div>
             </div>
@@ -256,7 +276,7 @@ export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, 
               <Button type="button" onClick={submitDraft} aria-disabled={busy !== null} className="aria-disabled:cursor-wait aria-disabled:opacity-50">
                 {busy === "form" ? "Saving..." : draft.id ? "Save payment" : "Save new payment"}
               </Button>
-              <Button type="button" variant="outline" onClick={() => { setDraft(null); setFormError(null); }}>Cancel</Button>
+              <Button type="button" variant="outline" aria-disabled={locked} onClick={() => unlessBusy(() => { setDraft(null); setFormError(null); })}>Cancel</Button>
             </div>
           </div>
         )}

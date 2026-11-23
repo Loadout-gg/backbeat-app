@@ -26,7 +26,7 @@ import {
   MAX_TAX_NOTE_LENGTH, bookingCommission, formatBasisPoints, parseCommissionPercent, parseMoneyAmount,
   type BookingPayment, type CommissionMode, type CommissionType,
 } from "@/lib/booking-finance";
-import { BookingPayments } from "./booking-payments";
+import { BookingPayments, useBookingPaymentsState } from "./booking-payments";
 
 interface EventBookingClientProps {
   booking: BookingWithArtist;
@@ -84,6 +84,8 @@ export function EventBookingClient({ booking, artistBookings, today, payments = 
   const savedTaxNote = booking.tax_note ?? "";
   const [taxNote, setTaxNote] = useState(savedTaxNote);
   const hasPayments = !!payments && payments.length > 0;
+  // Owned here, not by the panel: the Financial tab content unmounts on a tab change.
+  const paymentsState = useBookingPaymentsState();
 
   const [startTime, setStartTime] = useState(
     booking.start_time ? booking.start_time.slice(0, 5) : "10:30"
@@ -960,6 +962,7 @@ export function EventBookingClient({ booking, artistBookings, today, payments = 
                 commission={savedCommission}
                 payments={payments}
                 today={today}
+                state={paymentsState}
               />
             </div>
           </TabsContent>
