@@ -56,7 +56,7 @@ afterEach(() => {
 it("shows dashboard booking times as HH:MM and falls back to the artist name", () => {
   render(<DashboardContent
     welcomeMessage="Welcome back"
-    stats={{ eventsInProgress: 0, bookingsInProgress: 0, totalArtists: 1 }}
+    stats={{ eventsInProgress: 0, bookingsInProgress: 0, totalArtists: 1, totalPromoters: 0 }}
     eventsInProgress={[]}
     calendarToday="2026-11-14"
     bookings={[row({ artist: { ...row().artist!, stage_name: null, name: "Luna" } })]}

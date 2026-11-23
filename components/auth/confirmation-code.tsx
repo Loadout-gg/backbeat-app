@@ -11,7 +11,7 @@ export function ConfirmationCode({ value, onChange, disabled, invalid }: { value
     render={({ slots }) => <div aria-hidden="true" className="flex w-full max-w-xs items-center justify-center gap-1">
       {slots.map((slot, index) => <div key={index} data-slot="confirmation-digit" className={cn(
         "flex h-11 min-w-0 flex-1 items-center justify-center rounded-md border border-input text-lg tabular-nums",
-        index === 3 && "ml-2", slot.isActive && "border-ring ring-2 ring-ring/50", invalid && "border-destructive",
+        index === 3 && "ml-2", slot.isActive && "border-ring ring-2 ring-ring", invalid && "border-destructive",
       )}>{slot.char ?? (slot.hasFakeCaret ? <span className="h-5 w-px bg-foreground" /> : null)}</div>)}
     </div>} />
 }
