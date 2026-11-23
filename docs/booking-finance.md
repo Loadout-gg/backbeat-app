@@ -1,6 +1,6 @@
 # Booking finance (P2)
 
-P2 of the reference plan `ARCH-20261114-booking-domain` r02, implemented under the staging delegation of 2026-11-21 with Simone's decisions 1–13 of 2026-11-23 (see the [decision register](agents/decision-register.md), row `BOOKING-P2-FINANCE`). Staging only: production apply and promotion to `main` remain Alberto's.
+P2 of the reference plan `ARCH-20261114-booking-domain` r02, implemented under the staging delegation of 2026-11-21 (superseded on 2026-11-23 by `GOV-STAGING-20261123`; the reserved parts of this PR now need Alberto's authorization) with Simone's decisions 1–13 of 2026-11-23 (see the [decision register](agents/decision-register.md), row `BOOKING-P2-FINANCE`). Staging only: production apply and promotion to `main` remain Alberto's.
 
 ## Contract
 

@@ -35,7 +35,7 @@ const balance: BookingPayment = { id: "pay-2", booking_id: "booking-a", kind: "b
 const later: BookingPayment = { id: "pay-3", booking_id: "booking-a", kind: "other", amount_minor: 500, currency: "EUR", due_on: "2026-12-30", paid_on: null, note: null }
 
 async function open(overrides: Partial<BookingWithArtist> = {}, payments: readonly BookingPayment[] | null = [], today: string | undefined = TODAY) {
-  render(<EventBookingClient booking={{ ...base, ...overrides }} artistBookings={[]} today={today} payments={payments} />)
+  render(<EventBookingClient booking={{ ...base, ...overrides }} sameDayBookingCounts={{}} today={today} payments={payments} />)
   const tab = screen.getByRole("tab", { name: "Financial" })
   tab.focus()
   fireEvent.keyDown(screen.getByRole("tab", { name: "Performance" }), { key: "ArrowRight" })

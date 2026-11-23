@@ -26,15 +26,14 @@ Explain the decision needed, current contracts, options, recommendation, impacts
 
 Resume only against Alberto's explicit decision for the exact request revision and authorized scope. An experiment PASS, reviewer GO, deadline or silence is not architectural approval. Changed assumptions or scope require a new decision.
 
-## Staging delegation (2026-11-21)
+## Staging delegation (owner clarification, 2026-11-23)
 
-Recorded owner decision: Alberto (`DerekLoadout`) granted Simone full autonomy on `staging` (stated by Simone, 2026-11-21). Staging uses a Supabase database separate from production.
+This section supersedes the broad delegation recorded in PR #25. Simone may decide non-security product and UX work on staging, including additive migrations within approved contracts on the verified staging database. This authority does not extend to production.
 
-- On `staging`, Simone decides and the agent may implement, **without the architecture stop line or request package**: schema, migrations (additive and destructive), RLS, auth, roles and contracts.
+- Only Alberto authorizes workflow or policy changes, roles, Auth, RLS, tenant isolation, sensitive-data handling, destructive operations, infrastructure and production. These boundaries apply on staging too. If a change crosses one of them, obtain Alberto's explicit decision before implementation.
 - Preconditions are unchanged: PR to `staging`, `Quality` green on the current head, Codex review clean, and every migration versioned in the repository and described in the PR body (what, why, rollback).
 - Migrations are applied to the staging Supabase project only, never to production. Production apply and promotion to `main` remain Alberto's alone; he reviews the full diff, migrations included, at release and can require changes before live.
-- The stop line and request package still apply to anything touching `main`, the production database, Vercel/GitHub settings, secrets or billing.
-- This does not weaken branch protection or the live-release rules. Where other text in these instructions reserves schema, RLS, auth, role or destructive-data changes to Alberto, this section overrides it for `staging` only.
+- A reported statement, successful CI, clean review or merged PR does not establish owner approval. Neither a contributor nor an agent may expand their own delegation. The Git workflow, branch protection and architectural stop remain in force.
 
 ## Non-negotiable boundaries
 
