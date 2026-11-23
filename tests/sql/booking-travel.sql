@@ -168,6 +168,14 @@ BEGIN
   PERFORM bb_test.eq('leg: same date, earlier arrival time, same zone', bb_test.run_as(ua, format(ins_leg, ', depart_date, depart_time, arrive_date, arrive_time', wa, ba, 'other', ', ''2030-05-02'', ''10:00'', ''2030-05-02'', ''09:00''')), '23514');
   PERFORM bb_test.eq('leg: same date, earlier local arrival, different zones', bb_test.run_as(ua, format(ins_leg, ', depart_date, depart_time, depart_zone, arrive_date, arrive_time, arrive_zone', wa, ba, 'other', ', ''2030-05-02'', ''10:00'', ''Tokyo'', ''2030-05-02'', ''09:00'', ''Honolulu''')), 'OK:1');
   PERFORM bb_test.eq('leg: zone labels compared case-insensitively', bb_test.run_as(ua, format(ins_leg, ', depart_date, depart_time, depart_zone, arrive_date, arrive_time, arrive_zone', wa, ba, 'other', ', ''2030-05-02'', ''10:00'', ''cet'', ''2030-05-02'', ''09:00'', '' CET ''')), '23514');
+  -- Date-line rule (Simone 2026-11-23): one day earlier only with two different, set labels.
+  PERFORM bb_test.eq('leg: date line, different zones, arrival one day earlier', bb_test.run_as(ua, format(ins_leg, ', depart_date, depart_time, depart_zone, arrive_date, arrive_time, arrive_zone', wa, ba, 'other', ', ''2030-05-02'', ''17:00'', ''Tokyo'', ''2030-05-01'', ''10:00'', ''Los Angeles''')), 'OK:1');
+  PERFORM bb_test.eq('leg: date line, different zones, two days earlier', bb_test.run_as(ua, format(ins_leg, ', depart_date, depart_zone, arrive_date, arrive_zone', wa, ba, 'other', ', ''2030-05-02'', ''Tokyo'', ''2030-04-30'', ''Los Angeles''')), '23514');
+  PERFORM bb_test.eq('leg: date line, one label missing, one day earlier', bb_test.run_as(ua, format(ins_leg, ', depart_date, depart_zone, arrive_date', wa, ba, 'other', ', ''2030-05-02'', ''Tokyo'', ''2030-05-01''')), '23514');
+  PERFORM bb_test.eq('leg: date line, blank label counts as missing', bb_test.run_as(ua, format(ins_leg, ', depart_date, depart_zone, arrive_date, arrive_zone', wa, ba, 'other', ', ''2030-05-02'', ''  '', ''2030-05-01'', ''PST''')), '23514');
+  PERFORM bb_test.eq('leg: date line, equal labels, one day earlier', bb_test.run_as(ua, format(ins_leg, ', depart_date, depart_zone, arrive_date, arrive_zone', wa, ba, 'other', ', ''2030-05-02'', ''JST'', ''2030-05-01'', '' jst ''')), '23514');
+  PERFORM bb_test.eq('leg: one label missing, same date, earlier time', bb_test.run_as(ua, format(ins_leg, ', depart_date, depart_time, depart_zone, arrive_date, arrive_time', wa, ba, 'other', ', ''2030-05-02'', ''10:00'', ''CET'', ''2030-05-02'', ''09:00''')), '23514');
+  PERFORM bb_test.eq('leg: date line across a month end', bb_test.run_as(ua, format(ins_leg, ', depart_date, depart_zone, arrive_date, arrive_zone', wa, ba, 'other', ', ''2030-03-01'', ''Auckland'', ''2030-02-28'', ''Honolulu''')), 'OK:1');
   PERFORM bb_test.eq('leg: notes too long', bb_test.run_as(ua, format(ins_leg, ', notes', wa, ba, 'other', format(', %L', repeat('x', 2001)))), '23514');
   PERFORM bb_test.eq('leg: booking of another workspace', bb_test.run_as(ua, format(ins_leg, '', wa, 'b0000000-0000-4000-8000-00000000b00b', 'other', '')), '23503');
   PERFORM bb_test.eq('leg: update a column', bb_test.run_as(ua, 'UPDATE public.booking_travel_legs SET notes = ''changed'', updated_at = now() WHERE direction = ''inbound'''), 'OK:1');
@@ -244,9 +252,9 @@ CREATE TABLE bb_test.snapshot AS SELECT
 \ir ../../ops/supabase/booking-travel/verify.sql
 \o
 SELECT bb_test.eq('verify.sql: every check passes',
-  split_part(current_setting('backbeat.booking_travel_verify'), E'\n', 1), 'BOOKING_TRAVEL_VERIFY ALL PASS: pass=12 fail=0 skip=0');
+  split_part(current_setting('backbeat.booking_travel_verify'), E'\n', 1), 'BOOKING_TRAVEL_VERIFY ALL PASS: pass=13 fail=0 skip=0');
 SELECT bb_test.eq('verify.sql: one line per check',
-  (array_length(string_to_array(current_setting('backbeat.booking_travel_verify'), E'\n'), 1))::text, '13');
+  (array_length(string_to_array(current_setting('backbeat.booking_travel_verify'), E'\n'), 1))::text, '14');
 SELECT bb_test.eq('verify.sql: nothing left behind',
   (SELECT row(s.*)::text FROM bb_test.snapshot s),
   (SELECT row((SELECT count(*) FROM public.bookings), (SELECT count(*) FROM public.artists),

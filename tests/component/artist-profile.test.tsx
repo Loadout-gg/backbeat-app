@@ -57,5 +57,10 @@ it("does not expose the four unavailable footer destinations as links", () => {
   const footer = screen.getByRole("contentinfo")
   expect(within(footer).queryAllByRole("link")).toEqual([])
   expect(within(footer).getByText("Terms, Privacy, Help and Contact are currently unavailable.")).toBeTruthy()
-  expect(within(footer).getByText("© 2025 Backbeat. All rights reserved.")).toBeTruthy()
+  expect(within(footer).getByText("© 2026 Backbeat. All rights reserved.")).toBeTruthy()
+  expect(within(footer).queryByText(/© 2025/)).toBeNull()
+})
+it("renders the footer year from the configured calendar day, not a hard-coded year", () => {
+  render(<ArtistProfileClient artist={artist} bookings={[]} events={[]} calendarToday="2031-01-01" />)
+  expect(within(screen.getByRole("contentinfo")).getByText("© 2031 Backbeat. All rights reserved.")).toBeTruthy()
 })

@@ -14,7 +14,9 @@ P4 of the reference plan `ARCH-20261114-booking-domain` r02 (D4), plus artist tr
 | `artists.date_of_birth` | - | `date`, nullable, not before 1900-01-01 (database) and not after today in the calendar zone (app) |
 
 - Times are local date + time per endpoint, as written on the ticket. No conversion, no instants, no computed duration (decision 2, D4.2 A). The zone is an optional free-text label (max 64), not an IANA zone.
-- A time needs its date. Arrival date is never before departure date. On the same date, arrival time is not before departure time **only when both zone labels are equal** (case and outer spaces ignored): local clocks of different zones are not comparable without a zone policy. Known limit: a leg crossing the date line westwards (arrival calendar date earlier than departure) cannot be stored; record it with the date order kept and explain in notes.
+- A time needs its date. Order rule (database CHECK `booking_travel_legs_order_check` and Zod, Simone 2026-11-23):
+  - **Both zone labels set and different** (case and outer spaces ignored): local clocks are not comparable, so times are not compared and the arrival date may be **up to one day before** the departure date (date-line crossing, e.g. Tokyo 2030-05-02 17:00 → Los Angeles 2030-05-01 10:00). Two or more days earlier is rejected.
+  - **Equal labels, or one or both missing** (blank counts as missing): arrival date is not before departure date and, on the same date, arrival time is not before departure time.
 - Check-out is never before check-in; same-day check-out is allowed.
 - Lengths: mode 50, carrier 200, reference 100, places 300, zone 64, travellers 1000, driver name 200, driver phone 100, notes 2000; stay name 200, address 1000, confirmation 100; document number 64, issuing country 100, holder name 200. Every limit is both a Zod rule (`lib/booking-travel-validation.ts`) and a database CHECK.
 - Driver fields moved from the Performance placeholder into legs: the disabled driver inputs and the "Same driver Inbound/Outbound" checkbox are gone from the Performance tab.
@@ -69,10 +71,12 @@ Migration 009 is idempotent and refuses to run without `backbeat.booking_travel_
 
 Schema first, then code. Current staging code runs unchanged on the migrated schema: the new tables are unused, and `artists.date_of_birth` does reach the old `select("*")` artist reads, but it stays NULL for every artist until this PR's code (the only writer) is deployed, so keep the window between apply and merge short. The new code on the old schema shows "could not be loaded" in the Travel/Accommodation tabs and travel documents section, and every write fails. **Do not merge before applying 009 on staging.**
 
+Files for the staging SQL editor: `~/Desktop/backbeat-sql-009/` on Simone's machine (copies of the repo files with the staging target line added to 02).
+
 1. `01_preflight.sql` in the staging SQL editor: expect `PREFLIGHT READY`, marker class `staging`.
 2. `02_migration_009.sql` (setting line + migration, one run): ends with a summary SELECT.
 3. `03_postflight.sql`: expect `POSTFLIGHT OK failing: none`.
-4. Create one booking in the app (any status) and have a second account in another workspace, then `04_verify_rls.sql`: expect `BOOKING_TRAVEL_VERIFY ALL PASS: pass=12 fail=0 skip=0`. `INCOMPLETE` means missing test data, `FAILED` means do not merge. Nothing is left behind.
+4. Create one booking in the app (any status) and have a second account in another workspace, then `04_verify_rls.sql`: expect `BOOKING_TRAVEL_VERIFY ALL PASS: pass=13 fail=0 skip=0`. `INCOMPLETE` means missing test data, `FAILED` means do not merge. Nothing is left behind.
 5. Merge the PR to `staging`, verify the deployment commit.
 
 ## Rollback
@@ -86,5 +90,5 @@ Backups still cascade on booking/artist delete (they keep their foreign keys). T
 ## Tests
 
 - `pnpm test`: validation (`booking-travel-validation`), actions (`booking-travel-actions`: workspace scope, row witness, fixed copy, nothing sensitive logged, explicit projections), static migration and privacy contracts (`booking-travel-migration`), components (`booking-travel`, `artist-travel-documents`), and the artists list projection in `backend-read-contracts`.
-- `PG_BIN=<postgresql-17 bin> sh tests/sql/run-local.sh booking-travel`: applies 001–006 and 009 to a throwaway cluster; guard matrix, prerequisites, idempotency, untouched parent rows, CHECKs, column-scoped UPDATE, cross-workspace isolation for all three tables and the new column, cascade on booking and artist delete, preflight/postflight/verify, rollback and restore. The `auth` schema is a stub: not proof of hosted Auth or PostgREST behaviour. Not part of CI.
+- `PG_BIN=<postgresql-17 bin> sh tests/sql/run-local.sh booking-travel`: applies 001–006 and 009 to a throwaway cluster; guard matrix, prerequisites, idempotency, untouched parent rows, CHECKs (including the date-line rule), column-scoped UPDATE, cross-workspace isolation for all three tables and the new column, cascade on booking and artist delete, preflight/postflight/verify, rollback and restore. The `auth` schema is a stub: not proof of hosted Auth or PostgREST behaviour. Not part of CI.
 - `tests/integration` and `tests/e2e` need an authorized synthetic stack (NOT_RUN).

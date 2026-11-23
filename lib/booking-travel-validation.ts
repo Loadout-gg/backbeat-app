@@ -41,6 +41,18 @@ function clockKey(time: string): string {
 function zoneKey(zone: string | null): string {
   return (zone ?? "").trim().toLowerCase()
 }
+/** Both labels set and different: the two local clocks are not comparable. */
+function zonesDiffer(departZone: string | null, arriveZone: string | null): boolean {
+  const depart = zoneKey(departZone)
+  const arrive = zoneKey(arriveZone)
+  return depart !== "" && arrive !== "" && depart !== arrive
+}
+/** Calendar day before a YYYY-MM-DD date (UTC arithmetic, no zone involved). */
+function previousDay(date: string): string {
+  const day = new Date(`${date}T00:00:00Z`)
+  day.setUTCDate(day.getUTCDate() - 1)
+  return day.toISOString().slice(0, 10)
+}
 
 export const travelLegSchema = z.object({
   direction: z.enum(TRAVEL_DIRECTIONS, "Choose a direction"),
@@ -67,14 +79,19 @@ export const travelLegSchema = z.object({
     ctx.addIssue({ code: "custom", path: ["arrive_date"], message: "Enter the arrival date for the arrival time" })
   }
   if (leg.depart_date && leg.arrive_date) {
-    if (leg.arrive_date < leg.depart_date) {
+    // Mirrors booking_travel_legs_order_check (migration 009). Different, both-set zone labels:
+    // local clocks are not compared (decision 2) and the arrival date may be one day earlier
+    // (date-line crossing, Simone 2026-11-23). Otherwise strict date and same-date time order.
+    if (zonesDiffer(leg.depart_zone, leg.arrive_zone)) {
+      if (leg.arrive_date < previousDay(leg.depart_date)) {
+        ctx.addIssue({ code: "custom", path: ["arrive_date"], message: "Arrival can be at most one day before departure across time zones" })
+      }
+    } else if (leg.arrive_date < leg.depart_date) {
       ctx.addIssue({ code: "custom", path: ["arrive_date"], message: "Arrival cannot be before departure" })
     } else if (
       leg.arrive_date === leg.depart_date && leg.depart_time && leg.arrive_time
-      && zoneKey(leg.depart_zone) === zoneKey(leg.arrive_zone)
       && clockKey(leg.arrive_time) < clockKey(leg.depart_time)
     ) {
-      // Local times in different zones are not compared: there is no zone policy (decision 2).
       ctx.addIssue({ code: "custom", path: ["arrive_time"], message: "Arrival cannot be before departure" })
     }
   }

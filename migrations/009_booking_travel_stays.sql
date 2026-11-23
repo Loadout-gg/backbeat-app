@@ -112,14 +112,20 @@ CREATE TABLE IF NOT EXISTS public.booking_travel_legs (
     CHECK (depart_time IS NULL OR depart_date IS NOT NULL),
   CONSTRAINT booking_travel_legs_arrive_time_needs_date
     CHECK (arrive_time IS NULL OR arrive_date IS NOT NULL),
-  -- Arrival not before departure. Times are compared only on the same date with the same zone
-  -- label: local clock times in different zones are not comparable without a zone policy.
+  -- Arrival not before departure. When both zone labels are set and differ (case and outer
+  -- spaces ignored), local clocks are not comparable: the arrival date may be up to one day
+  -- before the departure date (date-line crossing, e.g. Tokyo to Los Angeles) and times are not
+  -- compared. With equal or missing labels: arrival date not before departure date and, on the
+  -- same date, arrival time not before departure time.
   CONSTRAINT booking_travel_legs_order_check CHECK (
-    depart_date IS NULL OR arrive_date IS NULL OR arrive_date > depart_date
+    depart_date IS NULL OR arrive_date IS NULL
+    OR (pg_catalog.btrim(coalesce(depart_zone, '')) <> ''
+        AND pg_catalog.btrim(coalesce(arrive_zone, '')) <> ''
+        AND pg_catalog.lower(pg_catalog.btrim(depart_zone)) <> pg_catalog.lower(pg_catalog.btrim(arrive_zone))
+        AND arrive_date >= depart_date - 1)
+    OR arrive_date > depart_date
     OR (arrive_date = depart_date AND (
-      depart_time IS NULL OR arrive_time IS NULL OR arrive_time >= depart_time
-      OR pg_catalog.lower(pg_catalog.btrim(coalesce(depart_zone, '')))
-         <> pg_catalog.lower(pg_catalog.btrim(coalesce(arrive_zone, '')))))),
+      depart_time IS NULL OR arrive_time IS NULL OR arrive_time >= depart_time))),
   CONSTRAINT booking_travel_legs_lengths CHECK (
     coalesce(pg_catalog.char_length(mode), 0) <= 50
     AND coalesce(pg_catalog.char_length(carrier), 0) <= 200

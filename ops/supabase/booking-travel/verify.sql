@@ -6,7 +6,7 @@
 --
 -- Every write happens inside a block that is always rolled back: no row is changed and nothing
 -- is left behind. Only synthetic marker values are written ('BB-VERIFY-...').
--- OUTPUT: the final SELECT. First row: "BOOKING_TRAVEL_VERIFY ALL PASS: pass=N fail=0 skip=0".
+-- OUTPUT: the final SELECT. First row: "BOOKING_TRAVEL_VERIFY ALL PASS: pass=13 fail=0 skip=0".
 -- "FAILED" or "INCOMPLETE" there means do not merge.
 DO $verify$
 DECLARE
@@ -87,6 +87,16 @@ BEGIN
     END;
     results := results || (CASE WHEN outcome = '23514' THEN 'PASS' ELSE 'FAIL' END
       || '|leg: arrival before departure rejected|' || outcome || ' (expected 23514)');
+
+    BEGIN
+      UPDATE public.booking_travel_legs SET depart_zone = 'BB-VERIFY-JST', arrive_zone = 'BB-VERIFY-PST',
+        arrive_date = target.date - 1 WHERE id = leg;
+      GET DIAGNOSTICS affected = ROW_COUNT;
+      outcome := 'rows=' || affected;
+    EXCEPTION WHEN OTHERS THEN outcome := SQLSTATE;
+    END;
+    results := results || (CASE WHEN outcome = 'rows=1' THEN 'PASS' ELSE 'FAIL' END
+      || '|leg: date-line arrival one day earlier accepted with different zone labels|' || outcome || ' (expected rows=1)');
 
     BEGIN
       UPDATE public.booking_stays SET check_out_on = target.date - 1 WHERE id = stay;

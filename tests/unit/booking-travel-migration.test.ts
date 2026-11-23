@@ -35,6 +35,8 @@ it("STATIC: 009 is additive and leaves existing tables' access unchanged", () =>
     expect(migration).toContain(`ALTER TABLE public.${table} ENABLE ROW LEVEL SECURITY;`)
   }
   expect(migration).toContain("REFERENCES public.bookings(workspace_id, id) ON DELETE CASCADE")
+  // Date-line rule: one day earlier only when both zone labels are set and differ.
+  expect(migration).toContain("AND arrive_date >= depart_date - 1)")
   expect(migration).toContain("REFERENCES public.artists(workspace_id, id) ON DELETE CASCADE")
   expect(migration.match(/FOR ALL TO authenticated\n  USING \(public\.backbeat_is_active_member\(workspace_id\)\)\n  WITH CHECK \(public\.backbeat_is_active_member\(workspace_id\)\);/g)).toHaveLength(3)
   expect(migration).toContain("FROM PUBLIC, anon, authenticated;")

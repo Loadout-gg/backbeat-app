@@ -27,6 +27,22 @@ it.each([
 ])("rejects leg %j with fixed copy", (patch, message) => {
   expect(issue(leg(patch))).toBe(message)
 })
+it.each([
+  [{ depart_date: "2030-05-02", depart_zone: "Tokyo", arrive_date: "2030-04-30", arrive_zone: "Los Angeles" }, "Arrival can be at most one day before departure across time zones"],
+  [{ depart_date: "2030-05-02", depart_zone: "Tokyo", arrive_date: "2030-05-01" }, "Arrival cannot be before departure"],
+  [{ depart_date: "2030-05-02", arrive_date: "2030-05-01", arrive_zone: "PST" }, "Arrival cannot be before departure"],
+  [{ depart_date: "2030-05-02", depart_zone: "JST", arrive_date: "2030-05-01", arrive_zone: " jst " }, "Arrival cannot be before departure"],
+  [{ depart_date: "2030-05-02", depart_time: "10:00", depart_zone: "CET", arrive_date: "2030-05-02", arrive_time: "09:00" }, "Arrival cannot be before departure"],
+  [{ depart_date: "2030-05-02", depart_zone: "  ", arrive_date: "2030-05-01", arrive_zone: "PST" }, "Arrival cannot be before departure"],
+])("date-line rule rejects %j", (patch, message) => {
+  expect(issue(leg(patch))).toBe(message)
+})
+it("date-line rule accepts an arrival one calendar day earlier only with two different zone labels", () => {
+  expect(leg({ depart_date: "2030-05-02", depart_time: "17:00", depart_zone: "Tokyo", arrive_date: "2030-05-01", arrive_time: "10:00", arrive_zone: "Los Angeles" }).success).toBe(true)
+  expect(leg({ depart_date: "2030-03-01", depart_zone: "Auckland", arrive_date: "2030-02-28", arrive_zone: "Honolulu" }).success).toBe(true)
+  expect(leg({ depart_date: "2028-03-01", depart_zone: "Auckland", arrive_date: "2028-02-29", arrive_zone: "Honolulu" }).success).toBe(true)
+  expect(leg({ depart_date: "2030-01-01", depart_zone: "Tokyo", arrive_date: "2029-12-31", arrive_zone: "Los Angeles" }).success).toBe(true)
+})
 it("compares clock times only for the same date and the same zone label", () => {
   expect(leg({ depart_date: "2030-05-02", depart_time: "10:00", depart_zone: "Tokyo", arrive_date: "2030-05-02", arrive_time: "09:00", arrive_zone: "Honolulu" }).success).toBe(true)
   expect(leg({ depart_date: "2030-05-02", depart_time: "10:00:00", arrive_date: "2030-05-02", arrive_time: "10:00" }).success).toBe(true)
