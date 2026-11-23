@@ -14,14 +14,20 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
-import { updateBooking, deleteBooking, type Booking, type BookingWithArtist } from "@/lib/actions/bookings";
-import { BOOKING_STATUS_LABELS, bookingStatusBadgeVariant, findSameDayBookings, sameDayWarning } from "@/lib/booking-display";
+import { updateBooking, updateBookingStatus, deleteBooking, type Booking, type BookingWithArtist } from "@/lib/actions/bookings";
+import {
+  BOOKING_STATUS_LABELS, BOOKING_TRANSITION_LABELS, bookingStatusBadgeVariant, findSameDayBookings,
+  holdRank, holdRankLabel, isHoldExpired, isPastBookingDate, sameDayWarning,
+} from "@/lib/booking-display";
+import { allowedBookingTransitions, type BookingStatus } from "@/lib/booking-status";
 import { formatArtistBaseRate } from "@/lib/artist-base-rate";
 
 interface EventBookingClientProps {
   booking: BookingWithArtist;
   /** This artist's bookings from the existing scoped read; null when that read failed. */
   artistBookings?: readonly Booking[] | null;
+  /** Server "today" (configured calendar zone). Without it, completion is not offered. */
+  today?: string;
 }
 
 const TABS = [
@@ -33,7 +39,7 @@ const TABS = [
   "Artist contacts",
 ] as const;
 
-export function EventBookingClient({ booking, artistBookings }: EventBookingClientProps) {
+export function EventBookingClient({ booking, artistBookings, today }: EventBookingClientProps) {
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
   const saveInFlight = useRef(false);
@@ -47,6 +53,11 @@ export function EventBookingClient({ booking, artistBookings }: EventBookingClie
   const deleteInFlight = useRef(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<BookingStatus | null>(null);
+  const statusInFlight = useRef(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [statusNotice, setStatusNotice] = useState("");
+  const [holdExpiresOn, setHoldExpiresOn] = useState(booking.hold_expires_on ?? "");
 
   // Form state - Performance tab
   const [bookingDate, setBookingDate] = useState(booking.date);
@@ -132,6 +143,36 @@ export function EventBookingClient({ booking, artistBookings }: EventBookingClie
     ? "Other bookings for this date could not be checked."
     : sameDayCount > 0 ? sameDayWarning(sameDayCount) : null;
 
+  // Status is always read from the server copy of the booking, never from a local draft.
+  const statusTargets = today ? allowedBookingTransitions(booking.status, booking.date, today) : [];
+  const holdExpired = today ? isHoldExpired(booking, today) : false;
+  const holdPriority = holdRankLabel(artistBookings ? holdRank(artistBookings, booking) : null);
+  const completionHint = booking.status === "confirmed" && !!today && isPastBookingDate(booking.date, today);
+  const savedHoldExpiry = booking.hold_expires_on ?? "";
+
+  const handleStatusChange = async (target: BookingStatus) => {
+    if (statusInFlight.current) return;
+    statusInFlight.current = true;
+    setPendingStatus(target);
+    setStatusError(null);
+    setStatusNotice("");
+    try {
+      const result = await updateBookingStatus(booking.id, target, booking.status);
+      if (!result.success) {
+        setStatusError(result.error || "Unable to update the booking status. Please try again.");
+        return;
+      }
+      setHoldExpiresOn("");
+      setStatusNotice(`Status changed to ${BOOKING_STATUS_LABELS[target].toLowerCase()}.`);
+      router.refresh();
+    } catch {
+      setStatusError("Unable to confirm the status change. Reload the booking before retrying.");
+    } finally {
+      statusInFlight.current = false;
+      setPendingStatus(null);
+    }
+  };
+
   const handleUpdateBooking = async () => {
     if (saveInFlight.current) return;
     setIsSaved(false);
@@ -139,6 +180,11 @@ export function EventBookingClient({ booking, artistBookings }: EventBookingClie
     setFeeError(null);
     if (!createBookingSchema.shape.date.safeParse(bookingDate).success) {
       setSaveError("Enter a valid booking date");
+      return;
+    }
+    const holdExpiryChanged = booking.status === "hold" && holdExpiresOn !== savedHoldExpiry;
+    if (holdExpiryChanged && holdExpiresOn && !createBookingSchema.shape.date.safeParse(holdExpiresOn).success) {
+      setSaveError("Enter a valid hold expiry date");
       return;
     }
     const fee = parseBookingFee(feeAmount, feeCurrency);
@@ -156,6 +202,7 @@ export function EventBookingClient({ booking, artistBookings }: EventBookingClie
       const result = await updateBooking(booking.id, {
         ...(bookingDate !== booking.date ? { date: bookingDate } : {}),
         ...(feeDirty && fee.success ? fee.data : {}),
+        ...(holdExpiryChanged ? { hold_expires_on: holdExpiresOn || null } : {}),
         start_time: startTime,
         duration_minutes: durationMinutes || null,
         notes: notes || null,
@@ -267,6 +314,61 @@ export function EventBookingClient({ booking, artistBookings }: EventBookingClie
             </div>
           </div>
         </div>
+
+        {/* Status: transitions are separate from "Update booking" and apply immediately. */}
+        <section aria-labelledby="booking-status-heading" className="space-y-3 border-b border-border px-4 py-4 sm:px-6">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h2 id="booking-status-heading" className="text-base font-medium text-foreground">Status</h2>
+            <Badge variant={bookingStatusBadgeVariant(booking.status)}>{BOOKING_STATUS_LABELS[booking.status]}</Badge>
+            {holdExpired && <Badge variant="destructive">Hold expired</Badge>}
+            {holdPriority && <Badge variant="outline">{holdPriority}</Badge>}
+          </div>
+          {completionHint && (
+            <p className="text-sm text-muted-foreground">This show date has passed. Mark as completed?</p>
+          )}
+          {booking.status === "hold" && (
+            <div className="max-w-xs">
+              <label htmlFor="booking-hold-expiry" className="mb-1.5 block text-xs font-medium text-foreground">
+                Hold expires on (optional)
+              </label>
+              <Input
+                id="booking-hold-expiry"
+                type="date"
+                value={holdExpiresOn}
+                onChange={(event) => setHoldExpiresOn(event.target.value)}
+                disabled={isSaving}
+                aria-describedby="booking-hold-expiry-help"
+                className="h-9 min-w-0 text-sm"
+              />
+              <p id="booking-hold-expiry-help" className="mt-1.5 text-xs text-muted-foreground">
+                Saved with Update booking. An expired hold is only flagged, never changed automatically.
+              </p>
+            </div>
+          )}
+          {statusTargets.length > 0 ? (
+            <div role="group" aria-label="Change status" className="flex min-w-0 flex-wrap gap-2">
+              {statusTargets.map((target) => (
+                <Button
+                  key={target}
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleStatusChange(target)}
+                  aria-disabled={pendingStatus !== null}
+                  className="h-auto min-h-9 whitespace-normal aria-disabled:cursor-wait aria-disabled:opacity-50"
+                >
+                  {pendingStatus === target ? "Updating..." : BOOKING_TRANSITION_LABELS[target]}
+                </Button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {booking.status === "completed" ? "A completed booking cannot change status." : "No status change is available right now."}
+            </p>
+          )}
+          {statusError && <p role="alert" className="text-sm text-destructive">{statusError}</p>}
+          {statusNotice && <p role="status" className="text-sm text-foreground">{statusNotice}</p>}
+        </section>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-0 min-w-0">
           <div className="px-4 py-3 sm:px-6 border-b border-border">

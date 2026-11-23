@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest"
 const { db, query, workspace } = vi.hoisted(() => {
   const query: Record<string, ReturnType<typeof vi.fn>> = {}
-  for (const method of ["insert", "update", "delete", "select", "eq", "single", "order", "range"]) query[method] = vi.fn()
+  for (const method of ["insert", "update", "delete", "select", "eq", "lte", "single", "maybeSingle", "order", "range"]) query[method] = vi.fn()
   return { query, workspace: vi.fn(async () => "selected-workspace"), db: { from: vi.fn(), auth: { getUser: vi.fn() } } }
 })
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn(async () => db) }))
@@ -16,12 +16,13 @@ beforeEach(() => {
   db.from.mockReturnValue(query)
   for (const method of Object.values(query)) method.mockReturnValue(query)
   query.single.mockResolvedValue({ data: { id, workspace_id: "wrong-workspace" }, error: null })
+  query.maybeSingle.mockResolvedValue({ data: { id }, error: null })
   query.range.mockResolvedValue({ data: [], count: 0, error: null })
 })
 it.each([
   ["create", () => createBooking(input)],
   ["update", () => updateBooking(id, { notes: "Updated" })],
-  ["status", () => updateBookingStatus(id, "confirmed")],
+  ["status", () => updateBookingStatus(id, "confirmed", "in_progress")],
   ["delete", () => deleteBooking(id)],
 ])("invalidates the new booking list after %s", async (_label, action) => {
   await action()
@@ -57,7 +58,7 @@ it("creates in the authoritative selected workspace rather than arbitrary member
 it.each([
   ["list", () => getBookings()], ["get", () => getBooking(id)],
   ["update", () => updateBooking(id, { notes: "Changed" })],
-  ["status", () => updateBookingStatus(id, "confirmed")],
+  ["status", () => updateBookingStatus(id, "confirmed", "in_progress")],
   ["delete", () => deleteBooking(id)],
 ])("scopes %s to the authoritative workspace", async (_label, action) => {
   await action()
@@ -77,32 +78,31 @@ it.each([
 })
 it.each([
   { date: "2026-02-30" }, { start_time: "25:00" }, { duration_minutes: -2 },
-  { status: "pending" },
+  { status: "pending" }, { status: "confirmed" }, { hold_expires_on: "2026-02-30" },
 ])("rejects invalid update %j before backend access", async (patch) => {
   const result = await updateBooking(id, patch as Parameters<typeof updateBooking>[1])
   expect(result.success).toBe(false)
   expect(db.from).not.toHaveBeenCalled()
 })
 it("rejects obsolete pending status before backend access", async () => {
-  const result = await updateBookingStatus(id, "pending" as Parameters<typeof updateBookingStatus>[1])
+  const result = await updateBookingStatus(id, "pending" as Parameters<typeof updateBookingStatus>[1], "in_progress")
   expect(result.success).toBe(false)
   expect(db.from).not.toHaveBeenCalled()
-})
-it.each(["in_progress", "confirmed", "cancelled", "completed"] as const)("accepts approved status %s (characterization)", async (status) => {
-  expect((await updateBookingStatus(id, status as Parameters<typeof updateBookingStatus>[1])).success).toBe(true)
-  expect(query.update).toHaveBeenCalledWith(expect.objectContaining({ status }))
+  const stale = await updateBookingStatus(id, "confirmed", "pending" as Parameters<typeof updateBookingStatus>[2])
+  expect(stale).toEqual({ success: false, error: "Invalid booking status" })
+  expect(db.from).not.toHaveBeenCalled()
 })
 it.each([
   ["update", () => updateBooking(id, { notes: "changed" })],
-  ["status", () => updateBookingStatus(id, "confirmed")],
+  ["status", () => updateBookingStatus(id, "confirmed", "in_progress")],
   ["delete", () => deleteBooking(id)],
 ])("reports missing or out-of-workspace %s instead of false success", async (_label, action) => {
-  query.single.mockResolvedValue({ data: null, error: null })
+  query.maybeSingle.mockResolvedValue({ data: null, error: null })
   expect(await action()).toEqual({ success: false, error: "Booking not found" })
 })
 it.each([
   ["update", () => updateBooking("bad-id", { notes: "changed" })],
-  ["status", () => updateBookingStatus("bad-id", "confirmed")],
+  ["status", () => updateBookingStatus("bad-id", "confirmed", "in_progress")],
   ["delete", () => deleteBooking("bad-id")],
 ])("rejects malformed %s identifiers before backend access", async (_label, action) => {
   expect((await action()).success).toBe(false)
@@ -172,4 +172,117 @@ it.each([
   expect((await updateBooking(id, patch)).success).toBe(false)
   expect(db.auth.getUser).not.toHaveBeenCalled()
   expect(db.from).not.toHaveBeenCalled()
+})
+
+// P1 lifecycle: transition graph, compare-and-set, fixed error copy.
+const STATUSES = ["in_progress", "hold", "option", "confirmed", "cancelled", "completed"] as const
+const ALLOWED = new Set([
+  "in_progress>hold", "in_progress>option", "in_progress>confirmed", "in_progress>cancelled",
+  "hold>option", "hold>confirmed", "hold>cancelled", "hold>in_progress",
+  "option>confirmed", "option>cancelled", "option>hold",
+  "confirmed>cancelled", "confirmed>completed", "cancelled>in_progress",
+])
+const pairs = STATUSES.flatMap(from => STATUSES.map(to => [from, to] as const))
+it.each(pairs.filter(([from, to]) => ALLOWED.has(`${from}>${to}`)))("allows %s -> %s with a compare-and-set write", async (from, to) => {
+  expect(await updateBookingStatus(id, to, from)).toEqual({ success: true })
+  expect(query.update).toHaveBeenCalledWith({ status: to, updated_at: expect.any(String) })
+  expect(query.eq).toHaveBeenCalledWith("id", id)
+  expect(query.eq).toHaveBeenCalledWith("workspace_id", "selected-workspace")
+  expect(query.eq).toHaveBeenCalledWith("status", from)
+  expect(revalidatePath).toHaveBeenCalledWith(`/dashboard/bookings/${id}`)
+})
+it.each(pairs.filter(([from, to]) => !ALLOWED.has(`${from}>${to}`)))("rejects %s -> %s before backend access", async (from, to) => {
+  expect(await updateBookingStatus(id, to, from)).toEqual({ success: false, error: "This status change is not allowed." })
+  expect(db.from).not.toHaveBeenCalled()
+  expect(db.auth.getUser).not.toHaveBeenCalled()
+})
+it("covers all 36 status pairs", () => expect(pairs).toHaveLength(36))
+it("adds the stored-date condition only when completing", async () => {
+  vi.useFakeTimers({ now: new Date("2026-11-21T12:00:00Z") })
+  try {
+    await updateBookingStatus(id, "completed", "confirmed")
+    expect(query.lte).toHaveBeenCalledWith("date", "2026-11-21")
+    query.lte.mockClear()
+    await updateBookingStatus(id, "cancelled", "confirmed")
+    expect(query.lte).not.toHaveBeenCalled()
+  } finally { vi.useRealTimers() }
+})
+const zeroRowsThen = (current: unknown) => query.maybeSingle
+  .mockResolvedValueOnce({ data: null, error: null })
+  .mockResolvedValueOnce({ data: current, error: null })
+it("reports a stale status as changed elsewhere, not as missing", async () => {
+  zeroRowsThen({ id, status: "cancelled", date: "2026-01-01" })
+  expect(await updateBookingStatus(id, "confirmed", "in_progress")).toEqual({
+    success: false, error: "This booking was changed elsewhere. Reload and try again.",
+  })
+  expect(query.select).toHaveBeenCalledWith("id, status, date")
+  expect(revalidatePath).not.toHaveBeenCalled()
+})
+it("reports a missing or out-of-workspace booking as not found, not as stale", async () => {
+  zeroRowsThen(null)
+  expect(await updateBookingStatus(id, "confirmed", "in_progress")).toEqual({ success: false, error: "Booking not found" })
+  expect(query.eq).toHaveBeenCalledWith("workspace_id", "selected-workspace")
+})
+it("refuses completion before the booking date with its own message", async () => {
+  vi.useFakeTimers({ now: new Date("2026-11-21T12:00:00Z") })
+  try {
+    zeroRowsThen({ id, status: "confirmed", date: "2026-11-22" })
+    expect(await updateBookingStatus(id, "completed", "confirmed")).toEqual({
+      success: false, error: "A booking can be marked as completed only on or after its date.",
+    })
+  } finally { vi.useRealTimers() }
+})
+it.each([
+  ["BB002", "This status change is not allowed."],
+  ["BB003", "A completed booking cannot be moved to a future date."],
+  ["XX000", "Unable to update the booking status. Please try again."],
+])("maps database rejection %s to fixed copy on status change", async (code, message) => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => {})
+  try {
+    query.maybeSingle.mockResolvedValueOnce({ data: null, error: { code, message: "PRIVATE_DATABASE_DETAIL" } })
+    expect(await updateBookingStatus(id, "confirmed", "in_progress")).toEqual({ success: false, error: message })
+  } finally { log.mockRestore() }
+})
+it("fails closed when the conflict read itself fails", async () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => {})
+  try {
+    query.maybeSingle.mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({ data: null, error: { message: "PRIVATE_DATABASE_DETAIL" } })
+    expect(await updateBookingStatus(id, "confirmed", "in_progress")).toEqual({
+      success: false, error: "Unable to update the booking status. Please try again.",
+    })
+  } finally { log.mockRestore() }
+})
+it.each([
+  ["create", () => createBooking(input), "single", "Unable to create booking. Please try again."],
+  ["update", () => updateBooking(id, { notes: "x" }), "maybeSingle", "Unable to save booking. Please try again."],
+  ["delete", () => deleteBooking(id), "maybeSingle", "Unable to delete booking. Please try again."],
+] as const)("never returns the provider message from %s", async (_label, action, terminal, message) => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => {})
+  try {
+    query[terminal].mockResolvedValueOnce({ data: null, error: { code: "42501", message: "PRIVATE_DATABASE_DETAIL" } })
+    expect(await action()).toEqual({ success: false, error: message })
+  } finally { log.mockRestore() }
+})
+it("never persists a status through updateBooking", async () => {
+  const result = await updateBooking(id, { notes: "x", status: "confirmed" } as Parameters<typeof updateBooking>[1])
+  expect(result).toEqual({ success: false, error: "Change the booking status with the status control" })
+  expect(db.from).not.toHaveBeenCalled()
+})
+it.each([["2026-12-01", "2026-12-01"], [null, null]])("persists hold expiry %j through the update allowlist", async (value, stored) => {
+  expect(await updateBooking(id, { hold_expires_on: value })).toEqual({ success: true })
+  expect(query.update).toHaveBeenCalledWith({ hold_expires_on: stored, updated_at: expect.any(String) })
+})
+it("explains a hold expiry rejected because the booking is not on hold", async () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => {})
+  try {
+    query.maybeSingle.mockResolvedValueOnce({ data: null, error: { code: "23514", message: "PRIVATE_DATABASE_DETAIL" } })
+    expect(await updateBooking(id, { hold_expires_on: "2026-12-01" })).toEqual({
+      success: false, error: "A hold expiry date can only be set while the booking is on hold.",
+    })
+    query.maybeSingle.mockResolvedValueOnce({ data: null, error: { code: "BB003", message: "PRIVATE_DATABASE_DETAIL" } })
+    expect(await updateBooking(id, { date: "2031-01-01" })).toEqual({
+      success: false, error: "A completed booking cannot be moved to a future date.",
+    })
+  } finally { log.mockRestore() }
 })

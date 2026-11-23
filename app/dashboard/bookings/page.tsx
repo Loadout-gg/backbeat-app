@@ -11,6 +11,9 @@ import {
   bookingArtistName,
   bookingStatusBadgeVariant,
   formatBookingTime,
+  holdRank,
+  holdRankLabel,
+  isHoldExpired,
   parseBookingStatusFilter,
   splitBookingsByDate,
   type BookingStatusFilter,
@@ -27,11 +30,17 @@ const FILTERS: { value: BookingStatusFilter; label: string }[] = [
   ...BOOKING_STATUSES.map((status) => ({ value: status, label: BOOKING_STATUS_LABELS[status] })),
 ]
 
-function BookingRow({ booking }: { booking: Booking }) {
+function BookingRow({ booking, all, today }: { booking: Booking; all: readonly Booking[]; today: string }) {
   const { month, day } = eventDateParts(booking.date)
+  // Rank is derived from the complete workspace list, not from the filtered view.
+  const priority = holdRankLabel(holdRank(all, booking))
   return (
     <li className="space-y-1">
-      <Badge variant={bookingStatusBadgeVariant(booking.status)}>{BOOKING_STATUS_LABELS[booking.status]}</Badge>
+      <div className="flex flex-wrap gap-1">
+        <Badge variant={bookingStatusBadgeVariant(booking.status)}>{BOOKING_STATUS_LABELS[booking.status]}</Badge>
+        {isHoldExpired(booking, today) && <Badge variant="destructive">Hold expired</Badge>}
+        {priority && <Badge variant="outline">{priority}</Badge>}
+      </div>
       <BookingCard
         id={booking.id}
         month={month.toUpperCase()}
@@ -57,7 +66,8 @@ export default async function BookingsPage({ searchParams }: BookingsPageProps =
   }
 
   const visible = filter === "all" ? bookings : bookings.filter((booking) => booking.status === filter)
-  const { upcoming, past } = splitBookingsByDate(visible, configuredCalendarDay())
+  const today = configuredCalendarDay()
+  const { upcoming, past } = splitBookingsByDate(visible, today)
 
   return (
     <div className="space-y-6">
@@ -97,7 +107,7 @@ export default async function BookingsPage({ searchParams }: BookingsPageProps =
           <section aria-labelledby="bookings-upcoming" className="space-y-3">
             <h2 id="bookings-upcoming" className="text-base font-semibold">Upcoming</h2>
             <ul className="space-y-3">
-              {upcoming.map((booking) => <BookingRow key={booking.id} booking={booking} />)}
+              {upcoming.map((booking) => <BookingRow key={booking.id} booking={booking} all={bookings} today={today} />)}
             </ul>
           </section>
         )}
@@ -105,7 +115,7 @@ export default async function BookingsPage({ searchParams }: BookingsPageProps =
           <section aria-labelledby="bookings-past" className="space-y-3">
             <h2 id="bookings-past" className="text-base font-semibold">Past</h2>
             <ul className="space-y-3">
-              {past.map((booking) => <BookingRow key={booking.id} booking={booking} />)}
+              {past.map((booking) => <BookingRow key={booking.id} booking={booking} all={bookings} today={today} />)}
             </ul>
           </section>
         )}
