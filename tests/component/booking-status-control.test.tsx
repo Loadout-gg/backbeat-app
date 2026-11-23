@@ -3,7 +3,7 @@ import React from "react"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 const mocks = vi.hoisted(() => ({
-  updateBooking: vi.fn(), updateBookingStatus: vi.fn(), deleteBooking: vi.fn(), getBookings: vi.fn(), refresh: vi.fn(),
+  updateBooking: vi.fn(), updateBookingStatus: vi.fn(), deleteBooking: vi.fn(), getBooking: vi.fn(), getBookings: vi.fn(), refresh: vi.fn(),
 }))
 vi.mock("next/navigation", async (importOriginal) => ({
   ...await importOriginal<typeof import("next/navigation")>(),
@@ -11,12 +11,12 @@ vi.mock("next/navigation", async (importOriginal) => ({
 }))
 vi.mock("@/lib/actions/bookings", () => ({
   updateBooking: mocks.updateBooking, updateBookingStatus: mocks.updateBookingStatus,
-  deleteBooking: mocks.deleteBooking, getBookings: mocks.getBookings,
+  deleteBooking: mocks.deleteBooking, getBooking: mocks.getBooking, getBookings: mocks.getBookings,
 }))
 import { EventBookingClient } from "@/app/dashboard/bookings/[id]/event-booking-client"
+import EventBookingPage from "@/app/dashboard/bookings/[id]/page"
 import BookingsPage from "@/app/dashboard/bookings/page"
 import type { Booking, BookingWithArtist } from "@/lib/actions/bookings"
-import type { BookingStatus } from "@/lib/booking-status"
 
 const TODAY = "2026-11-21"
 const base: BookingWithArtist = {
@@ -26,8 +26,8 @@ const base: BookingWithArtist = {
   duration_minutes: 60, notes: null, status: "in_progress", created_at: "2026-01-02", updated_at: "",
   artist: { id: "artist-a", stage_name: "DJ Moon", name: "Luna", surname: null, location: null, fee: null, currency: "EUR", profile_image_url: null },
 }
-const editor = (overrides: Partial<BookingWithArtist> = {}, artistBookings: readonly Booking[] | null = []) =>
-  <EventBookingClient booking={{ ...base, ...overrides }} artistBookings={artistBookings} today={TODAY} />
+const editor = (overrides: Partial<BookingWithArtist> = {}) =>
+  <EventBookingClient booking={{ ...base, ...overrides }} today={TODAY} />
 const statusSection = () => within(screen.getByRole("region", { name: "Status" }))
 const actions = () => within(screen.getByRole("group", { name: "Change status" })).getAllByRole("button").map(button => button.textContent)
 
@@ -140,13 +140,28 @@ it.each([["2026-11-20", true], [TODAY, false], [null, false]] as const)("flags a
   expect(statusSection().queryByText("Hold expired") !== null).toBe(expired)
   expect(statusSection().getByText("Hold", { exact: true })).toBeTruthy()
 })
-it("shows the derived hold priority only when holds compete for the same artist and date", () => {
-  const other = { ...base, id: "booking-0", status: "hold" as BookingStatus, created_at: "2026-01-01" }
-  const mine = { ...base, status: "hold" as BookingStatus }
-  const { unmount } = render(editor({ status: "hold" }, [mine, other]))
+it("shows only the server-projected priority for the saved hold while the notice follows the draft date", async () => {
+  vi.useFakeTimers({ now: new Date(`${TODAY}T12:00:00Z`), toFake: ["Date"] })
+  const other = { ...base, id: "booking-0", status: "hold" as const, created_at: "2026-01-01", notes: "Synthetic private hold note" }
+  const mine = { ...base, status: "hold" as const }
+  const params = { params: Promise.resolve({ id: mine.id }) }
+  mocks.getBooking.mockResolvedValueOnce(mine)
+  mocks.getBookings.mockResolvedValueOnce([mine, other])
+  const page = await EventBookingPage(params)
+  expect(page.props).toStrictEqual({
+    booking: mine, sameDayBookingCounts: { [mine.date]: 1 }, holdPosition: { rank: 2, total: 2 }, today: TODAY,
+  })
+  const { unmount } = render(page)
   expect(statusSection().getByText("Hold priority 2 of 2")).toBeTruthy()
+  expect(screen.getByText("This artist already has another booking on this date.")).toBeTruthy()
+  fireEvent.change(screen.getByLabelText("Booking date"), { target: { value: "2027-01-01" } })
+  expect(screen.queryByText(/already has/)).toBeNull()
+  expect(statusSection().getByText("Hold priority 2 of 2")).toBeTruthy()
+  expect(mocks.updateBooking).not.toHaveBeenCalled()
   unmount()
-  render(editor({ status: "hold" }, [mine, { ...other, date: "2027-01-01" }]))
+  mocks.getBooking.mockResolvedValueOnce(mine)
+  mocks.getBookings.mockResolvedValueOnce([mine, { ...other, date: "2027-01-01" }, { ...other, id: "other-artist", artist_id: "artist-b" }])
+  render(await EventBookingPage(params))
   expect(screen.queryByText(/Hold priority/)).toBeNull()
 })
 it("lists hold and option filters and derives expired and priority badges from the full list", async () => {

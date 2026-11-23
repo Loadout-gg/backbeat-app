@@ -111,6 +111,14 @@ it("shows an honest empty state for a status with no bookings and ignores unknow
   expect(screen.getAllByRole("link", { name: "Continue setup" })).toHaveLength(1)
 })
 
+it("keeps all bookings visible when the Next query contains repeated status values", async () => {
+  mocks.getBookings.mockResolvedValueOnce(listRows)
+  render(await BookingsPage({ searchParams: Promise.resolve({ status: ["confirmed", "cancelled"] }) }))
+  expect(screen.getByRole("link", { name: "All" }).getAttribute("aria-current")).toBe("page")
+  expect(detailLinks("Upcoming")).toEqual(["/dashboard/bookings/today", "/dashboard/bookings/future-late"])
+  expect(detailLinks("Past")).toEqual(["/dashboard/bookings/past-recent", "/dashboard/bookings/past-old"])
+})
+
 // 4 + 6: editor status badge, close target, same-day notice
 it("shows a read-only status badge and closes to the bookings list", () => {
   render(<EventBookingClient booking={{ ...editorBooking, status: "confirmed" }} />)
@@ -121,30 +129,87 @@ it("shows a read-only status badge and closes to the bookings list", () => {
   expect((screen.getByLabelText("End time") as HTMLInputElement).value).toBe("22:30")
 })
 
-it("warns in the editor about other same-day bookings, excluding itself and cancelled ones, and follows date edits", () => {
-  const artistBookings = [
-    editorBooking,
-    row({ id: "same-day", date: "2026-11-20", status: "confirmed" }),
-    row({ id: "cancelled", date: "2026-11-20", status: "cancelled" }),
-    row({ id: "next-day", date: "2026-11-21" }),
-  ]
-  render(<EventBookingClient booking={editorBooking} artistBookings={artistBookings} />)
+const otherBooking = (id: string, overrides: Partial<Booking>) => ({
+  ...row({
+    id, notes: `Synthetic note ${id}`, contact_name_main: `Fixture ${id}`,
+    contact_phone_main: "+12025550142", contact_email_main: `${id}@example.invalid`,
+    fee_amount_minor: 12345, fee_currency: "EUR",
+    ...overrides,
+  }),
+  event: { title: `Synthetic related event ${id}` },
+})
+const artistBookings = [
+  editorBooking,
+  otherBooking("same-day", { status: "confirmed" }),
+  row({ id: "cancelled", status: "cancelled" }),
+  row({ id: "other-artist", artist_id: "artist-b" }),
+  otherBooking("next-day", { date: "2026-11-21" }),
+  row({ id: "completed", date: "2026-11-21", status: "completed" }),
+  row({ id: "cancelled-only", date: "2026-11-22", status: "cancelled" }),
+]
+const editorParams = { params: Promise.resolve({ id: editorBooking.id }) }
+
+it("passes only the selected booking and exact date counts, rank and calendar context to the editor client", async () => {
+  mocks.getBooking.mockResolvedValueOnce(editorBooking)
+  mocks.getBookings.mockResolvedValueOnce(artistBookings)
+  const page = await EventBookingPage(editorParams)
+  expect(page.type).toBe(EventBookingClient)
+  expect(mocks.getBooking).toHaveBeenCalledWith(editorBooking.id)
+  expect(mocks.getBookings).toHaveBeenCalledExactlyOnceWith({ artistId, failOnError: true })
+  const { booking, ...notice } = page.props
+  expect(booking).toBe(editorBooking)
+  expect(notice).toStrictEqual({
+    sameDayBookingCounts: { "2026-11-20": 1, "2026-11-21": 2 },
+    holdPosition: null,
+    today: "2026-11-14",
+  })
+})
+
+it("warns in the editor about other same-day bookings, excluding itself and cancelled ones, and follows date edits", async () => {
+  mocks.getBooking.mockResolvedValueOnce(editorBooking)
+  mocks.getBookings.mockResolvedValueOnce(artistBookings)
+  render(await EventBookingPage(editorParams))
+  const date = screen.getByLabelText("Booking date")
   expect(screen.getByText("This artist already has another booking on this date.")).toBeTruthy()
-  fireEvent.change(screen.getByLabelText("Booking date"), { target: { value: "2026-11-22" } })
+  fireEvent.change(date, { target: { value: "2026-11-22" } })
   expect(screen.queryByText(/already has/)).toBeNull()
-  fireEvent.change(screen.getByLabelText("Booking date"), { target: { value: "2026-11-21" } })
-  expect(screen.getByText("This artist already has another booking on this date.")).toBeTruthy()
+  fireEvent.change(date, { target: { value: "2026-11-21" } })
+  expect(screen.getByText("This artist already has 2 other bookings on this date.")).toBeTruthy()
+  fireEvent.change(date, { target: { value: "" } })
+  expect(screen.queryByText(/already has/)).toBeNull()
   expect(mocks.updateBooking).not.toHaveBeenCalled()
+})
+
+it("shows no notice when the artist read succeeds with no other bookings", async () => {
+  mocks.getBooking.mockResolvedValueOnce(editorBooking)
+  mocks.getBookings.mockResolvedValueOnce([editorBooking])
+  render(await EventBookingPage(editorParams))
+  expect(screen.queryByText(/already has|could not be checked/)).toBeNull()
 })
 
 it("says the same-day check could not run when the artist read failed, without blocking the editor", async () => {
   mocks.getBooking.mockResolvedValueOnce(editorBooking)
   mocks.getBookings.mockRejectedValueOnce(new Error("private detail"))
-  render(await EventBookingPage({ params: Promise.resolve({ id: editorBooking.id }) }))
+  const page = await EventBookingPage(editorParams)
+  expect(page.props).toStrictEqual({ booking: editorBooking, sameDayBookingCounts: null, holdPosition: null, today: "2026-11-14" })
+  render(page)
   expect(mocks.getBookings).toHaveBeenCalledWith({ artistId, failOnError: true })
   expect(screen.getByText("Other bookings for this date could not be checked.")).toBeTruthy()
   expect(screen.queryByText("private detail")).toBeNull()
   expect(screen.getByRole("button", { name: "Update booking" })).toBeTruthy()
+})
+
+it("does not load other bookings when the selected booking is unavailable", async () => {
+  mocks.getBooking.mockResolvedValueOnce(null)
+  await expect(EventBookingPage(editorParams)).rejects.toMatchObject({ digest: "NEXT_HTTP_ERROR_FALLBACK;404" })
+  expect(mocks.getBookings).not.toHaveBeenCalled()
+})
+
+it("preserves the framework redirect when the artist read redirects to workspace selection", async () => {
+  const redirect = Object.assign(new Error("NEXT_REDIRECT"), { digest: "NEXT_REDIRECT;replace;/onboarding;307;" })
+  mocks.getBooking.mockResolvedValueOnce(editorBooking)
+  mocks.getBookings.mockRejectedValueOnce(redirect)
+  await expect(EventBookingPage(editorParams)).rejects.toBe(redirect)
 })
 
 // 5 + 6: create modal
