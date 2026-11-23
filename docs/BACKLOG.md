@@ -68,6 +68,13 @@ Status values: `Proposed` (not yet discussed) · `Needs decision` · `Ready` · 
 | C2 | Post-#24 realignment: the initial dry run against staging `7ab53ac` showed 11 conflicting files of 61 changed. Alberto authorized the [one-time two-parent integration-branch exception](agents/git-workflow.md#one-time-conflict-resolution-for-the-post-24-sync) for this sync only; future syncs use `main` → `staging`. | Release workflow | Separate Alberto authorization for publication and integration; normal review, CI, merge and post-merge checks | In progress (local preparation only; staging not yet realigned) |
 | C3 | The `AGENTS.md` architecture stop line (`chiedere ad alberto  il piano architetturale`) remains an exact-string contract (two spaces kept, GOV-001). #32 left it untouched; the historical English-only instruction (`AGENT-LANGUAGE-EN`) is not authority to change it | Agent instructions | Keep verbatim unless Alberto explicitly authorizes a change | Needs decision only if a change is proposed |
 
+## Governance
+
+| ID | Finding | Classification | Needs first | Status |
+|---|---|---|---|---|
+| G1 | Revision of `GOV-STAGING-20261123` reported by Simone from a 2026-11-23 phone call with Alberto: staging schema/migrations incl. RLS, grants, policies, triggers, roles, contracts back to Simone; `@codex review` + `@codex security review` clean on current head for security-relevant PRs; travel identity documents with lazy read, reasoned and logged downloads (retention open); payments visible to all active members, void instead of hard delete. [Request r01](agents/requests/GOV-20261123-staging-delegation-revision/r01/REQUEST.md), register `GOV-20261123-STAGING-REVISION` | Workflow/policy, reserved | Alberto's approval of the PR carrying r01; retention rule | Needs decision |
+| G2 | If G1 is approved: open PR #33 (migration 007 grants `DELETE` on `booking_payments`) and PR #36 (no download reason/log for `artist_travel_documents`) do not yet meet R4/R3 | Follows G1 | G1 | Proposed |
+
 ## Booking domain (ARCH-20261114-booking-domain r02): status and open items (2026-11-23)
 
 - D0.2 + P1: done on staging (#29). Remaining r02 phases (finance, contacts/documents, travel/accommodation, booking → event) are reference scope, not authorized by the superseded #25 report or the #29 merge.

@@ -34,6 +34,7 @@ This section supersedes the broad delegation recorded in PR #25. Simone may deci
 - Preconditions are unchanged: PR to `staging`, `Quality` green on the current head, Codex review clean, and every migration versioned in the repository and described in the PR body (what, why, rollback).
 - Migrations are applied to the staging Supabase project only, never to production. Production apply and promotion to `main` remain Alberto's alone; he reviews the full diff, migrations included, at release and can require changes before live.
 - A reported statement, successful CI, clean review or merged PR does not establish owner approval. Neither a contributor nor an agent may expand their own delegation. The Git workflow, branch protection and architectural stop remain in force.
+- Pending, not in force: a revision of this section (`GOV-20261123-STAGING-REVISION` in the [decision register](docs/agents/decision-register.md#governance-correction-and-supersession)) is requested and awaits Alberto's approval of its PR. Do not rely on it until the register records that approval.
 
 ## Non-negotiable boundaries
 
