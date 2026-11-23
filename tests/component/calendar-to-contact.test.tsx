@@ -39,13 +39,14 @@ const relation = (promoter: typeof marta) => ({ id: promoter.id, name: promoter.
 const events = [
   { id: EVENT_A, artist_id: "artist-a", date: "2026-10-02", title: "Autumn show", location: "Rome", status: "confirmed", promoter_id: marta.id, promoters: relation(marta) },
   { id: EVENT_B, artist_id: "artist-a", date: "2026-10-09", title: "Winter preview", location: "Milan", status: "in_progress", promoter_id: luca.id, promoters: relation(luca) },
-] as EventWithRelations[]
+] as (EventWithRelations & Pick<EventDetail, "promoter_id">)[]
 // The contact written on a booking is the booking's own; it is not an event promoter.
 const booking = {
   id: "booking-a", artist_id: "artist-a", date: "2026-10-09", start_time: "20:00", status: "in_progress",
   contact_name_main: "Giulia Verdi", contact_email_main: "giulia@example.test", contact_phone_main: null,
 } as Booking
-const detail = (event: EventWithRelations): EventDetail => ({
+// List rows carry no promoter_id (R17); the detail read does.
+const detail = (event: (typeof events)[number]): EventDetail => ({
   id: event.id, title: event.title, date: event.date, location: event.location,
   status: event.status, artist_id: event.artist_id, promoter_id: event.promoter_id,
 })

@@ -16,7 +16,7 @@ afterEach(cleanup)
 const artist = { id: "artist-a", name: "Alice", stage_name: "DJ Alice" } as Artist
 const event = (overrides: Partial<EventWithRelations>): EventWithRelations => ({
   id: "event-a", artist_id: "artist-a", date: "2026-10-02", title: "Autumn show", location: "Rome",
-  status: "confirmed", promoter_id: null, workspace_id: "w", created_at: "", artists: null, promoters: null,
+  status: "confirmed", artists: null, promoters: null,
   ...overrides,
 })
 const renderOverview = (events: EventWithRelations[], calendarError = false) => {
