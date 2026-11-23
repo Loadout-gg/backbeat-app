@@ -98,7 +98,19 @@ export default async function BookingsPage({ searchParams }: BookingsPageProps =
           </>
         )}
         {!loadError && bookings.length === 0 && (
-          <p className="rounded-lg border bg-card p-5 text-sm text-muted-foreground">No bookings in your workspace yet.</p>
+          // No artist count is read here: the way out is valid with or without artists.
+          <div className="space-y-3 rounded-lg border bg-card p-5">
+            <p className="text-sm text-muted-foreground">No bookings in your workspace yet.</p>
+            <p className="text-sm text-muted-foreground">A booking starts from an artist. Add an artist, or open one from Artists and choose New booking.</p>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild size="sm">
+                <Link href="/dashboard/artists/new">Add artist</Link>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <Link href="/dashboard/artists">View artists</Link>
+              </Button>
+            </div>
+          </div>
         )}
         {!loadError && bookings.length > 0 && visible.length === 0 && (
           <p className="rounded-lg border bg-card p-5 text-sm text-muted-foreground">No bookings with this status.</p>
