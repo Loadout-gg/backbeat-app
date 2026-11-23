@@ -4,7 +4,8 @@ Read this first when picking up work, then `AGENTS.md` and `docs/agents/README.m
 
 ## Current state (2026-10-28, with 2026-11-21 and 2026-11-23 notes)
 
-- 2026-11-23 note (read from GitHub): `staging` HEAD `7ab53ac` (PRs #26–#31 merged, no other open PRs when `fix/dashboard-promoters-favicon-tokens` started). `main` `89639af` is not an ancestor of `staging`; the post-release realignment is blocked and with Alberto (BACKLOG C2). Agents reply in English only (decision register AGENT-LANGUAGE-EN).
+- 2026-11-23 governance correction: Alberto superseded the broad delegation reported in #25 and authorized the [one-time conflict resolution](agents/git-workflow.md#one-time-conflict-resolution-for-the-post-24-sync) for the post-#24 realignment. Candidate preparation is local; staging is not yet realigned. See [backlog C2](BACKLOG.md#ci-and-tooling) and the [current decision register](agents/decision-register.md#governance-correction-and-supersession).
+- Earlier 2026-11-23 snapshot (read from GitHub): `staging` HEAD `7ab53ac` (PRs #26–#31 merged, no other open PRs when `fix/dashboard-promoters-favicon-tokens` started). `main` `89639af` was not an ancestor of that staging head; the direct sync was blocked. The historical English-only instruction is not owner-approved workflow policy (decision register `AGENT-LANGUAGE-EN`).
 - 2026-11-21 note (read from GitHub, not re-qualified): PRs #13–#18, #20, #21, #22, #25, #26, #27, #28, #30 and #29 are merged into `staging` (HEAD `5ad87f0`, deployed on `backbeat-staging`); #23 and release PR #24 were merged into `main` on 2026-11-19. Runtime pin is now Node 26.13.1 (`.node-version`). The bullets below are the 2026-10-28 snapshot and are stale where they name `7e0db2b`, Node 24 or open PRs.
 
 - `main` at `7e0db2b`: Node 24.22.1 runtime (`docs/runtime-node24.md`), pnpm 12.3.4.
@@ -15,14 +16,14 @@ Read this first when picking up work, then `AGENTS.md` and `docs/agents/README.m
 
 ## How work flows
 
-1. Pick the next item from `docs/BACKLOG.md`. Resolve its "Needs first" with the responsible owner: Simone for non-security product/UX/copy/visual scope; Alberto for product security and architecture-reserved choices. Architectural decisions use the request package in `docs/agents/architecture-decisions.md`.
+1. Pick the next item from `docs/BACKLOG.md`. Resolve its "Needs first" with the responsible owner under the current authority below. Architectural and reserved decisions use the request package in `docs/agents/architecture-decisions.md`.
 2. Follow [the approved Git and staging workflow](agents/git-workflow.md): new independent `fix/<slug>` or `feat/<slug>` branches start from up-to-date `origin/staging`. Preserve and coordinate existing PR stacks; no automatic rebase or retarget. Keep changes small, run applicable checks, and update docs in the same PR.
 3. Open feature/fix PRs explicitly to `staging`, with the handoff from `docs/agents/development.md`: classification, changed files, real command outcomes, `NOT_RUN`, open decisions. After opening, request `@codex review`; request a fresh review after corrective pushes.
-4. Simone (with Claude) checks scope, architecture contracts, tests, Quality and the Codex verdict on the current head. A green check or review is not merge authorization. Staging integration requires explicit authorization under `docs/agents/git-workflow.md` and a post-merge deployment check.
+4. Check scope, architecture contracts, tests, `Quality` and the Codex verdict on the current head. Simone can authorize a staging PR merge only in her scope; Alberto authorizes reserved changes. A reported statement, green CI, review or merged PR is not owner approval. Follow `docs/agents/git-workflow.md` for explicit action authorization and the post-merge staging deployment check.
 5. Only Alberto can authorize a release toward `main`/live. Follow the approved release and reverse-synchronization procedure; no direct pushes or CI bypasses.
 6. Update `docs/BACKLOG.md` status and this file.
 
-Decision owners (from 2026-10-30): Alberto reviews product security; Simone decides UX, copy, visual and other non-security product scope. Architecture-reserved decisions in AGENTS.md stay with Alberto.
+Current decision authority: Simone decides non-security product/UX and may authorize additive staging migrations within approved contracts. Only Alberto authorizes workflow/policy, roles and permissions, Auth/RLS and isolation, sensitive-data handling changes, destructive operations, infrastructure and production, including reserved changes proposed on staging. The log below remains historical.
 
 ## Open questions for Alberto
 
@@ -31,13 +32,13 @@ Decision owners (from 2026-10-30): Alberto reviews product security; Simone deci
 - Order for R1-R3, R5, R8, R9 and for the candidate features in the backlog.
 - Answered (Simone, 2026-11-21, from the project owner's environment map; not verified by an agent): the project referenced by migration 004 (`jttrznlbbjyufzyqmzzs`) is PRODUCTION. See "Supabase projects" below.
 - Fix V1-V3 now, or leave visual consistency for later? V2 and V3 are done; V1 is done with provisional artwork in #32 (Simone, 2026-11-23).
-- Main-to-staging realignment after release #24: blocked (PR head must be `main`; dry run shows 11 conflicting files of 61). Needs Alberto; see BACKLOG C2.
+- Main-to-staging realignment after release #24 (BACKLOG C2): Alberto resolved the method for this sync only. The initial dry run against `7ab53ac` showed 11 conflicting files of 61. Publication, integration and staging readback remain pending; normal review/CI/merge gates apply.
 - Production release of migrations 005/006 (booking lifecycle): pending Alberto; the 005/006 guard currently allows only development and staging targets.
 - Migration 004 was applied on staging outside its guard paths: is that acceptable, and does it need a follow-up before production?
-- R16 (booking actions returned raw provider error messages to the UI): fixed copy with validation messages kept, merged in PR #29 (`5ad87f0`), decided by Simone under the staging delegation. For Alberto's product-security review at release.
-- `ARCH-20261114-booking-domain` r02 (booking domain P1–P5: lifecycle, finance, contacts/documents, travel/accommodation, booking → event), delivered by Simone outside the repo; supersedes r01 with Simone's answers on the Artist contacts tab and the meaning of `completed`. Reference plan, owner-delegated on staging (2026-11-21); D0.2 + P1 merged in PR #29 (`5ad87f0`), next: P2. Staging backend identity: see "Supabase projects" below; staging preflight of 2026-11-21 (run by Simone): 002 and 004 applied, `bookings` empty. Open: role visibility for money/documents. Migrations go to the staging Supabase project only; production apply stays Alberto's.
+- R16 (booking actions returned raw provider error messages to the UI): fixed copy with validation messages kept, merged in PR #29 (`5ad87f0`) after Simone's historical decision. That record is not Alberto's approval; any new product-security decision belongs to Alberto, not to a release-only review.
+- `ARCH-20261114-booking-domain` r02 (booking domain P1–P5: lifecycle, finance, contacts/documents, travel/accommodation, booking → event), delivered by Simone outside the repo; supersedes r01 with Simone's answers on the Artist contacts tab and the meaning of `completed`. Reference only; D0.2 + P1 merged in PR #29 (`5ad87f0`). No approval of the full plan or later phases follows from #25 or #29. Role visibility for money/documents is still an Alberto decision. Staging preflight of 2026-11-21 (run by Simone): 002 and 004 applied, `bookings` empty. Confirm the authorized target before any execution; production apply stays Alberto's.
 
-- Vercel Hobby risk on `backbeat-staging`: **disproved on 2026-11-21** (staging merges `1043ef1` and `8d17b5c` by `sdemela` both deployed). Still open: why `a8c5e49` (`dpl_HofuCsi4rdWQ2kBup2VevvHzXYKH`) failed; cause unknown; only the Vercel log can tell, and reading it is pending with Alberto. Original note (hypothesis, not verified): every successful staging merge so far is by `DerekLoadout`; the only merge by `sdemela` (`a8c5e49`, Merge PR #20) failed (`dpl_HofuCsi4rdWQ2kBup2VevvHzXYKH`), and with the staging delegation Simone will perform staging merges. Options: Vercel Pro with Simone in the team, or read the failed deployment log (`npx vercel inspect dpl_HofuCsi4rdWQ2kBup2VevvHzXYKH --logs`) to confirm the cause. No workaround (author/email changes, shared accounts) will be attempted.
+- Vercel Hobby risk on `backbeat-staging`: **disproved on 2026-11-21** (staging merges `1043ef1` and `8d17b5c` by `sdemela` both deployed). Still open: why `a8c5e49` (`dpl_HofuCsi4rdWQ2kBup2VevvHzXYKH`) failed; cause unknown; only the Vercel log can tell, and reading it is pending with Alberto. Original note (historical hypothesis, not verified or current authority): every successful staging merge so far is by `DerekLoadout`; the only merge by `sdemela` (`a8c5e49`, Merge PR #20) failed (`dpl_HofuCsi4rdWQ2kBup2VevvHzXYKH`), and with the staging delegation Simone will perform staging merges. Options: Vercel Pro with Simone in the team, or read the failed deployment log (`npx vercel inspect dpl_HofuCsi4rdWQ2kBup2VevvHzXYKH --logs`) to confirm the cause. No workaround (author/email changes, shared accounts) will be attempted.
 
 ## Supabase projects
 
@@ -45,16 +46,18 @@ Stated by Simone on 2026-11-21 from the project owner's environment map. Not ver
 
 | Ref | Meaning | Rule |
 |---|---|---|
-| `hupkygptbvnzrihrlcxv` (supabase-amethyst-nest) | Backbeat STAGING database, used by Vercel `backbeat-staging`, branch `staging` | Only allowed migration target under the staging delegation |
+| `hupkygptbvnzrihrlcxv` (supabase-amethyst-nest) | Backbeat STAGING database, used by Vercel `backbeat-staging`, branch `staging` | Only staging target for eligible additive migrations, with explicit target-specific authorization |
 | `jttrznlbbjyufzyqmzzs` (supabase-violet-school) | Backbeat PRODUCTION database, used by `app.backbeat.show`, branch `main`; the ref in migration 004 | Forbidden for agents; Alberto only |
 
 Staging marker (read by Simone in the SQL editor, 2026-11-21): `public.runtime_environment` on staging holds exactly one row, `backbeat-staging` / `staging` / `synthetic_only = true`, pinned by CHECK constraints; owner `postgres`, RLS on. Local development databases carry `backbeat-dev` / `development` (migration 001). Migrations 005/006 bind each target to its own marker.
 
 Open question for Alberto (not blocking): migration 004 is applied on staging, but its guard knows only two paths, the `backbeat-dev` marker and the production ref with no marker table. Staging matches neither, so 004 reached staging outside those two guard paths (edited copy or manual statements); how is not recorded.
 
-The local Supabase CLI login on Simone's machine lists only projects of another company, named "Staging" and "Production". They are not Backbeat. Never take a `--project-ref` from `supabase projects list` for Backbeat, and never use `--linked`. Agents have no CLI access to the Backbeat projects: staging database steps are run by Simone in the dashboard SQL editor, after checking the ref in the dashboard URL.
+The local Supabase CLI login on Simone's machine lists only projects of another company, named "Staging" and "Production". They are not Backbeat. Never take a `--project-ref` from `supabase projects list` for Backbeat, and never use `--linked`. Agents have no CLI access to the Backbeat projects. For an authorized staging database step, verify the dashboard URL's ref; Simone's SQL-editor access does not authorize reserved operations.
 
 ## Log
+
+Historical log, not current policy. In particular, the `docs/staging-delegation` (#25), #29, #29 rollout and #32 entries preserve what was recorded then; the [supersession](agents/decision-register.md#governance-correction-and-supersession) is controlling for new work.
 
 | Date | PR | What changed |
 |---|---|---|

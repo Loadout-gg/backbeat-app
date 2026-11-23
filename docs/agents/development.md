@@ -95,7 +95,8 @@ A local commit, passing unit suite or review GO is not a production release. Com
 
 ## Runtime policy after the source snapshot
 
-The current runtime candidate and its release boundaries are documented in
-[Node 26 runtime policy](../runtime-node26.md). Read the current runtime pins and
-qualification evidence; the older Node 22 snapshot above is historical, not an
-instruction to undo an approved upgrade.
+Use [`.node-version`](../../.node-version) for the exact Node pin and
+[`package.json`](../../package.json) for the supported major. The
+[Node 26 runtime policy](../runtime-node26.md) records the current release
+boundaries. The [historical Node 24 policy](../runtime-node24.md) and the
+Node 22 snapshot above are not instructions to downgrade.

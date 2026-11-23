@@ -23,8 +23,11 @@ Official references: [Node releases](https://nodejs.org/dist/index.json),
 [Next 16.4.5](https://github.com/vercel/next.js/releases/tag/v16.4.5),
 [Vercel Node versions](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions).
 
-Preserve frozen installs, denied lifecycle scripts, both fail-closed audits,
-`Quality`, minimatch overrides and its compatibility patch. No broader dependency
+Preserve frozen installs, denied lifecycle scripts, both fail-closed audits and
+`Quality`. The original staging correction retained the minimatch compatibility
+patch. The main-to-staging realignment adopts main's qualified lock instead:
+legacy ESLint consumers resolve callable minimatch 3.1.5 and the TypeScript parser
+resolves the named API on 11.0.9; the staging patch is no longer required. No broader
 upgrade, framework redesign, React/Zod/Tailwind change or audit waiver is approved.
 The existing Tailwind loader and typography regressions remain required.
 

@@ -14,18 +14,20 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
-import { updateBooking, updateBookingStatus, deleteBooking, type Booking, type BookingWithArtist } from "@/lib/actions/bookings";
+import { updateBooking, updateBookingStatus, deleteBooking, type BookingWithArtist } from "@/lib/actions/bookings";
 import {
-  BOOKING_STATUS_LABELS, BOOKING_TRANSITION_LABELS, bookingStatusBadgeVariant, findSameDayBookings,
-  holdRank, holdRankLabel, isHoldExpired, isPastBookingDate, sameDayWarning,
+  BOOKING_STATUS_LABELS, BOOKING_TRANSITION_LABELS, bookingStatusBadgeVariant,
+  holdRankLabel, isHoldExpired, isPastBookingDate, sameDayWarning,
 } from "@/lib/booking-display";
 import { allowedBookingTransitions, type BookingStatus } from "@/lib/booking-status";
 import { formatArtistBaseRate } from "@/lib/artist-base-rate";
 
 interface EventBookingClientProps {
   booking: BookingWithArtist;
-  /** This artist's bookings from the existing scoped read; null when that read failed. */
-  artistBookings?: readonly Booking[] | null;
+  /** Counts of other non-cancelled bookings by date; null when the scoped read failed. */
+  sameDayBookingCounts?: Readonly<Partial<Record<string, number>>> | null;
+  /** Server-calculated priority for the persisted hold, without peer booking records. */
+  holdPosition?: Readonly<{ rank: number; total: number }> | null;
   /** Server "today" (configured calendar zone). Without it, completion is not offered. */
   today?: string;
 }
@@ -39,7 +41,7 @@ const TABS = [
   "Artist contacts",
 ] as const;
 
-export function EventBookingClient({ booking, artistBookings, today }: EventBookingClientProps) {
+export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition, today }: EventBookingClientProps) {
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
   const saveInFlight = useRef(false);
@@ -135,18 +137,16 @@ export function EventBookingClient({ booking, artistBookings, today }: EventBook
     return `${endH.toString().padStart(2, "0")}:${endM.toString().padStart(2, "0")}`;
   };
 
-  // Non-blocking notice for the draft date; the current booking and cancelled ones are excluded.
-  const sameDayCount = artistBookings
-    ? findSameDayBookings(artistBookings, { artistId: booking.artist_id, date: bookingDate, excludeId: booking.id }).length
-    : 0;
-  const sameDayNotice = artistBookings === null
+  // Non-blocking notice for the draft date, using only server-projected counts.
+  const sameDayCount = sameDayBookingCounts?.[bookingDate] ?? 0;
+  const sameDayNotice = sameDayBookingCounts === null
     ? "Other bookings for this date could not be checked."
     : sameDayCount > 0 ? sameDayWarning(sameDayCount) : null;
 
   // Status is always read from the server copy of the booking, never from a local draft.
   const statusTargets = today ? allowedBookingTransitions(booking.status, booking.date, today) : [];
   const holdExpired = today ? isHoldExpired(booking, today) : false;
-  const holdPriority = holdRankLabel(artistBookings ? holdRank(artistBookings, booking) : null);
+  const holdPriority = holdRankLabel(holdPosition ?? null);
   const completionHint = booking.status === "confirmed" && !!today && isPastBookingDate(booking.date, today);
   const savedHoldExpiry = booking.hold_expires_on ?? "";
 
