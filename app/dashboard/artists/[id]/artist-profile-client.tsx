@@ -738,6 +738,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
         preselectedArtist={artist}
         existingBookings={calendarError ? null : bookings}
         calendarToday={calendarToday}
+        returnTo="artist"
       />
 
       {/* Footer */}

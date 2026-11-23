@@ -57,11 +57,11 @@ it("offers no transition for a completed booking and says why", () => {
 it("does not offer completion when the server date is unknown", () => {
   render(<EventBookingClient booking={{ ...base, status: "confirmed", date: "2020-01-01" }} />)
   expect(screen.queryByRole("button", { name: "Mark as completed" })).toBeNull()
-  expect(screen.queryByText("This show date has passed. Mark as completed?")).toBeNull()
+  expect(screen.queryByText("This show date has passed. Mark as completed once the show has taken place.")).toBeNull()
 })
 it.each([["2026-11-20", true], [TODAY, false], ["2026-11-22", false]] as const)("hints at completion for a confirmed show on %s: %s", (date, shown) => {
   render(editor({ status: "confirmed", date }))
-  expect(screen.queryByText("This show date has passed. Mark as completed?") !== null).toBe(shown)
+  expect(screen.queryByText("This show date has passed. Mark as completed once the show has taken place.") !== null).toBe(shown)
 })
 it.each([
   ["in_progress", "Place on hold", "hold", "Status changed to hold."],

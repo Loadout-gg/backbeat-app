@@ -58,7 +58,7 @@ it("associates negative-fee feedback with the amount and sends focus directly to
   fireEvent.click(save)
   await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
   expect(document.activeElement).toBe(save)
-  expect(updateBooking).toHaveBeenCalledWith(booking.id, expect.objectContaining({ fee_amount_minor: 90000, fee_currency: "EUR", start_time: "21:30", duration_minutes: 90, contact_name_main: "Alex Venue", notes: booking.notes }))
+  expect(updateBooking).toHaveBeenCalledWith(booking.id, { fee_amount_minor: 90000, fee_currency: "EUR" })
 })
 
 it.each([
@@ -139,7 +139,8 @@ it("preserves same-ID drafts on refreshed props and never replays consumed valid
   fireEvent.click(save)
   await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
   expect(updateBooking).toHaveBeenCalledWith(booking.id, {
-    date: "2030-01-22", start_time: "00:30", duration_minutes: 90, notes: "New note", venue_name: "New Hall",
+    // Duration "01:30" equals the loaded 90 minutes, so it is not sent.
+    date: "2030-01-22", start_time: "00:30", notes: "New note", venue_name: "New Hall",
     venue_address: "New address", contact_name_main: "Sam", contact_phone_main: "+44 2000000000", contact_email_main: "sam@backbeat.test",
     fee_amount_minor: 90000, fee_currency: "EUR",
   })
@@ -184,7 +185,8 @@ it("does not report the current draft as saved when it changes during a pending 
   await act(async () => resolve({ success: true }))
   expect(screen.getByRole("status").textContent).toBe("")
   expect((screen.getByLabelText("Note", { exact: true }) as HTMLTextAreaElement).value).toBe("New unsaved note")
-  expect(updateBooking).toHaveBeenCalledWith(booking.id, expect.objectContaining({ notes: booking.notes }))
+  // The note was unchanged when the save was submitted, so it is not part of the payload.
+  expect(updateBooking.mock.calls[0][1]).not.toHaveProperty("notes")
 })
 
 it("guards repeated activation before React renders the pending state", async () => {
@@ -224,9 +226,5 @@ it("keeps the save control focusable while pending and exposes a durable saved s
   rerender(<EventBookingClient booking={{ ...booking, date: "2030-01-22", artist: { ...booking.artist } }} />)
   expect(screen.getByRole("status").textContent).toBe("Booking saved.")
   expect(document.activeElement).toBe(save)
-  expect(updateBooking).toHaveBeenCalledWith(booking.id, {
-    date: "2030-01-22", start_time: "21:30", duration_minutes: 90, notes: booking.notes,
-    venue_name: booking.venue_name, venue_address: booking.venue_address,
-    contact_name_main: booking.contact_name_main, contact_phone_main: booking.contact_phone_main, contact_email_main: booking.contact_email_main,
-  })
+  expect(updateBooking).toHaveBeenCalledWith(booking.id, { date: "2030-01-22" })
 })
