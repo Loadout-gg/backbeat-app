@@ -103,13 +103,27 @@ const booking = (overrides: Partial<Booking> = {}): Booking => ({
   venue_name: null, venue_address: null, contact_name_main: null, contact_phone_main: null,
   contact_email_main: null, status: "in_progress", created_at: "", updated_at: "", ...overrides,
 })
-const props = { welcomeMessage: "Welcome back", stats: { eventsInProgress: 7, bookingsInProgress: 99, totalArtists: 12 }, eventsInProgress: [], bookings: [], calendarToday: "2026-11-14" }
-it("exposes only the three supported metrics with the filtered booking count", () => {
+const props = { welcomeMessage: "Welcome back", stats: { eventsInProgress: 7, bookingsInProgress: 99, totalArtists: 12, totalPromoters: 5 }, eventsInProgress: [], bookings: [], calendarToday: "2026-11-14" }
+it("exposes only the four supported metrics with the filtered booking count", () => {
   render(<DashboardContent {...props} bookings={[booking(), booking({ id: "other", status: "cancelled" })]} />)
   expect(screen.queryByText("Performance in progress")).toBeNull()
   const summary = screen.getByRole("region", { name: "Workspace overview" })
-  expect(within(summary).getAllByRole("term")).toHaveLength(3)
-  expect(within(summary).getAllByRole("definition").map(el => el.textContent)).toEqual(["7", "1", "12"])
+  expect(within(summary).getAllByRole("term")).toHaveLength(4)
+  expect(within(summary).getAllByRole("definition").map(el => el.textContent)).toEqual(["7", "1", "12", "5"])
+})
+it("shows the workspace promoter count as a card linking to the promoters list", () => {
+  render(<DashboardContent {...props} />)
+  const summary = screen.getByRole("region", { name: "Workspace overview" })
+  const link = within(summary).getByRole("link", { name: /Promoters/ })
+  expect(link.getAttribute("href")).toBe("/dashboard/promoters")
+  expect(within(link).getByRole("term").textContent).toBe("Promoters")
+  expect(within(link).getByRole("definition").textContent).toBe("5")
+  expect(within(summary).getAllByRole("link")).toHaveLength(1)
+})
+it("renders a zero promoter count rather than hiding the card", () => {
+  render(<DashboardContent {...props} stats={{ ...props.stats, totalPromoters: 0 }} />)
+  const link = within(screen.getByRole("region", { name: "Workspace overview" })).getByRole("link", { name: /Promoters/ })
+  expect(within(link).getByRole("definition").textContent).toBe("0")
 })
 
 // Compatibility checks: these existing behaviors are intentionally unchanged.

@@ -7,7 +7,6 @@ import "./globals.css"
 export const metadata: Metadata = {
   title: "Backbeat",
   description: "Artist management CRM for music agencies",
-  generator: "v0.app",
   icons: {
     icon: [
       {

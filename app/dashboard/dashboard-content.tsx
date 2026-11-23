@@ -16,6 +16,7 @@ interface DashboardStats {
   eventsInProgress: number
   bookingsInProgress: number
   totalArtists: number
+  totalPromoters: number
 }
 
 interface Event {
@@ -54,13 +55,14 @@ export function DashboardContent({
         <h1 className="mb-5 break-words text-2xl font-semibold tracking-tight">{welcomeMessage}</h1>
 
         {/* Stats row */}
-        <div role="region" aria-label="Workspace overview" className="grid grid-cols-1 gap-2 rounded-xl bg-muted/60 p-2 mb-6 sm:grid-cols-3">
+        <div role="region" aria-label="Workspace overview" className="grid grid-cols-1 gap-2 rounded-xl bg-muted/60 p-2 mb-6 sm:grid-cols-2 lg:grid-cols-4">
           <StatsCard label="Events in progress" value={stats.eventsInProgress} />
           <StatsCard
             label="Bookings in progress"
             value={bookingsInProgress.length}
           />
           <StatsCard label="Artists total" value={stats.totalArtists} />
+          <StatsCard label="Promoters" value={stats.totalPromoters} href="/dashboard/promoters" />
         </div>
 
         {/* Main content grid */}

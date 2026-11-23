@@ -1,34 +1,36 @@
-# Flusso Git e staging di Backbeat
+# Backbeat Git and staging workflow
 
-Queste istruzioni valgono per Claude e per gli altri agenti che lavorano con Simone. Simone descrive il risultato di prodotto; l'agente controlla branch, permessi, test e destinazione. Non delegare a Simone decisioni tecniche non spiegate.
+These instructions apply to Claude and to every other agent working with Simone. Simone describes the product outcome; the agent controls branch, permissions, tests and destination. Do not hand Simone unexplained technical decisions.
 
-## Flusso approvato
+Language: agents reply to Simone in English only (terse technical English), including summaries, handoffs, questions and merge confirmations. Decided by Simone on 2026-11-23; recorded in the [decision register](decision-register.md). The architecture stop line in `AGENTS.md` is a fixed string and stays verbatim.
 
-Un solo repository: `Loadout-gg/backbeat-app`. Nessun fork o repository aggiuntivo. Il branch predefinito del repository è `staging`; `main` rimane il branch di rilascio live. Il default GitHub non modifica il Branch Tracking dei progetti Vercel.
+## Approved flow
 
-| Branch | Scopo | Progetto Vercel | URL |
+One repository: `Loadout-gg/backbeat-app`. No forks or additional repositories. The repository default branch is `staging`; `main` remains the live release branch. The GitHub default does not change the Branch Tracking of the Vercel projects.
+
+| Branch | Purpose | Vercel project | URL |
 | --- | --- | --- | --- |
-| `staging` | Collaudo condiviso, non produzione | `backbeat-staging` | https://backbeat-staging.vercel.app |
-| `main` | Versione live approvata | `backbeat-app` | https://app.backbeat.show |
+| `staging` | Shared acceptance testing, not production | `backbeat-staging` | https://backbeat-staging.vercel.app |
+| `main` | Approved live version | `backbeat-app` | https://app.backbeat.show |
 
-Percorso normale: `feat/*` o `fix/*` -> PR verso `staging` -> verifica sullo staging -> PR di rilascio `staging` -> `main`, solo dopo autorizzazione esplicita di Alberto. Il nome Production in Vercel è relativo al singolo progetto: non identifica da solo la live.
+Normal path: `feat/*` or `fix/*` -> PR to `staging` -> check on staging -> release PR `staging` -> `main`, only after Alberto's explicit authorization. The Production name in Vercel is relative to a single project: on its own it does not identify the live site.
 
-Il collegamento Vercel e un build verde non provano che lo staging sia utilizzabile. Prima di dichiarare un deploy riuscito, verificare progetto, commit, branch, URL e backend. Non dichiarare funzionante un'automazione ancora non verificata.
+A Vercel link and a green build do not prove that staging is usable. Before declaring a deploy successful, verify project, commit, branch, URL and backend. Do not declare an unverified automation as working.
 
-## Prima sessione di Claude e checkout già esistenti
+## First Claude session and existing checkouts
 
-Un nuovo clone parte da `staging`. I checkout esistenti e le vecchie PR non cambiano branch da soli.
+A new clone starts from `staging`. Existing checkouts and old PRs do not switch branch on their own.
 
-Prima della prima attività con queste regole, verificare `origin`, branch e `git status --short`. Con modifiche non salvate, fermarsi senza stash/reset. In un checkout pulito, eseguire `git fetch origin` e leggere la guida aggiornata con `git show origin/staging:docs/agents/git-workflow.md`.
+Before the first task under these rules, check `origin`, branch and `git status --short`. With uncommitted changes, stop without stash/reset. In a clean checkout, run `git fetch origin` and read the current guide with `git show origin/staging:docs/agents/git-workflow.md`.
 
-Per una nuova attività, creare il branch di lavoro da `origin/staging`: conterrà `AGENTS.md`, `CLAUDE.md` e la guida aggiornata. Avviare una nuova sessione Claude Code dalla radice di quel checkout e usare `/memory` per verificare i file caricati; chiedere a Claude di riassumere base PR, ambiente e autorità di merge prima di scrivere codice.
+For a new task, create the working branch from `origin/staging`: it will contain `AGENTS.md`, `CLAUDE.md` and the current guide. Start a new Claude Code session from the root of that checkout and use `/memory` to check the loaded files; ask Claude to summarize PR base, environment and merge authority before writing code.
 
-Per una vecchia PR, non cambiare branch né importare tutta `staging` automaticamente: leggere anche `git show origin/staging:AGENTS.md`, fornire esplicitamente a Claude le istruzioni correnti e coordinare con Alberto l'aggiornamento della catena. Se si usa Claude senza caricamento dei file di progetto, allegare esplicitamente la guida corrente e `AGENTS.md`; non presumere che un link sia stato letto.
+For an old PR, do not switch branch or pull in all of `staging` automatically: also read `git show origin/staging:AGENTS.md`, give Claude the current instructions explicitly and coordinate the chain update with Alberto. If Claude is used without loading the project files, attach the current guide and `AGENTS.md` explicitly; do not assume a link has been read.
 
-## Prima di modificare qualsiasi file
+## Before modifying any file
 
-1. Leggere `AGENTS.md`, questa guida e i contratti applicabili in `docs/agents/`.
-2. Ispezionare il checkout, senza modificare o pubblicare nulla:
+1. Read `AGENTS.md`, this guide and the applicable contracts in `docs/agents/`.
+2. Inspect the checkout without modifying or publishing anything:
 
 ```sh
 git remote get-url origin
@@ -37,19 +39,19 @@ git branch --show-current
 git rev-parse HEAD
 ```
 
-3. Verificare che `origin` identifichi esattamente `Loadout-gg/backbeat-app`. Sono ammesse le normali forme HTTPS e SSH dello stesso repository. Se il repository è diverso, fermarsi.
-4. Se ci sono modifiche non proprie, fermarsi e spiegare a Simone quali file sono coinvolti. Non cancellare, sovrascrivere, committare o mettere in stash il lavoro altrui.
-5. Per una nuova attività indipendente e un checkout pulito: eseguire `git fetch origin`, controllare che `origin/staging` esista e creare un nuovo branch `feat/<descrizione>` o `fix/<descrizione>` da `origin/staging`. Non lavorare direttamente su `main` o `staging`.
-6. Se si sta continuando una PR esistente, leggere prima head, base e dipendenze con `gh pr view <numero> --repo Loadout-gg/backbeat-app`. Non cambiare branch di base, rebase, cherry-pick o catene di PR automaticamente. Le PR dipendenti già aperte vanno coordinate con Alberto.
-7. Riassumere a Simone, in inglese (terse technical English): risultato richiesto, branch di lavoro, base della PR e cosa NON verrà modificato.
+3. Check that `origin` identifies exactly `Loadout-gg/backbeat-app`. The usual HTTPS and SSH forms of the same repository are accepted. If the repository differs, stop.
+4. If there are changes that are not yours, stop and tell Simone which files are involved. Do not delete, overwrite, commit or stash other people's work.
+5. For a new independent task in a clean checkout: run `git fetch origin`, check that `origin/staging` exists and create a new `feat/<description>` or `fix/<description>` branch from `origin/staging`. Do not work directly on `main` or `staging`.
+6. When continuing an existing PR, first read head, base and dependencies with `gh pr view <number> --repo Loadout-gg/backbeat-app`. Do not change base branch, rebase, cherry-pick or PR chains automatically. Dependent PRs already open are coordinated with Alberto.
+7. Summarize for Simone, in English: requested outcome, working branch, PR base and what will NOT be changed.
 
-## Implementazione e controlli
+## Implementation and checks
 
-Restare entro l'attività assegnata. Non introdurre librerie, upgrade, redesign o cambi architetturali per rendere più comodo il task. Il contratto architetturale e la sua escalation restano quelli di `AGENTS.md`.
+Stay within the assigned task. Do not introduce libraries, upgrades, redesigns or architectural changes to make the task easier. The architecture contract and its escalation remain those in `AGENTS.md`.
 
-Leggere i pin correnti in `.node-version`, `package.json`, lockfile e CI. Non usare versioni ricordate da una vecchia chat. Per installare dipendenze già previste, quando autorizzato: `pnpm install --frozen-lockfile --ignore-scripts`. Non rigenerare il lockfile o abilitare script per aggirare un errore.
+Read the current pins in `.node-version`, `package.json`, the lockfile and CI. Do not use versions remembered from an old chat. To install already planned dependencies, when authorized: `pnpm install --frozen-lockfile --ignore-scripts`. Do not regenerate the lockfile or enable scripts to work around an error.
 
-Eseguire i test focalizzati della modifica e i controlli applicabili:
+Run the focused tests for the change and the applicable checks:
 
 ```sh
 pnpm typecheck
@@ -59,87 +61,87 @@ pnpm test:runtime
 git diff --check
 ```
 
-La CI `Quality` esegue anche build, smoke test `next-start`, qualificazione del container e audit delle dipendenze, secondo `.github/workflows/ci.yml`. I controlli locali sopra non sostituiscono la CI completa né autorizzano un merge con `Quality` fallito o mancante.
+The `Quality` CI also runs build, the `next-start` smoke test, container qualification and dependency audits, as defined in `.github/workflows/ci.yml`. The local checks above do not replace the full CI and do not authorize a merge with `Quality` failed or missing.
 
-Un controllo non eseguito va indicato come `NOT_RUN`, con motivo. Non disabilitare controlli o riscrivere test per ottenere verde. Per build e test con backend seguire `docs/agents/development.md`; mai usare la produzione come ambiente di test.
+A check that was not run is reported as `NOT_RUN`, with the reason. Do not disable checks or rewrite tests to get green. For builds and tests with a backend follow `docs/agents/development.md`; never use production as a test environment.
 
-## Commit, push e PR
+## Commit, push and PR
 
-- Un'autorizzazione a sviluppare non è automaticamente un'autorizzazione a pubblicare. Se Simone ha chiesto esplicitamente di preparare/pubblicare una PR, quella richiesta copre il push del solo branch di lavoro e la PR verso `staging`; altrimenti chiedere prima di pubblicare.
-- Controllare `git diff` e aggiungere solo i file della modifica. Non usare `git add .` alla cieca.
-- Non committare `.env*` con segreti, token, password, chiavi amministrative, dump, dati reali, `.vercel/` o credenziali di altri ambienti. Conservare gli eventuali template di esempio privi di segreti già previsti dal repository.
-- Usare un push esplicito verso il proprio branch e creare la PR con base esplicita `staging`, mai affidarsi al default `main`.
-- Per creare una PR usare `gh pr create --repo Loadout-gg/backbeat-app --base staging --head <branch-di-lavoro> --title <titolo> --body-file <file-descrizione>`; poi rileggere URL, head e base con `gh pr view`.
-- Descrivere risultato visibile, file modificati, test reali, limiti e passi di collaudo per una persona non tecnica.
-- Attendere il check GitHub `Quality` sul commit corrente. Un check verde su un commit precedente non vale.
-- Non fare merge autonomamente, non attivare auto-merge e non approvare il proprio lavoro. **Simone può autorizzare il merge di una PR verso `staging`**, senza attendere Alberto, dopo che l'agente ha mostrato link della PR, risultato atteso e `Quality` verde sul commit corrente. L'agente deve prima dichiarare: "This merge updates staging only, not production. Confirm merging the PR above?". Un “sì” in risposta vale per quella PR, non per altre attività. Dopo il consenso verificare nuovamente head/base/check e fare un merge vincolato alla head verificata; non usare `--admin` o bypass. L'autorizzazione a creare una PR non include il merge.
+- Authorization to develop is not automatically authorization to publish. If Simone explicitly asked to prepare/publish a PR, that request covers pushing the working branch only and the PR to `staging`; otherwise ask before publishing.
+- Check `git diff` and add only the files of the change. Do not use `git add .` blindly.
+- Do not commit `.env*` with secrets, tokens, passwords, admin keys, dumps, real data, `.vercel/` or credentials of other environments. Keep any secret-free example templates the repository already provides.
+- Push explicitly to your own branch and create the PR with explicit base `staging`; never rely on the `main` default.
+- To create a PR use `gh pr create --repo Loadout-gg/backbeat-app --base staging --head <working-branch> --title <title> --body-file <description-file>`; then re-read URL, head and base with `gh pr view`.
+- Describe the visible result, changed files, real tests, limits and acceptance steps for a non-technical person.
+- Wait for the GitHub `Quality` check on the current commit. A green check on an earlier commit does not count.
+- Do not merge on your own, do not enable auto-merge and do not approve your own work. **Simone can authorize merging a PR into `staging`**, without waiting for Alberto, after the agent has shown the PR link, the expected result and `Quality` green on the current commit. The agent must first state: "This merge updates staging only, not production. Confirm merging the PR above?". A "yes" in reply applies to that PR, not to other tasks. After consent, re-check head/base/checks and merge pinned to the verified head; do not use `--admin` or bypasses. Authorization to create a PR does not include the merge.
 
-## Staging e rilascio
+## Staging and release
 
-Dopo un merge autorizzato su `staging`, verificare il deploy del progetto `backbeat-staging` sullo stesso commit. Non usare le Preview del progetto live come sostituto. Lo staging è condiviso: coordinare i test prima di sostituire una candidata. Il progetto ha un filtro di build per il branch `staging`: non assumere che un deploy manuale da un altro branch sia una via alternativa disponibile e non rimuovere il filtro per sbloccarlo.
+After an authorized merge into `staging`, verify the deploy of the `backbeat-staging` project on the same commit. Do not use Previews of the live project as a substitute. Staging is shared: coordinate tests before replacing a candidate. The project has a build filter for the `staging` branch: do not assume that a manual deploy from another branch is an available alternative, and do not remove the filter to unblock it.
 
-### Verificare il deploy senza accesso amministrativo Vercel
+### Verify the deploy without Vercel admin access
 
-Ricavare dalla PR il commit di merge su `staging`, non usare la precedente head del branch di lavoro. Con l'accesso GitHub già disponibile, leggere gli stati di quel commit e i deployment:
+Take the merge commit on `staging` from the PR; do not use the previous head of the working branch. With the GitHub access already available, read that commit's statuses and deployments:
 
 ```sh
 # STAGING_SHA must be the exact merge commit read from the merged PR.
-: "${STAGING_SHA:?Impostare il commit di merge verificato della PR}"
+: "${STAGING_SHA:?Set the verified merge commit of the PR}"
 gh api "repos/Loadout-gg/backbeat-app/commits/$STAGING_SHA/status"
 gh api "repos/Loadout-gg/backbeat-app/commits/$STAGING_SHA/check-runs"
 gh api "repos/Loadout-gg/backbeat-app/deployments?sha=$STAGING_SHA"
 ```
 
-Se è presente un record di deployment, leggere `repos/Loadout-gg/backbeat-app/deployments/<deployment-id>/statuses`. Verificare SHA, progetto `backbeat-staging` e URL staging dal record/link del provider: un generico check Vercel verde o l'etichetta Production non bastano, perché il repository è condiviso da due progetti. La versione corrente su `origin/staging` può essere avanzata nel frattempo: non attribuirle i test di una candidata precedente.
+If a deployment record exists, read `repos/Loadout-gg/backbeat-app/deployments/<deployment-id>/statuses`. Verify SHA, project `backbeat-staging` and staging URL from the provider record/link: a generic green Vercel check or the Production label is not enough, because two projects share the repository. The current version on `origin/staging` may have moved on in the meantime: do not attribute an earlier candidate's tests to it.
 
-Se GitHub non espone prove sufficienti, riportare `DEPLOY_NOT_VERIFIED` e chiedere ad Alberto la verifica del deployment, senza richiedere token o accesso amministrativo. Visitare il sito protetto richiede un accesso separato; la sua assenza non impedisce di preparare la PR. Non dichiarare verificati login o percorsi applicativi da un semplice stato di deployment.
+If GitHub does not expose enough evidence, report `DEPLOY_NOT_VERIFIED` and ask Alberto to verify the deployment, without requesting tokens or admin access. Visiting the protected site needs separate access; its absence does not prevent preparing the PR. Do not declare login or application paths verified from a deployment status alone.
 
-Un push o merge su `main` può aggiornare immediatamente la live. Non creare una PR verso `main`, fare merge o eseguire un deploy/promozione live senza un'autorizzazione esplicita di Alberto riferita alla candidata da rilasciare. Una richiesta generica di Simone come “finisci”, “pubblica” o “metti online” non autorizza la produzione: chiarire che l'azione proposta riguarda lo staging.
+A push or merge to `main` can update the live site immediately. Do not create a PR to `main`, merge, or run a live deploy/promotion without Alberto's explicit authorization for the candidate being released. A generic request from Simone such as "finish", "publish" or "put it online" does not authorize production: make clear that the proposed action concerns staging.
 
-Per un rilascio autorizzato, la base è `main` e la head è `staging`; verificare il diff completo, i check correnti, le migrazioni necessarie e la review di prodotto di Alberto. Solo l'account `DerekLoadout` può aggiornare `main`; mantenere PR e `Quality` obbligatori, senza richiedere una seconda approvazione GitHub che bloccherebbe le PR dello stesso proprietario. Questa configurazione non sostituisce l'autorizzazione di Alberto al rilascio specifico.
+For an authorized release, the base is `main` and the head is `staging`; verify the full diff, current checks, required migrations and Alberto's product review. Only the `DerekLoadout` account can update `main`; keep PR and `Quality` required, without requiring a second GitHub approval that would block the owner's own PRs. This configuration does not replace Alberto's authorization of the specific release.
 
-Tra i due branch permanenti usare un **merge commit**, non squash o rebase, e non cancellare `staging`.
+Between the two permanent branches use a **merge commit**, not squash or rebase, and do not delete `staging`.
 
-### Riallineamento standard dopo ogni rilascio
+### Standard realignment after every release
 
-Il merge `staging` -> `main` crea un commit su `main` che `staging` deve acquisire. Il riallineamento è parte del rilascio autorizzato, non una nuova scelta architetturale:
+The `staging` -> `main` merge creates a commit on `main` that `staging` must acquire. Realignment is part of the authorized release, not a new architectural choice:
 
-1. Verificare PR di rilascio merged, SHA di `main` e stato effettivo della live; non avviare un nuovo rilascio se quello corrente non è qualificato.
-2. Controllare divergenza tra i branch. Se `main` è già antenato di `staging`, non creare una PR inutile.
-3. Altrimenti aprire una PR con **head `main`, base `staging`**, dedicata al riallineamento. Non aggiungere feature e non fare push diretto ai branch protetti.
-4. Attendere `Quality` verde sulla PR e verificare che non ci siano conflitti o modifiche inattese. Completare il merge commit come parte del rilascio già autorizzato. In caso di conflitti o lavoro concorrente ambiguo, fermarsi e chiedere ad Alberto; niente risoluzioni alla cieca.
-5. Dopo `git fetch origin`, verificare `git merge-base --is-ancestor origin/main origin/staging` (exit 0). Il riallineamento può avviare un nuovo deploy staging; registrare il nuovo SHA. Non fare un secondo merge verso `main` solo per inseguire il commit di riallineamento.
+1. Verify the merged release PR, the `main` SHA and the actual state of the live site; do not start a new release if the current one is not qualified.
+2. Check divergence between the branches. If `main` is already an ancestor of `staging`, do not create a pointless PR.
+3. Otherwise open a PR with **head `main`, base `staging`**, dedicated to the realignment. Do not add features and do not push directly to protected branches.
+4. Wait for `Quality` green on the PR and verify there are no conflicts or unexpected changes. Complete the merge commit as part of the already authorized release. With conflicts or ambiguous concurrent work, stop and ask Alberto; no blind resolutions.
+5. After `git fetch origin`, verify `git merge-base --is-ancestor origin/main origin/staging` (exit 0). The realignment may trigger a new staging deploy; record the new SHA. Do not make a second merge to `main` just to chase the realignment commit.
 
-La regola serve anche dopo un hotfix live autorizzato. Nuove attività indipendenti partono dallo `staging` riallineato.
+The rule also applies after an authorized live hotfix. New independent tasks start from the realigned `staging`.
 
-## Delega staging (2026-11-21)
+## Staging delegation (2026-11-21)
 
-Alberto (`DerekLoadout`) ha dato a Simone piena autonomia su `staging` (dichiarato da Simone, 2026-11-21); lo staging usa un database Supabase separato dalla produzione.
+Alberto (`DerekLoadout`) gave Simone full autonomy on `staging` (stated by Simone, 2026-11-21); staging uses a Supabase database separate from production.
 
-- Su `staging` Simone decide e l'agente può implementare, senza la frase di stop architetturale: schema, migrazioni (additive e distruttive), RLS, auth, ruoli e contratti.
-- Restano invariate le precondizioni: PR verso `staging`, `Quality` verde sulla head corrente, Codex senza rilievi, migrazioni versionate nel repository e descritte nel corpo della PR (cosa, perché, rollback).
-- Le migrazioni si applicano solo al progetto Supabase di staging, mai alla produzione. Applicazione in produzione e promozione a `main` restano solo di Alberto, che rivede il diff completo (migrazioni incluse) al rilascio e può chiedere modifiche prima della live.
-- Frase di stop e pacchetto di richiesta valgono ancora per tutto ciò che tocca `main`, il database di produzione, le impostazioni Vercel/GitHub, i segreti o la fatturazione.
-- Le eccezioni sotto ("Non modificare Auth, … RLS, ruoli…" e "Le modifiche al database…") si leggono alla luce di questa delega per lo staging; branch protection e regole di rilascio non cambiano.
+- On `staging` Simone decides and the agent may implement, without the architecture stop line: schema, migrations (additive and destructive), RLS, auth, roles and contracts.
+- Preconditions are unchanged: PR to `staging`, `Quality` green on the current head, Codex review clean, migrations versioned in the repository and described in the PR body (what, why, rollback).
+- Migrations are applied to the staging Supabase project only, never to production. Production apply and promotion to `main` remain Alberto's alone; he reviews the full diff (migrations included) at release and can require changes before live.
+- The stop line and request package still apply to anything touching `main`, the production database, Vercel/GitHub settings, secrets or billing.
+- The exceptions below ("Do not modify Auth, … RLS, roles…" and "Database changes…") are read in light of this delegation for staging; branch protection and release rules do not change.
 
-## Confini che non si aggirano
+## Boundaries that are not bypassed
 
-- Niente push diretto su `main`/`staging`, force push, `reset --hard`, `git clean`, cancellazioni di branch o riscrittura della storia per sbloccare il lavoro.
-- Non cambiare branch protection, workflow CI, istruzioni degli agenti, collegamenti Git/Vercel, domini, variabili d'ambiente, piano o permessi come parte di una feature ordinaria.
-- Simone collabora su GitHub; non serve un invito amministrativo Vercel. Se Hobby blocca un deploy, riportare l'errore: non cambiare autore/email dei commit, condividere account, aggiungere token o aggirare il blocco.
-- Usare solo account e dati sintetici dello staging. Credenziali e database live non sono un fallback.
-- Le modifiche al database devono essere versionate e descritte nella PR. Non applicare SQL o migrazioni automaticamente: l'esecuzione sul backend richiede un'autorizzazione specifica per il target. Il deploy del codice non applica le migrazioni.
-- Non modificare Auth, conferma email, RLS, ruoli o membership per far passare un test. Account applicativo, accesso al sito protetto e membership amministrativa sono permessi distinti.
+- No direct push to `main`/`staging`, force push, `reset --hard`, `git clean`, branch deletion or history rewriting to unblock work.
+- Do not change branch protection, CI workflows, agent instructions, Git/Vercel links, domains, environment variables, plan or permissions as part of an ordinary feature.
+- Simone collaborates on GitHub; no Vercel admin invitation is needed. If Hobby blocks a deploy, report the error: do not change commit author/email, share accounts, add tokens or bypass the block.
+- Use only synthetic staging accounts and data. Live credentials and database are not a fallback.
+- Database changes must be versioned and described in the PR. Do not apply SQL or migrations automatically: running them on the backend requires a target-specific authorization. A code deploy does not apply migrations.
+- Do not modify Auth, email confirmation, RLS, roles or membership to make a test pass. Application account, access to the protected site and admin membership are distinct permissions.
 
-## Consegna a Simone
+## Handoff to Simone
 
-Gli agenti rispondono a Simone solo in inglese (agents reply in English only; Simone, 2026-11-23). Fornire sempre, in inglese:
+Always provide, in English:
 
-1. Cosa cambia per l'utente, in poche righe.
-2. Link PR, branch di base e commit verificato.
-3. Test PASS/FAIL/NOT_RUN, senza risultati inventati.
-4. URL staging e commit effettivamente deployato, oppure motivo per cui il deploy non è verificato.
-5. Passi semplici per provare il risultato e cosa aspettarsi.
-6. Cosa resta da approvare. Specificare sempre se la live è rimasta invariata.
+1. What changes for the user, in a few lines.
+2. PR link, base branch and verified commit.
+3. Tests PASS/FAIL/NOT_RUN, with no invented results.
+4. Staging URL and the commit actually deployed, or why the deploy is not verified.
+5. Simple steps to try the result and what to expect.
+6. What remains to be approved. Always state whether the live site is unchanged.
 
-Le istruzioni guidano l'agente ma non sostituiscono i controlli GitHub. Non dichiarare che Claude le ha caricate o rispettate senza una verifica nella sessione effettivamente usata da Simone.
+The instructions guide the agent but do not replace the GitHub checks. Do not claim that Claude loaded or followed them without verification in the session Simone actually used.
