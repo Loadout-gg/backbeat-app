@@ -238,6 +238,31 @@ export async function updateEvent(
   return { success: true }
 }
 
+const EVENT_DELETE_FAILED = "Unable to delete the event. Please try again."
+
+/** Deletes one event of the selected workspace. Bookings, artists and promoters are separate records and are not touched. */
+export async function deleteEvent(id: string): Promise<{ success: true } | { success: false; error: string }> {
+  if (!z.guid().safeParse(id).success) return { success: false, error: EVENT_NOT_FOUND }
+
+  const supabase = await createClient()
+  const workspaceId = await getCurrentWorkspaceId()
+  const { data, error } = await supabase
+    .from("events")
+    .delete()
+    .eq("workspace_id", workspaceId)
+    .eq("id", id)
+    .select("id")
+
+  if (error) return { success: false, error: EVENT_DELETE_FAILED }
+  // No provider error is not proof of a delete: require exactly the targeted row back.
+  if (!Array.isArray(data) || data.length !== 1 || data[0].id !== id) return { success: false, error: EVENT_NOT_FOUND }
+
+  revalidatePath("/dashboard/events")
+  revalidatePath("/dashboard")
+  revalidatePath("/dashboard/artists")
+  return { success: true }
+}
+
 export type PromoterOption = Pick<Promoter, "id" | "name" | "company_name">
 
 // Used by the event selector; never send contacts/notes. The directory and writes live in ./promoters.

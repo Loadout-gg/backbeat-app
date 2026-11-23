@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => {
 vi.mock("@/lib/supabase/server", () => ({ createClient: mocks.createClient }))
 vi.mock("@/lib/actions/workspace", () => ({ getCurrentWorkspaceId: mocks.workspace }))
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }))
-import { getEvent, updateEvent } from "@/lib/actions/events"
+import { deleteEvent, getEvent, updateEvent } from "@/lib/actions/events"
 
 const ID = "11111111-1111-4111-8111-111111111111"
 const ARTIST = "22222222-2222-4222-8222-222222222222"
@@ -17,7 +17,7 @@ const valid = { title: "Synthetic Night", date: "2030-03-01", status: "confirmed
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.state.result = { data: null, error: null }
-  for (const method of ["select", "update", "eq", "maybeSingle"]) mocks.query[method] = vi.fn(() => mocks.query)
+  for (const method of ["select", "update", "delete", "eq", "maybeSingle"]) mocks.query[method] = vi.fn(() => mocks.query)
   ;(mocks.query as { then: unknown }).then = (resolve: (value: unknown) => unknown) => Promise.resolve(mocks.state.result).then(resolve)
   mocks.from.mockReturnValue(mocks.query)
   mocks.createClient.mockResolvedValue({ from: mocks.from })
@@ -89,5 +89,28 @@ it("hides the provider message on a failed update and rejects a malformed id ear
   expect(await updateEvent(ID, valid)).toEqual({ success: false, error: "Unable to save the event. Please try again." })
   mocks.createClient.mockClear()
   expect(await updateEvent("not-a-uuid", valid)).toEqual({ success: false, error: "Event not found." })
+  expect(mocks.createClient).not.toHaveBeenCalled()
+})
+
+it("deletes only the targeted event of the selected workspace and requires it back", async () => {
+  mocks.state.result = { data: [{ id: ID }], error: null }
+  expect(await deleteEvent(ID)).toEqual({ success: true })
+  expect(mocks.from).toHaveBeenCalledWith("events")
+  expect(mocks.query.delete).toHaveBeenCalledTimes(1)
+  expect(mocks.query.eq.mock.calls).toEqual([["workspace_id", "selected-workspace"], ["id", ID]])
+  expect(mocks.revalidatePath.mock.calls.map(call => call[0])).toEqual(["/dashboard/events", "/dashboard", "/dashboard/artists"])
+})
+
+it.each([[[]], [null], [[{ id: ARTIST }]], [[{ id: ID }, { id: ID }]]])("does not report a delete when the database returns %j", async (data) => {
+  mocks.state.result = { data, error: null }
+  expect(await deleteEvent(ID)).toEqual({ success: false, error: "Event not found." })
+  expect(mocks.revalidatePath).not.toHaveBeenCalled()
+})
+
+it("hides the provider message on a failed delete and rejects a malformed id before backend access", async () => {
+  mocks.state.result = { data: null, error: { message: "private database detail" } }
+  expect(await deleteEvent(ID)).toEqual({ success: false, error: "Unable to delete the event. Please try again." })
+  mocks.createClient.mockClear()
+  expect(await deleteEvent("not-a-uuid")).toEqual({ success: false, error: "Event not found." })
   expect(mocks.createClient).not.toHaveBeenCalled()
 })

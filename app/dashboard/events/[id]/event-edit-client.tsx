@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { updateEvent, type EventDetail, type EventUpdateInput } from "@/lib/actions/events"
+import { DeleteEvent } from "./delete-event"
 
 type Option = { id: string; label: string }
 const STATUSES = [
@@ -130,6 +131,7 @@ export function EventEditClient({ event, artists, promoters }: { event: EventDet
           </form>
         </CardContent>
       </Card>
+      <DeleteEvent id={event.id} title={event.title} />
     </div>
   )
 }
