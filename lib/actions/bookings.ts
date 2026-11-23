@@ -55,6 +55,30 @@ export interface BookingWithArtist extends Booking {
   };
 }
 
+// List projections (R17/F19): each caller receives only the fields it renders or
+// computes from. Notes, contacts, fees, workspace_id and the artist's fee never leave
+// the server through a list read; the single-booking detail read (getBooking) is the
+// only wide read. Keep these in sync with tests/unit/bookings-read-projection.test.ts.
+const BOOKING_LIST_COLUMNS = {
+  calendar: "id,artist_id,date,start_time,status",
+  dashboard: "id,artist_id,date,start_time,status,venue_name,venue_address,artist:artists(stage_name,name)",
+  list: "id,artist_id,date,start_time,status,hold_expires_on,created_at,venue_name,venue_address,artist:artists(stage_name,name)",
+} as const;
+const CREATED_BOOKING_COLUMNS = "id,artist_id,date";
+
+type BookingArtistName = { stage_name: string | null; name: string | null } | null;
+/** Artist profile calendar and the same-day notice of the new booking dialog. */
+export type BookingCalendarItem = Pick<Booking, "id" | "artist_id" | "date" | "start_time" | "status">;
+/** Dashboard "Bookings in progress" cards. */
+export type BookingDashboardItem = BookingCalendarItem &
+  Pick<Booking, "venue_name" | "venue_address"> & { artist: BookingArtistName };
+/** Bookings list page (server-rendered) and server-only counts on the detail page. */
+export type BookingListItem = BookingDashboardItem & Pick<Booking, "created_at" | "hold_expires_on">;
+export type BookingFields = keyof typeof BOOKING_LIST_COLUMNS;
+type BookingRows = { calendar: BookingCalendarItem; dashboard: BookingDashboardItem; list: BookingListItem };
+/** What createBooking returns to the dialog: identity, artist check and the saved date. */
+export type CreatedBooking = Pick<Booking, "id" | "artist_id" | "date">;
+
 // Fixed user-facing copy: provider/database messages are logged, never returned.
 const TRANSITION_BLOCK_MESSAGES: Record<BookingTransitionBlock, string> = {
   not_allowed: "This status change is not allowed.",
@@ -73,9 +97,12 @@ function lifecycleErrorMessage(error: ProviderError): string | null {
 
 // failOnError is retained for source compatibility only.
 // Collection/auth failures always reject; false no longer means "return []".
-export async function getBookings(
-  options: { artistId?: string; failOnError?: boolean } = {}
-): Promise<Booking[]> {
+export async function getBookings<F extends BookingFields = "list">(
+  options: { artistId?: string; failOnError?: boolean; fields?: F } = {}
+): Promise<BookingRows[F][]> {
+  const fields = options.fields ?? "list";
+  if (!Object.hasOwn(BOOKING_LIST_COLUMNS, fields)) throw new Error("Invalid booking fields");
+  const columns: string = BOOKING_LIST_COLUMNS[fields];
   if (
     options.artistId !== undefined &&
     !createBookingSchema.shape.artistId.safeParse(options.artistId).success
@@ -97,16 +124,10 @@ export async function getBookings(
   const workspaceId = await getCurrentWorkspaceId();
 
   try {
-    return await readCompleteCollection<Booking>(async (from, to) => {
+    return await readCompleteCollection<BookingRows[F]>(async (from, to) => {
       let query = supabase
         .from("bookings")
-        .select(
-          `
-          *,
-          artist:artists(id, stage_name, name, surname, location, fee, currency, profile_image_url)
-          `,
-          { count: "exact" }
-        )
+        .select(columns, { count: "exact" })
         .eq("workspace_id", workspaceId);
 
       if (options.artistId !== undefined) {
@@ -119,7 +140,7 @@ export async function getBookings(
         .range(from, to);
 
       return {
-        data: data as unknown as Booking[] | null,
+        data: data as unknown as BookingRows[F][] | null,
         error,
         count,
       };
@@ -135,7 +156,7 @@ export async function createBooking(formData: {
   startTime: string;
   durationMinutes: number;
   notes?: string;
-}): Promise<{ success: boolean; error?: string; booking?: Booking }> {
+}): Promise<{ success: boolean; error?: string; booking?: CreatedBooking }> {
   const validation = createBookingSchema.safeParse(formData);
   if (!validation.success) return { success: false, error: validation.error.issues[0].message };
   const supabase = await createClient();
@@ -160,12 +181,7 @@ export async function createBooking(formData: {
       notes: formData.notes || null,
       status: "in_progress",
     })
-    .select(
-      `
-      *,
-      artist:artists(id, stage_name, name, surname, location, fee, currency, profile_image_url)
-    `
-    )
+    .select(CREATED_BOOKING_COLUMNS)
     .single();
 
   if (error) {
@@ -177,7 +193,7 @@ export async function createBooking(formData: {
   revalidatePath("/dashboard/bookings");
   revalidatePath("/dashboard/artists");
 
-  return { success: true, booking };
+  return { success: true, booking: booking as CreatedBooking };
 }
 
 export async function updateBookingStatus(

@@ -14,7 +14,7 @@ export default async function DashboardPage() {
   const [stats, eventsInProgress, bookings, userData] = await Promise.all([
     getDashboardStats(),
     listEventsInProgress(),
-    getBookings({ failOnError: true }),
+    getBookings({ failOnError: true, fields: "dashboard" }),
     getCurrentUser(),
   ])
 
