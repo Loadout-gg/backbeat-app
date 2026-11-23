@@ -449,7 +449,7 @@ const readers = [
     run: () => listEvents(),
     order: "date.desc,created_at.desc,id.asc",
     status: null,
-    columns: "*,artists:artist_id(id,name,stage_name),promoters:promoter_id(id,name,company_name)",
+    columns: "id,title,date,location,status,artist_id,promoter_id,workspace_id,created_at,artists:artist_id(id,name,stage_name),promoters:promoter_id(id,name,company_name)",
   },
   {
     name: "events in progress",
@@ -457,7 +457,7 @@ const readers = [
     run: () => listEventsInProgress(),
     order: "date.asc,created_at.desc,id.asc",
     status: "eq.in_progress",
-    columns: "*,artists:artist_id(id,name,stage_name),promoters:promoter_id(id,name,company_name)",
+    columns: "id,title,date,location,status,artist_id,promoter_id,workspace_id,created_at,artists:artist_id(id,name,stage_name),promoters:promoter_id(id,name,company_name)",
   },
   {
     name: "promoters",

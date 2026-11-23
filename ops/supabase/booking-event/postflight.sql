@@ -53,6 +53,18 @@ WITH checks(ord, item, ok, detail) AS (
   SELECT 10, 'bookings: index on (workspace_id, promoter_id)', count(*) = 1, count(*)::text || '/1'
   FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'bookings' AND indexname = 'bookings_workspace_promoter_idx'
   UNION ALL
+  SELECT 15, 'events: trigger events_enforce_booking enabled, BEFORE INSERT OR UPDATE OF booking_id, workspace_id',
+         count(*) = 1 AND bool_and(tgenabled = 'O'
+           AND pg_get_triggerdef(oid) LIKE '%BEFORE INSERT OR UPDATE OF booking_id, workspace_id ON public.events FOR EACH ROW%'),
+         coalesce(string_agg(pg_get_triggerdef(oid), ' '), 'absent')
+  FROM pg_trigger WHERE tgrelid = to_regclass('public.events') AND tgname = 'events_enforce_booking' AND NOT tgisinternal
+  UNION ALL
+  SELECT 16, 'trigger function: SECURITY INVOKER, empty search_path, not executable by anon/authenticated',
+         count(*) = 1 AND bool_and(NOT prosecdef AND proconfig = ARRAY['search_path=""']
+           AND NOT has_function_privilege('authenticated', oid, 'EXECUTE')
+           AND NOT has_function_privilege('anon', oid, 'EXECUTE')), count(*)::text || '/1'
+  FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname = 'backbeat_enforce_event_booking'
+  UNION ALL
   SELECT 11, 'RLS still enabled on events, bookings, promoters', count(*) = 3, count(*)::text || '/3'
   FROM pg_class WHERE relrowsecurity
     AND oid IN (to_regclass('public.events'), to_regclass('public.bookings'), to_regclass('public.promoters'))

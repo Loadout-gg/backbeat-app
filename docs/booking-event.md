@@ -19,7 +19,7 @@ P5 of the reference plan `ARCH-20261114-booking-domain` r02 (D0, D5), implemente
 2. Allowed only when the stored status is `confirmed` or `completed`; otherwise "An event can be created only from a confirmed or completed booking."
 3. If an event already exists: "An event already exists for this booking." plus the id of that event (the UI links to it). Nothing is inserted.
 4. One `INSERT` into `events`. No RPC, no second write: **the booking status and every other booking field are unchanged.**
-5. A unique violation (two requests racing) is resolved to the same "already exists" answer. A foreign-key violation (booking, artist or promoter deleted meanwhile) is "The booking changed while the event was being created. Reload and try again."
+5. The database repeats the status rule (below); its SQLSTATE `BB006` is answered with the same copy as step 2. A unique violation (two requests racing) is resolved to the same "already exists" answer. A foreign-key violation (booking, artist or promoter deleted meanwhile) is "The booking changed while the event was being created. Reload and try again."
 6. Success requires the created row back, in the selected workspace and linked to this booking.
 
 Field map (a snapshot taken at conversion; later edits on either side do not flow to the other):
@@ -35,7 +35,14 @@ Field map (a snapshot taken at conversion; later edits on either side do not flo
 | `start_time` | booking `start_time` |
 | `fee_amount_minor`, `fee_currency` | booking fee pair, or both null |
 
-The gate on the booking status is an application rule. The database enforces one event per booking and the same-workspace link, not the booking status.
+### Status gate in the database
+
+The trigger `events_enforce_booking` (`BEFORE INSERT OR UPDATE OF booking_id, workspace_id` on `events`, function `backbeat_enforce_event_booking()`, SECURITY INVOKER, not executable by `PUBLIC`, `anon` or `authenticated`) applies the gate to every writer, raw REST included:
+
+- When `booking_id` is not null, the linked booking of the same workspace must be `confirmed` or `completed`; otherwise the write fails with SQLSTATE `BB006` (`BB001`–`BB003` belong to migration 006, `BB004`–`BB005` to 007).
+- The booking row is locked `FOR SHARE`, so its status cannot change before the event write commits.
+- It is evaluated only when a link is set or changed. A later status change of the booking (cancelled, reopened) neither unlinks nor blocks the existing event, and the event stays editable. Unlinking and linking again is a new link and is checked.
+- A booking that does not exist or that the writer cannot see is left to the foreign key and RLS (`23503` / `42501`).
 
 ### Event start time, fee and status
 
@@ -54,13 +61,14 @@ The gate on the booking status is an application rule. The database enforces one
 ### Visibility and errors
 
 - RLS, grants and policies on `events`, `bookings` and `promoters` are unchanged: one `FOR ALL` active-member policy each, no role-specific policy. Every active workspace member sees and edits everything.
-- New actions return fixed copy; provider and database messages are logged server-side only. New reads use explicit projections and never select `public_token`.
+- New actions return fixed copy; provider and database messages are logged server-side only.
+- Every read of `events` names its columns (BACKLOG R17): `listEvents` and `listEventsInProgress` select `id, title, date, location, status, artist_id, promoter_id, workspace_id, created_at` plus the artist and promoter embeds, `getEvent` its detail list. `public_token` never leaves the server. `tests/unit/event-read-projection.test.ts` fails on `select("*")`, a bare `select()` or `public_token` in any events read under `lib/`, `app/` or `components/`.
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `migrations/008_booking_event.sql` | columns, keys, foreign keys, CHECKs, index |
+| `migrations/008_booking_event.sql` | columns, keys, foreign keys, CHECKs, index, status-gate trigger |
 | `ops/supabase/booking-event/preflight.sql` | read-only state report; lists event rows that violate the status CHECK (id and status only) |
 | `ops/supabase/booking-event/postflight.sql` | read-only checks after apply, summary in the last row |
 | `ops/supabase/booking-event/verify.sql` | behaviour as a member, an outsider and anon; every write is rolled back; summary in the first row |
@@ -70,28 +78,30 @@ The gate on the booking status is an application rule. The database enforces one
 | `app/dashboard/bookings/[id]/booking-event-link.tsx` | "Create event" control and link to the event |
 | `components/dashboard/booking-promoter-select.tsx` | promoter selector used by the create modal and the editor |
 
-Migration 008 is additive and idempotent, with no backfill. It refuses to run without `backbeat.booking_event_target` set to `development` or `hosted:hupkygptbvnzrihrlcxv` (staging), bound to the matching synthetic marker row exactly as 005/006 (see [booking lifecycle](booking-lifecycle.md)); a database without the marker table, such as production, is refused. It requires 005, RLS on the three tables and `UNIQUE (workspace_id, id)` on promoters. It refuses to run while any event row has a status outside the three values (`BOOKING_EVENT_UNEXPECTED_EVENT_STATUS_ROWS`); the preflight lists those rows. Existing single-column CHECKs on `events.status`, if any, are replaced by `events_status_check`.
+Migration 008 is additive and idempotent, with no backfill. It creates 15 objects: 5 columns, 8 constraints, 1 function, 1 trigger (plus one index). It refuses to run without `backbeat.booking_event_target` set to `development` or `hosted:hupkygptbvnzrihrlcxv` (staging), bound to the matching synthetic marker row exactly as 005/006 (see [booking lifecycle](booking-lifecycle.md)); a database without the marker table, such as production, is refused. It requires 005, RLS on the three tables and `UNIQUE (workspace_id, id)` on promoters. It refuses to run while any event row has a status outside the three values (`BOOKING_EVENT_UNEXPECTED_EVENT_STATUS_ROWS`); the preflight lists those rows. Existing single-column CHECKs on `events.status`, if any, are replaced by `events_status_check`.
 
 ## Order
 
 Schema first, then code. The current staging code runs unchanged on the migrated schema. The new code reads the new columns, so **do not merge before 008 is applied on staging**.
 
-Paste-ready copies for the staging SQL editor are generated outside the repository (`~/Desktop/backbeat-sql-pr34/`), each ending with one summarizing SELECT:
+Paste-ready copies for the staging SQL editor are generated outside the repository (`~/Desktop/backbeat-sql-008/`), each ending with one summarizing SELECT:
 
-1. `01_preflight.sql`: expect marker class `staging`, `008 objects present` = `0/13`, no `status_violation` row, last row `READY_FOR_008`.
-2. `02_migration_008.sql` (sets the staging target, then the migration): expect `MIGRATION_008_APPLIED`, `13/13 objects`.
-3. `03_postflight.sql`: expect last row `SUMMARY | ALL PASS | 14/14`.
-4. `04_verify_rls.sql`: expect first row `SUMMARY | ALL PASS | pass=16 fail=0 skip=0`. It needs one artist in a workspace with an active member and one account outside that workspace. `INCOMPLETE` means missing test data, `FAILED` means do not merge.
+1. `01_preflight.sql`: expect marker class `staging`, `008 objects present` = `0/15`, no `status_violation` row, last row `READY_FOR_008`.
+2. `02_migration_008.sql` (sets the staging target, then the migration): expect `MIGRATION_008_APPLIED`, `15/15 objects`.
+3. `03_postflight.sql`: expect last row `SUMMARY | ALL PASS | 16/16`.
+4. `04_verify_rls.sql`: expect first row `SUMMARY | ALL PASS | pass=18 fail=0 skip=0`. It needs one artist in a workspace with an active member and one account outside that workspace. `INCOMPLETE` means missing test data, `FAILED` means do not merge.
 5. With 008 applied and the old code still deployed, open the bookings list, a booking and the events list on staging: they must still load (the new foreign keys add relationships that PostgREST reads).
 6. Merge the PR to `staging`, verify the deployment commit.
 
 ## Rollback
 
 1. Redeploy the previous application version (revert the merge through a PR to `staging`). It runs unchanged on the 008 schema.
-2. Only to remove the schema: run `rollback.sql` with the same target prefix. It copies the booking link, start time and fee of events and the promoter of bookings into `public.booking_event_rollback_backup` (RLS on, no grants, no policies), then drops those columns, their constraints, the index and `events_status_check`. No event or booking is deleted. `UNIQUE (workspace_id, id)` on events stays.
-3. To go forward again: apply 008, then restore by hand (staging only) and drop the backup:
+2. Only to remove the schema: run `rollback.sql` with the same target prefix. It copies the booking link, start time and fee of events and the promoter of bookings into `public.booking_event_rollback_backup` (RLS on, no grants, no policies), then drops the status-gate trigger and function, those columns, their constraints, the index and `events_status_check`. No event or booking is deleted. `UNIQUE (workspace_id, id)` on events stays.
+3. To go forward again: apply 008, then restore by hand (staging only) and drop the backup. The status gate is switched off for the restore only: these links existed before, and the gate applies when a link is created, not to a booking that changed status afterwards.
 
 ```sql
+BEGIN;
+ALTER TABLE public.events DISABLE TRIGGER events_enforce_booking;
 UPDATE public.events AS e
   SET booking_id = k.booking_id, start_time = k.start_time,
       fee_amount_minor = k.fee_amount_minor, fee_currency = k.fee_currency
@@ -104,13 +114,15 @@ UPDATE public.bookings AS b SET promoter_id = k.promoter_id
   WHERE k.source = 'booking' AND b.id = k.id AND b.workspace_id = k.workspace_id
     AND EXISTS (SELECT 1 FROM public.promoters AS p
       WHERE p.id = k.promoter_id AND p.workspace_id = k.workspace_id);
+ALTER TABLE public.events ENABLE TRIGGER events_enforce_booking;
 DROP TABLE public.booking_event_rollback_backup;
+COMMIT;
 ```
 
 Events whose booking was deleted after the rollback are skipped by the first statement and keep no snapshot.
 
 ## Tests
 
-- `pnpm test`: conversion action (scope, gate, field map, retry, race, witness, fixed copy, projections), event read/update with the new fields, booking promoter create/update, "Create event" control, promoter selector in the modal and the editor, event page fields and link, static migration contracts.
-- `PG_BIN=<postgresql-17 bin> sh tests/sql/run-booking-event.sh`: applies 001–006 and 008 to a throwaway local cluster and executes one event per booking, the retry, cross-workspace isolation, the status CHECK guard, fee rules, promoter link, deletes that keep the event and the booking, workspace cascade, preflight/postflight/verify, rollback and restore, and the target guard matrix. The `auth` schema there is a stub, so it does not prove hosted Auth or PostgREST behaviour. Not part of CI. It has its own runner so parallel branches do not edit `run-local.sh`.
+- `pnpm test`: conversion action (scope, gate, field map, retry, race, witness, fixed copy, projections), event read/update with the new fields, booking promoter create/update, `BB006` mapping, static guard on events read projections, "Create event" control, promoter selector in the modal and the editor, event page fields and link, static migration contracts.
+- `PG_BIN=<postgresql-17 bin> sh tests/sql/run-booking-event.sh`: applies 001–006 and 008 to a throwaway local cluster and executes one event per booking, the retry, the status gate (a raw insert of an event linked to an `in_progress` booking is rejected with `BB006`, all six statuses, later status changes), cross-workspace isolation, the status CHECK guard, fee rules, promoter link, deletes that keep the event and the booking, workspace cascade, preflight/postflight/verify, rollback and restore, and the target guard matrix. The `auth` schema there is a stub, so it does not prove hosted Auth or PostgREST behaviour. Not part of CI. It has its own runner so parallel branches do not edit `run-local.sh`.
 - `tests/integration` and `tests/e2e` need an authorized synthetic stack.

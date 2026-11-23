@@ -2,7 +2,7 @@
 -- row counts, and the id + status of event rows that would violate the new status CHECK
 -- (no title, no other row content). Run it before applying 008; it changes nothing.
 -- Expected on staging before 008: marker class "staging", 005 applied, "008 objects present"
--- = 0/13, no "status_violation" row, and the last row READY_FOR_008.
+-- = 0/15, no "status_violation" row, and the last row READY_FOR_008.
 SELECT section, item, detail FROM (
   SELECT 1 AS ord, 'env' AS section, 'server' AS item,
          current_setting('server_version') || ' | current_date=' || current_date::text AS detail
@@ -42,7 +42,10 @@ SELECT section, item, detail FROM (
              WHERE (conrelid = to_regclass('public.events') AND conname IN ('events_status_check',
                       'events_fee_amount_minor_check', 'events_fee_currency_check', 'events_fee_pair_check',
                       'events_workspace_id_id_key', 'events_booking_id_key', 'events_booking_id_fkey'))
-                OR (conrelid = to_regclass('public.bookings') AND conname = 'bookings_promoter_id_fkey')))::text || '/13'
+                OR (conrelid = to_regclass('public.bookings') AND conname = 'bookings_promoter_id_fkey'))
+          + (CASE WHEN to_regprocedure('public.backbeat_enforce_event_booking()') IS NULL THEN 0 ELSE 1 END)
+          + (SELECT count(*) FROM pg_trigger WHERE tgrelid = to_regclass('public.events')
+             AND tgname = 'events_enforce_booking' AND NOT tgisinternal))::text || '/15'
   UNION ALL
   SELECT 14, 'migration', 'rollback backup table present',
          (CASE WHEN to_regclass('public.booking_event_rollback_backup') IS NULL THEN 0 ELSE 1 END)::text || '/1'
@@ -60,6 +63,9 @@ SELECT section, item, detail FROM (
   UNION ALL
   SELECT 32, 'fk_from_bookings', con.conname::text, pg_get_constraintdef(con.oid)
   FROM pg_constraint con WHERE con.conrelid = to_regclass('public.bookings') AND con.contype = 'f'
+  UNION ALL
+  SELECT 33, 'trigger', 'events.' || t.tgname::text || ' enabled=' || t.tgenabled::text, pg_get_triggerdef(t.oid)
+  FROM pg_trigger t WHERE t.tgrelid = to_regclass('public.events') AND NOT t.tgisinternal
   UNION ALL
   SELECT 40, 'policy', p.tablename::text || '.' || p.policyname::text || ' [' || p.cmd || '] to ' || array_to_string(p.roles, ','),
          'USING ' || coalesce(p.qual, '-') || ' | CHECK ' || coalesce(p.with_check, '-')

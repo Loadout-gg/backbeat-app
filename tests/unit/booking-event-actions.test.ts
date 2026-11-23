@@ -138,6 +138,16 @@ it("reports a booking, artist or promoter deleted meanwhile (foreign key) with f
   expect(await createEventFromBooking(BOOKING)).toEqual({ success: false, error: BOOKING_EVENT_COPY.changed })
 })
 
+it("maps the database status gate (BB006) to the same fixed copy as the application gate", async () => {
+  // The booking left confirmed/completed between the read and the insert.
+  queue(ok(booking), ok(null), fail("BB006"))
+  const result = await createEventFromBooking(BOOKING)
+  expect(result).toEqual({ success: false, error: "An event can be created only from a confirmed or completed booking." })
+  expect(JSON.stringify(result)).not.toContain("private database detail")
+  expect(mocks.calls).toHaveLength(3)
+  expect(mocks.revalidatePath).not.toHaveBeenCalled()
+})
+
 it.each([
   ["booking read", [fail("XX000")]],
   ["existing-event read", [ok(booking), fail("XX000")]],

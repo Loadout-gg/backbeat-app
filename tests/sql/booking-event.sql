@@ -52,7 +52,7 @@ CREATE TABLE bb_test.bookings_before AS SELECT id, to_jsonb(b) AS row FROM publi
 SELECT bb_test.eq('preflight: ready, nothing applied',
   (SELECT string_agg(detail, ' | ' ORDER BY item) FROM (:preflight) AS p
    WHERE item IN ('ready for 008', '008 objects present', 'runtime_environment marker class')),
-  '0/13 | READY_FOR_008 | development');
+  '0/15 | READY_FOR_008 | development');
 SELECT bb_test.eq('preflight: no status violation listed',
   (SELECT count(*)::text FROM (:preflight) AS p WHERE section = 'status_violation'), '0');
 
@@ -95,7 +95,9 @@ SELECT bb_test.eq('guard: refused targets add nothing',
   (SELECT count(*)::text FROM information_schema.columns WHERE table_schema = 'public'
      AND ((table_name = 'events' AND column_name IN ('booking_id', 'start_time', 'fee_amount_minor', 'fee_currency'))
        OR (table_name = 'bookings' AND column_name = 'promoter_id')))
-  || ':' || (SELECT count(*)::text FROM pg_constraint WHERE conname IN ('events_status_check', 'events_workspace_id_id_key', 'events_booking_id_key'))
+  || ':' || ((SELECT count(*) FROM pg_constraint WHERE conname IN ('events_status_check', 'events_workspace_id_id_key', 'events_booking_id_key'))
+             + (SELECT count(*) FROM pg_proc WHERE proname = 'backbeat_enforce_event_booking')
+             + (SELECT count(*) FROM pg_trigger WHERE tgname = 'events_enforce_booking'))::text
   || ':' || coalesce(to_regclass('public.booking_event_rollback_backup')::text, 'no-backup'), '0:0:no-backup');
 
 SET backbeat.booking_event_target = 'development';
@@ -122,13 +124,24 @@ SELECT bb_test.eq('schema: exactly one status CHECK on events',
   (SELECT string_agg(conname, ',') FROM pg_constraint WHERE conrelid = 'public.events'::regclass
    AND contype = 'c' AND pg_get_constraintdef(oid) LIKE '%status%'), 'events_status_check');
 SELECT bb_test.eq('schema: 008 objects all present',
-  (SELECT detail FROM (:preflight) AS p WHERE item = '008 objects present'), '13/13');
+  (SELECT detail FROM (:preflight) AS p WHERE item = '008 objects present'), '15/15');
+SELECT bb_test.eq('schema: one link trigger on events, function not callable by API roles',
+  (SELECT count(*)::text FROM pg_trigger WHERE tgrelid = 'public.events'::regclass AND tgname = 'events_enforce_booking' AND NOT tgisinternal)
+  || ':' || (SELECT prosecdef::text FROM pg_proc WHERE proname = 'backbeat_enforce_event_booking')
+  || ':' || (has_function_privilege('authenticated', 'public.backbeat_enforce_event_booking()', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.backbeat_enforce_event_booking()', 'EXECUTE')
+     OR has_function_privilege('public', 'public.backbeat_enforce_event_booking()', 'EXECUTE'))::text, '1:false:false');
+-- Bookings used by the link tests are confirmed (in_progress -> confirmed is a graph transition);
+-- b4 stays in_progress for the status gate.
+INSERT INTO public.bookings (id, workspace_id, artist_id, date, start_time) VALUES
+  ('a0000000-0000-4000-8000-0000000b0004', 'a0000000-0000-4000-8000-0000000000aa', 'a0000000-0000-4000-8000-00000000a472', '2030-05-04', '21:00');
+UPDATE public.bookings SET status = 'confirmed' WHERE id <> 'a0000000-0000-4000-8000-0000000b0004';
 
 -- The postflight must execute and pass on the migrated schema.
 \ir ../../ops/supabase/booking-event/postflight.sql
 \set postflight `sed -e 's/;[[:space:]]*$//' ../../ops/supabase/booking-event/postflight.sql`
 SELECT bb_test.eq('postflight: every check passes',
-  (SELECT string_agg(result || ' ' || detail, '') FROM (:postflight) AS p WHERE ord = 99), 'ALL PASS 14/14');
+  (SELECT string_agg(result || ' ' || detail, '') FROM (:postflight) AS p WHERE ord = 99), 'ALL PASS 16/16');
 SELECT bb_test.eq('postflight: no failing row',
   (SELECT coalesce(string_agg(item, '; '), 'none') FROM (:postflight) AS p WHERE result <> 'PASS' AND ord <> 99), 'none');
 
@@ -138,12 +151,12 @@ CREATE TABLE bb_test.counts_before AS SELECT
   (SELECT count(*) FROM public.promoters) AS promoters, (SELECT count(*) FROM public.workspaces) AS workspaces,
   (SELECT count(*) FROM public.artists) AS artists;
 \ir ../../ops/supabase/booking-event/verify.sql
-SELECT bb_test.eq('verify.sql: 16 PASS lines, no FAIL or SKIP',
+SELECT bb_test.eq('verify.sql: 18 PASS lines, no FAIL or SKIP',
   (SELECT count(*) FILTER (WHERE line LIKE 'PASS|%')::text || ':' || count(*) FILTER (WHERE line NOT LIKE 'PASS|%')::text
-   FROM unnest(string_to_array(current_setting('backbeat.event_verify_report'), E'\n')) AS line), '16:0');
+   FROM unnest(string_to_array(current_setting('backbeat.event_verify_report'), E'\n')) AS line), '18:0');
 \set verify `sed -e '1,/^\$verify\$;$/d' -e 's/;[[:space:]]*$//' ../../ops/supabase/booking-event/verify.sql`
 SELECT bb_test.eq('verify.sql: summary row',
-  (SELECT result || ' ' || detail FROM (:verify) AS v WHERE ord = 0), 'ALL PASS pass=16 fail=0 skip=0');
+  (SELECT result || ' ' || detail FROM (:verify) AS v WHERE ord = 0), 'ALL PASS pass=18 fail=0 skip=0');
 SELECT bb_test.eq('verify.sql: leaves no row behind',
   (SELECT (c.events = (SELECT count(*) FROM public.events) AND c.bookings = (SELECT count(*) FROM public.bookings)
      AND c.promoters = (SELECT count(*) FROM public.promoters) AND c.workspaces = (SELECT count(*) FROM public.workspaces)
@@ -163,7 +176,10 @@ DECLARE
   b2 uuid := 'a0000000-0000-4000-8000-0000000b0002';
   b3 uuid := 'a0000000-0000-4000-8000-0000000b0003';
   bb uuid := 'b0000000-0000-4000-8000-0000000b0001';
+  b4 uuid := 'a0000000-0000-4000-8000-0000000b0004';
+  a2 uuid := 'a0000000-0000-4000-8000-00000000a472';
   e1 uuid := 'a0000000-0000-4000-8000-0000000e0001';
+  seeded uuid; gate_status text; gate_event uuid;
   ins text := 'INSERT INTO public.events (workspace_id, title, date, status%s) VALUES (%L, %L, ''2030-05-01'', %L%s)';
 BEGIN
   -- One event per booking (decision 1) and the conversion snapshot (decision 3).
@@ -182,6 +198,39 @@ BEGIN
   PERFORM bb_test.eq('events without a booking stay unlimited (second)', bb_test.run_as(ua, format(ins, '', wa, 'free 2', 'in_progress', '')), 'OK:1');
   PERFORM bb_test.eq('convert: unknown booking rejected',
     bb_test.run_as(ua, format(ins, ', booking_id', wa, 'orphan', 'confirmed', format(', %L', gen_random_uuid()))), '23503');
+
+  -- Decision 4 in the database (BB006): raw writes can link only a confirmed or completed booking.
+  PERFORM bb_test.eq('gate: raw insert of an event linked to an in_progress booking is rejected',
+    bb_test.run_as(ua, format(ins, ', booking_id', wa, 'early', 'confirmed', format(', %L', b4))), 'BB006');
+  PERFORM bb_test.eq('gate: the rejected insert left no event', (SELECT count(*)::text FROM public.events WHERE booking_id = b4), '0');
+  FOREACH gate_status IN ARRAY ARRAY['in_progress', 'hold', 'option', 'confirmed', 'cancelled', 'completed'] LOOP
+    seeded := bb_test.seed(wa, a2, gate_status, '2020-01-01');
+    PERFORM bb_test.eq('gate: insert linked to a ' || gate_status || ' booking',
+      bb_test.run_as(ua, format(ins, ', booking_id', wa, 'gate ' || gate_status, 'confirmed', format(', %L', seeded))),
+      CASE WHEN gate_status IN ('confirmed', 'completed') THEN 'OK:1' ELSE 'BB006' END);
+  END LOOP;
+  PERFORM bb_test.eq('gate: an existing event cannot be pointed at an in_progress booking',
+    bb_test.run_as(ua, format('UPDATE public.events SET booking_id = %L WHERE title = %L', b4, 'free 1')), 'BB006');
+  BEGIN
+    UPDATE public.events SET booking_id = b4 WHERE title = 'free 2';
+    gate_status := 'updated';
+  EXCEPTION WHEN OTHERS THEN gate_status := SQLSTATE;
+  END;
+  PERFORM bb_test.eq('gate: the database owner is bound by the same rule', gate_status, 'BB006');
+  -- A later status change of the booking neither unlinks nor blocks the existing event.
+  SELECT id INTO gate_event FROM public.events WHERE title = 'gate confirmed';
+  SELECT booking_id INTO seeded FROM public.events WHERE id = gate_event;
+  PERFORM bb_test.eq('gate: the linked booking can still be cancelled',
+    bb_test.run_as(ua, format('UPDATE public.bookings SET status = ''cancelled'' WHERE id = %L', seeded)), 'OK:1');
+  PERFORM bb_test.eq('gate: event of a cancelled booking stays linked', (SELECT booking_id::text FROM public.events WHERE id = gate_event), seeded::text);
+  PERFORM bb_test.eq('gate: event of a cancelled booking is still editable',
+    bb_test.run_as(ua, format('UPDATE public.events SET title = ''gate edited'', start_time = ''20:00'' WHERE id = %L', gate_event)), 'OK:1');
+  PERFORM bb_test.eq('gate: rewriting the same link of a cancelled booking passes',
+    bb_test.run_as(ua, format('UPDATE public.events SET booking_id = %L, workspace_id = %L WHERE id = %L', seeded, wa, gate_event)), 'OK:1');
+  PERFORM bb_test.eq('gate: unlinking and relinking to the now cancelled booking is rejected',
+    bb_test.run_as(ua, format('DO $t$ BEGIN UPDATE public.events SET booking_id = NULL WHERE id = %L; UPDATE public.events SET booking_id = %L WHERE id = %L; END $t$', gate_event, seeded, gate_event)), 'BB006');
+  PERFORM bb_test.eq('gate: B still gets the foreign key answer for a booking it cannot see',
+    bb_test.run_as(ub, format(ins, ', booking_id', wb, 'blind', 'confirmed', format(', %L', b4))), '23503');
 
   -- Cross-workspace isolation: composite FK plus the unchanged active-member policy.
   PERFORM bb_test.eq('isolation: A event cannot link a booking of B',
@@ -238,7 +287,7 @@ BEGIN
     bb_test.run_as(ua, format('DELETE FROM public.promoters WHERE id = %L', pa)), 'OK:1');
   PERFORM bb_test.eq('promoter: bookings kept, only promoter_id cleared',
     (SELECT count(*)::text || ':' || count(promoter_id)::text || ':' || count(DISTINCT workspace_id)::text
-     FROM public.bookings WHERE workspace_id = wa), '4:0:1');
+     FROM public.bookings WHERE workspace_id = wa AND date >= '2030-01-01'), '5:0:1');
   PERFORM bb_test.eq('promoter: events kept, only promoter_id cleared',
     (SELECT count(promoter_id)::text || ':' || (SELECT booking_id::text FROM public.events WHERE id = e1)
      FROM public.events WHERE workspace_id = wa), '0:' || b1::text);
@@ -283,6 +332,8 @@ SELECT bb_test.eq('rollback: columns, link constraints and status CHECK removed'
        OR (table_name = 'bookings' AND column_name = 'promoter_id')))
    + (SELECT count(*) FROM pg_constraint WHERE conname IN ('events_status_check', 'events_booking_id_key',
         'events_booking_id_fkey', 'bookings_promoter_id_fkey', 'events_fee_pair_check'))
+   + (SELECT count(*) FROM pg_proc WHERE proname = 'backbeat_enforce_event_booking')
+   + (SELECT count(*) FROM pg_trigger WHERE tgname = 'events_enforce_booking')
    + (SELECT count(*) FROM pg_indexes WHERE indexname = 'bookings_workspace_promoter_idx'))::text, '0');
 SELECT bb_test.eq('rollback: additive events key kept',
   (SELECT count(*)::text FROM pg_constraint WHERE conname = 'events_workspace_id_id_key'), '1');
@@ -302,6 +353,11 @@ SELECT bb_test.eq('rollback: second run keeps the first backup',
   (SELECT count(*)::text FROM public.booking_event_rollback_backup), :'backup_rows');
 \ir ../../migrations/008_booking_event.sql
 -- Manual restore documented in docs/booking-event.md (rows whose booking or promoter still exists).
+-- The booking was cancelled after the rollback: the link is restored anyway, because the
+-- status gate applies when a link is created, not to links that already existed.
+UPDATE public.bookings SET status = 'cancelled' WHERE id = 'a0000000-0000-4000-8000-0000000b0003';
+BEGIN;
+ALTER TABLE public.events DISABLE TRIGGER events_enforce_booking;
 UPDATE public.events AS e
   SET booking_id = k.booking_id, start_time = k.start_time,
       fee_amount_minor = k.fee_amount_minor, fee_currency = k.fee_currency
@@ -314,6 +370,10 @@ UPDATE public.bookings AS b SET promoter_id = k.promoter_id
   WHERE k.source = 'booking' AND b.id = k.id AND b.workspace_id = k.workspace_id
     AND EXISTS (SELECT 1 FROM public.promoters AS p
       WHERE p.id = k.promoter_id AND p.workspace_id = k.workspace_id);
+ALTER TABLE public.events ENABLE TRIGGER events_enforce_booking;
+COMMIT;
+SELECT bb_test.eq('restore: trigger enabled again',
+  (SELECT tgenabled::text FROM pg_trigger WHERE tgname = 'events_enforce_booking'), 'O');
 SELECT bb_test.eq('restore: link, snapshot and promoter back',
   (SELECT booking_id::text || ':' || start_time::text || ':' || fee_amount_minor || ':' || fee_currency
    FROM public.events WHERE id = 'a0000000-0000-4000-8000-0000000e0003')

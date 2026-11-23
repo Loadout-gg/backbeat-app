@@ -1,7 +1,8 @@
 -- Rollback of migrations/008_booking_event.sql. Redeploy the previous app version first;
 -- the previous version also runs unchanged on the 008 schema, so this file is needed only
 -- to remove the schema itself. Lossy for the live tables: the booking link, start time and
--- fee snapshot of events and the promoter of bookings are removed. They are first copied to
+-- fee snapshot of events and the promoter of bookings are removed, with the trigger and
+-- function that gate the link on the booking status. They are first copied to
 -- booking_event_rollback_backup (RLS on, no grants, no policies: invisible to the API).
 -- Re-running is safe: a later rollback overwrites the backup of a row that still exists with
 -- its current values and keeps the backup of rows that are already gone. Events and bookings
@@ -83,6 +84,8 @@ BEGIN
 END
 $backup$;
 
+DROP TRIGGER IF EXISTS events_enforce_booking ON public.events;
+DROP FUNCTION IF EXISTS public.backbeat_enforce_event_booking();
 DROP INDEX IF EXISTS public.bookings_workspace_promoter_idx;
 ALTER TABLE public.bookings
   DROP CONSTRAINT IF EXISTS bookings_promoter_id_fkey,

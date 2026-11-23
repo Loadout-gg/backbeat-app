@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs"
 import { expect, it } from "vitest"
 import { BOOKING_FEE_CURRENCIES, MAX_BOOKING_FEE_MINOR } from "@/lib/booking-fee"
-import { EVENT_STATUSES } from "@/lib/booking-event"
+import { CONVERTIBLE_BOOKING_STATUSES, EVENT_BOOKING_STATUS_SQLSTATE, EVENT_STATUSES } from "@/lib/booking-event"
 const read = (path: string) => readFileSync(path, "utf8")
 const migration = read("migrations/008_booking_event.sql")
 const [preflight, postflight, verify, rollback] = ["preflight", "postflight", "verify", "rollback"]
@@ -32,10 +32,10 @@ it("STATIC: 008 and its rollback need an explicit development or staging target,
   }
 })
 
-it("STATIC: 008 is additive and re-runnable: no backfill, no row rewrite, no policy, grant or function", () => {
+it("STATIC: 008 is additive and re-runnable: no backfill, no row rewrite, no policy or table grant", () => {
   const sql = code(migration)
   expect(sql).not.toMatch(/\bUPDATE public\.|\bDELETE FROM\b|\bINSERT INTO\b|\bTRUNCATE\b|\bDROP (?:TABLE|COLUMN|POLICY|INDEX)\b/)
-  expect(sql).not.toMatch(/\bCREATE (?:OR REPLACE )?(?:POLICY|FUNCTION|TRIGGER|TABLE)\b|\bGRANT\b|\bREVOKE\b|\bSECURITY DEFINER\b|ROW LEVEL SECURITY/)
+  expect(sql).not.toMatch(/\bCREATE (?:OR REPLACE )?(?:POLICY|TABLE)\b|\bGRANT\b|\bREVOKE\b(?! ALL ON FUNCTION)|\bSECURITY DEFINER\b|ROW LEVEL SECURITY/)
   expect(sql.match(/ADD COLUMN IF NOT EXISTS/g)).toHaveLength(5)
   expect(sql.match(/ADD COLUMN(?! IF NOT EXISTS)/g)).toBeNull()
   expect(sql).toContain("CREATE INDEX IF NOT EXISTS bookings_workspace_promoter_idx")
@@ -58,6 +58,25 @@ it("STATIC: one event per booking, same-workspace links, and deletes that null o
   // A bare SET NULL on a composite key would also null workspace_id (NOT NULL): never used.
   expect(sql).not.toMatch(/ON DELETE SET NULL(?! \()/)
   expect(sql).not.toMatch(/ON DELETE CASCADE/)
+})
+
+it("STATIC: the link trigger gates on the booking status for every writer, as SECURITY INVOKER", () => {
+  const sql = code(migration)
+  expect(sql.match(/CREATE OR REPLACE FUNCTION/g)).toHaveLength(1)
+  expect(sql).toContain("CREATE OR REPLACE FUNCTION public.backbeat_enforce_event_booking()\nRETURNS trigger LANGUAGE plpgsql SET search_path = ''")
+  expect(sql).toContain("REVOKE ALL ON FUNCTION public.backbeat_enforce_event_booking() FROM PUBLIC, anon, authenticated;")
+  expect(sql).toContain("DROP TRIGGER IF EXISTS events_enforce_booking ON public.events;")
+  expect(sql).toContain("CREATE TRIGGER events_enforce_booking BEFORE INSERT OR UPDATE OF booking_id, workspace_id ON public.events\n  FOR EACH ROW EXECUTE FUNCTION public.backbeat_enforce_event_booking();")
+  expect(sql).toContain(`linked_status NOT IN (${list(CONVERTIBLE_BOOKING_STATUSES)})`)
+  expect(sql).toContain(`USING ERRCODE = '${EVENT_BOOKING_STATUS_SQLSTATE}'`)
+  expect(EVENT_BOOKING_STATUS_SQLSTATE).toBe("BB006")
+  // Same-workspace lookup, row locked until commit; only evaluated when the link changes.
+  expect(sql.replace(/\s+/g, " ")).toContain("FROM public.bookings AS b WHERE b.id = NEW.booking_id AND b.workspace_id = NEW.workspace_id FOR SHARE;")
+  expect(sql).toContain("NEW.booking_id IS NOT DISTINCT FROM OLD.booking_id")
+  // SQLSTATEs of the other booking migrations are not reused.
+  for (const taken of ["BB001", "BB002", "BB003", "BB004", "BB005"]) expect(sql).not.toContain(taken)
+  expect(read("migrations/006_booking_lifecycle.sql")).not.toContain("BB006")
+  expect(code(rollback)).toContain("DROP TRIGGER IF EXISTS events_enforce_booking ON public.events;\nDROP FUNCTION IF EXISTS public.backbeat_enforce_event_booking();")
 })
 
 it("STATIC: 008 mirrors the application value sets and refuses rows that violate the status CHECK", () => {

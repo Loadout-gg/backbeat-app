@@ -6,7 +6,7 @@
 -- It creates its own booking, promoter, event and a second workspace inside a block that is
 -- always rolled back: no row is changed and nothing is left behind. The report is the
 -- result of the final SELECT:
---   first row "SUMMARY | ALL PASS | pass=16 fail=0 skip=0", then one row per check.
+--   first row "SUMMARY | ALL PASS | pass=18 fail=0 skip=0", then one row per check.
 -- "FAILED" or "INCOMPLETE" in the summary means do not merge.
 DO $verify$
 DECLARE
@@ -94,6 +94,17 @@ BEGIN
       results := results || (CASE WHEN outcome = '23503' THEN 'PASS' ELSE 'FAIL' END
         || '|member: promoter of another workspace rejected|' || outcome || ' (expected 23503)');
     END IF;
+
+    -- The fresh booking is in_progress: the link must be refused until it is confirmed.
+    BEGIN
+      INSERT INTO public.events (workspace_id, title, date, status, booking_id)
+        VALUES (target.workspace_id, 'BB VERIFY early event', CURRENT_DATE + 30, 'confirmed', booking);
+      outcome := 'inserted';
+    EXCEPTION WHEN OTHERS THEN outcome := SQLSTATE;
+    END;
+    results := results || (CASE WHEN outcome = 'BB006' THEN 'PASS' ELSE 'FAIL' END
+      || '|member: event for a booking that is not confirmed or completed rejected|' || outcome || ' (expected BB006)');
+    UPDATE public.bookings SET status = 'confirmed' WHERE id = booking;
 
     BEGIN
       INSERT INTO public.events (workspace_id, title, date, location, status, artist_id, promoter_id,
@@ -202,6 +213,17 @@ BEGIN
     PERFORM set_config('request.jwt.claims',
       json_build_object('sub', member, 'role', 'authenticated')::text, true);
     SET LOCAL ROLE authenticated;
+    -- A later status change of the booking neither unlinks nor blocks its event.
+    BEGIN
+      UPDATE public.bookings SET status = 'cancelled' WHERE id = booking;
+      UPDATE public.events SET location = 'BB VERIFY venue 2', booking_id = booking WHERE id = event;
+      SELECT CASE WHEN e.booking_id = booking AND e.location = 'BB VERIFY venue 2' THEN 'ok' ELSE 'unexpected row state' END
+        INTO outcome FROM public.events AS e WHERE e.id = event;
+      outcome := coalesce(outcome, 'event gone');
+    EXCEPTION WHEN OTHERS THEN outcome := SQLSTATE;
+    END;
+    results := results || (CASE WHEN outcome = 'ok' THEN 'PASS' ELSE 'FAIL' END
+      || '|member: cancelling the booking later keeps its event linked and editable|' || outcome);
     BEGIN
       DELETE FROM public.promoters WHERE id = promoter;
       SELECT CASE WHEN b.promoter_id IS NULL AND b.workspace_id = target.workspace_id

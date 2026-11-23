@@ -1,7 +1,9 @@
 -- P5 of ARCH-20261114-booking-domain r02 (staging delegation, decisions of 2026-11-23).
 -- Additive: booking -> event link (events.booking_id, one event per booking), event start
 -- time and fee snapshot, events status CHECK, UNIQUE (workspace_id, id) on events, and an
--- optional promoter link on bookings. No row is rewritten, nothing is backfilled.
+-- optional promoter link on bookings, plus a trigger that lets an event be linked only to a
+-- confirmed or completed booking, for every writer including raw REST.
+-- No row is rewritten, nothing is backfilled.
 -- Idempotent: safe to re-run. Requires 005. Prefix with an explicit target:
 --   SET backbeat.booking_event_target = 'development';                 -- synthetic local
 --   SET backbeat.booking_event_target = 'hosted:hupkygptbvnzrihrlcxv'; -- staging
@@ -159,6 +161,40 @@ END
 $keys$;
 CREATE INDEX IF NOT EXISTS bookings_workspace_promoter_idx
   ON public.bookings (workspace_id, promoter_id);
+
+-- Decision 4 in the database: an event can be linked only to a booking that is confirmed or
+-- completed at that moment. SECURITY INVOKER: runs as the writer, under the writer's RLS.
+-- Evaluated only when the link is set or changed, so a later status change of the booking
+-- neither unlinks nor blocks its event, and the FK's own SET NULL (booking_id) passes.
+-- The booking row is locked FOR SHARE, so its status cannot change before this write commits.
+-- A booking the writer cannot see or that does not exist is left to RLS and to
+-- events_booking_id_fkey (42501 / 23503). SQLSTATE BB006 (006 uses BB001-BB003, 007 BB004-BB005).
+CREATE OR REPLACE FUNCTION public.backbeat_enforce_event_booking()
+RETURNS trigger LANGUAGE plpgsql SET search_path = ''
+AS $function$
+DECLARE linked_status text;
+BEGIN
+  IF NEW.booking_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+  IF TG_OP = 'UPDATE' AND NEW.booking_id IS NOT DISTINCT FROM OLD.booking_id
+     AND NEW.workspace_id IS NOT DISTINCT FROM OLD.workspace_id THEN
+    RETURN NEW;
+  END IF;
+  SELECT b.status INTO linked_status FROM public.bookings AS b
+    WHERE b.id = NEW.booking_id AND b.workspace_id = NEW.workspace_id
+    FOR SHARE;
+  IF FOUND AND linked_status NOT IN ('confirmed', 'completed') THEN
+    RAISE EXCEPTION 'EVENT_BOOKING_MUST_BE_CONFIRMED_OR_COMPLETED' USING ERRCODE = 'BB006';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+REVOKE ALL ON FUNCTION public.backbeat_enforce_event_booking() FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS events_enforce_booking ON public.events;
+CREATE TRIGGER events_enforce_booking BEFORE INSERT OR UPDATE OF booking_id, workspace_id ON public.events
+  FOR EACH ROW EXECUTE FUNCTION public.backbeat_enforce_event_booking();
 
 -- Decision 6: RLS, grants and policies on events, bookings and promoters are unchanged
 -- (one FOR ALL active-member policy each). The new columns inherit them.

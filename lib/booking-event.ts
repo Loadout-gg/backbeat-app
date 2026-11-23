@@ -17,6 +17,9 @@ export function canConvertBookingToEvent(status: string): boolean {
   return (CONVERTIBLE_BOOKING_STATUSES as readonly string[]).includes(status)
 }
 
+/** SQLSTATE raised by backbeat_enforce_event_booking (migration 008): linked booking not confirmed/completed. */
+export const EVENT_BOOKING_STATUS_SQLSTATE = "BB006"
+
 /** Fixed user-facing copy: provider and database messages are never returned. */
 export const BOOKING_EVENT_COPY = {
   notFound: "Booking not found",

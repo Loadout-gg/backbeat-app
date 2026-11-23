@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
-import { BOOKING_EVENT_COPY, bookingEventTitle, canConvertBookingToEvent } from "@/lib/booking-event"
+import { BOOKING_EVENT_COPY, EVENT_BOOKING_STATUS_SQLSTATE, bookingEventTitle, canConvertBookingToEvent } from "@/lib/booking-event"
 import { getCurrentWorkspaceId } from "./workspace"
 
 export type BookingEventLink = { id: string; title: string }
@@ -119,6 +119,8 @@ export async function createEventFromBooking(bookingId: string): Promise<Booking
         ...(winner.link ? { existingEventId: winner.link.id } : {}),
       }
     }
+    // The database gate: the booking left confirmed/completed after the read above.
+    if (insertError.code === EVENT_BOOKING_STATUS_SQLSTATE) return { success: false, error: BOOKING_EVENT_COPY.notConvertible }
     // 23503: the booking, its artist or its promoter was deleted after the read above.
     if (insertError.code === "23503") return { success: false, error: BOOKING_EVENT_COPY.changed }
     return { success: false, error: BOOKING_EVENT_COPY.failed }
