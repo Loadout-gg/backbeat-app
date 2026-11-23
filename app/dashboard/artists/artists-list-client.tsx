@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useMemo, useRef, useState } from "react"
+import { exportArtistsCsv } from "@/lib/actions/artist-export"
+import { ARTIST_EXPORT_ERROR } from "@/lib/artist-csv"
 import { artistDisplayName, artistRealName, filterArtistDirectory, type ArtistDirectoryEntry } from "@/lib/artist-list"
 
 const PAGE_SIZE = 20
@@ -15,6 +17,37 @@ const PAGE_SIZE = 20
 export default function ArtistsListClient({ artists }: { artists: ArtistDirectoryEntry[] }) {
   const [query, setQuery] = useState("")
   const searchRef = useRef<HTMLInputElement>(null)
+
+  const [exporting, setExporting] = useState(false)
+  const [exportMessage, setExportMessage] = useState<{ kind: "error" | "status"; text: string } | null>(null)
+
+  async function exportCsv() {
+    setExporting(true)
+    setExportMessage(null)
+    try {
+      const result = await exportArtistsCsv()
+      if (!result.success) {
+        setExportMessage({ kind: "error", text: ARTIST_EXPORT_ERROR })
+      } else if (result.count === 0) {
+        setExportMessage({ kind: "status", text: "There are no artists to export." })
+      } else {
+        const url = URL.createObjectURL(new Blob([result.csv], { type: "text/csv;charset=utf-8" }))
+        const link = document.createElement("a")
+        link.href = url
+        link.download = result.fileName
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        URL.revokeObjectURL(url)
+        setExportMessage({ kind: "status", text: `Exported ${result.count} ${result.count === 1 ? "artist" : "artists"}.` })
+      }
+    } catch {
+      // Network or runtime failure: same fixed copy, never the raw message.
+      setExportMessage({ kind: "error", text: ARTIST_EXPORT_ERROR })
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const [requestedPage, setPage] = useState(1)
   const filtered = useMemo(() => filterArtistDirectory(artists, query), [artists, query])
@@ -55,9 +88,9 @@ export default function ArtistsListClient({ artists }: { artists: ArtistDirector
             {query && <Button variant="ghost" size="sm" onClick={() => { setQuery(""); setPage(1); searchRef.current?.focus() }}>Clear search</Button>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" disabled title="CSV export is unavailable">
+            <Button variant="outline" size="sm" onClick={exportCsv} disabled={exporting || artists.length === 0} aria-describedby={exportMessage ? "artists-export-message" : undefined}>
               <Download aria-hidden="true" className="mr-2 h-4 w-4" />
-              Download CSV (unavailable)
+              {exporting ? "Exporting…" : "Export CSV"}
             </Button>
             <Button size="sm" asChild>
               <Link href="/dashboard/artists/new">
@@ -67,6 +100,12 @@ export default function ArtistsListClient({ artists }: { artists: ArtistDirector
             </Button>
           </div>
         </div>
+
+        {exportMessage && (
+          <p id="artists-export-message" role={exportMessage.kind === "error" ? "alert" : "status"} className={exportMessage.kind === "error" ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>
+            {exportMessage.text}
+          </p>
+        )}
 
         <p className="text-sm text-muted-foreground">Artists · A–Z</p>
 

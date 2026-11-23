@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 const server = vi.hoisted(() => ({ list: vi.fn(), directory: vi.fn() }))
 vi.mock("@/lib/actions/artists", () => ({ listArtists: server.list }))
 vi.mock("@/lib/actions/artist-directory", () => ({ listArtistDirectory: server.directory }))
+vi.mock("@/lib/actions/artist-export", () => ({ exportArtistsCsv: vi.fn() }))
 import ArtistsPage from "@/app/dashboard/artists/page"
 afterEach(cleanup)
 it("does not render an empty roster when the dedicated read fails", async () => {
@@ -55,10 +56,10 @@ it("opens an artist-specific keyboard menu with real routes and disabled deletio
   expect(screen.getByRole("menuitem", { name: "View details" }).getAttribute("href")).toBe("/dashboard/artists/a")
   expect(screen.getByRole("menuitem", { name: "Delete (unavailable)" }).getAttribute("aria-disabled")).toBe("true")
 })
-it("keeps export explicitly unavailable", async () => {
+it("offers an enabled CSV export for a non-empty roster", async () => {
   server.directory.mockResolvedValue([artist("a", "Aurora")])
   render(await ArtistsPage())
-  expect((screen.getByRole("button", { name: /Download CSV/ }) as HTMLButtonElement).disabled).toBe(true)
+  expect((screen.getByRole("button", { name: "Export CSV" }) as HTMLButtonElement).disabled).toBe(false)
 })
 it("distinguishes no matches from an empty roster", async () => {
   server.directory.mockResolvedValue([artist("a", "Aurora")])

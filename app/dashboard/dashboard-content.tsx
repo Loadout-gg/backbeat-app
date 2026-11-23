@@ -183,7 +183,8 @@ export function DashboardContent({
       />
 
       <footer className="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-muted/60 px-4 py-4 text-xs text-muted-foreground">
-        <span>© 2025 Backbeat. All rights reserved.</span>
+        {/* Year of the configured calendar day (server zone policy), not the viewer clock. */}
+        <span>© {calendarToday.slice(0, 4)} Backbeat. All rights reserved.</span>
         <span>Terms, Privacy, Help and Contact are currently unavailable.</span>
       </footer>
     </div>

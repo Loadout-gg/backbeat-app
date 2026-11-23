@@ -171,3 +171,11 @@ it("names an event in progress by the artist stage name, then name, then the eve
   expect(within(section).getAllByRole("heading").map(el => el.textContent)).toEqual(expect.arrayContaining(["DJ Alice", "Bruno Bianchi", "Third night"]))
   expect(within(section).queryByText("Alice Rossi")).toBeNull()
 })
+it("renders the footer year from the configured calendar day, not a hard-coded year", () => {
+  const { unmount } = render(<DashboardContent {...props} calendarToday="2031-01-01" />)
+  expect(screen.getByText("© 2031 Backbeat. All rights reserved.")).toBeTruthy()
+  expect(screen.queryByText(/© 2025/)).toBeNull()
+  unmount()
+  render(<DashboardContent {...props} />)
+  expect(screen.getByText("© 2026 Backbeat. All rights reserved.")).toBeTruthy()
+})
