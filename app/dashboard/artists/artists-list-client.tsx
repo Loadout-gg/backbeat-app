@@ -9,12 +9,13 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useMemo, useRef, useState } from "react"
 import { exportArtistsCsv } from "@/lib/actions/artist-export"
 import { ARTIST_EXPORT_ERROR } from "@/lib/artist-csv"
+import { RetryButton } from "@/components/retry-button"
 import { artistDisplayName, artistRealName, filterArtistDirectory, type ArtistDirectoryEntry } from "@/lib/artist-list"
 
 const PAGE_SIZE = 20
 
 // Operate: the existing shell frames one readable, bounded directory panel.
-export default function ArtistsListClient({ artists }: { artists: ArtistDirectoryEntry[] }) {
+export default function ArtistsListClient({ artists, loadError = false }: { artists: ArtistDirectoryEntry[]; loadError?: boolean }) {
   const [query, setQuery] = useState("")
   const searchRef = useRef<HTMLInputElement>(null)
 
@@ -81,6 +82,7 @@ export default function ArtistsListClient({ artists }: { artists: ArtistDirector
                 aria-label="Search artists"
                 value={query}
                 onChange={(event) => { setQuery(event.target.value); setPage(1) }}
+                disabled={loadError}
                 placeholder="Search by name, genre or location"
                 className="bg-background pl-9"
               />
@@ -88,7 +90,7 @@ export default function ArtistsListClient({ artists }: { artists: ArtistDirector
             {query && <Button variant="ghost" size="sm" onClick={() => { setQuery(""); setPage(1); searchRef.current?.focus() }}>Clear search</Button>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" onClick={exportCsv} disabled={exporting || artists.length === 0} aria-describedby={exportMessage ? "artists-export-message" : undefined}>
+            <Button variant="outline" size="sm" onClick={exportCsv} disabled={exporting || loadError || artists.length === 0} aria-describedby={exportMessage ? "artists-export-message" : undefined}>
               <Download aria-hidden="true" className="mr-2 h-4 w-4" />
               {exporting ? "Exporting…" : "Export CSV"}
             </Button>
@@ -109,18 +111,27 @@ export default function ArtistsListClient({ artists }: { artists: ArtistDirector
 
         <p className="text-sm text-muted-foreground">Artists · A–Z</p>
 
-        {artists.length === 0 ? (
+        {loadError ? (
+          <div className="space-y-4 rounded-xl bg-background px-4 py-12 text-center">
+            <p role="alert" className="text-sm text-destructive">Unable to load artists. Your roster was not changed; please try again.</p>
+            <RetryButton label="Retry loading artists" />
+          </div>
+        ) : artists.length === 0 ? (
           <div className="rounded-xl bg-background px-4 py-12 text-center">
             <p className="text-muted-foreground mb-4">No artists yet. Add your first artist to get started.</p>
             <Button asChild>
               <Link href="/dashboard/artists/new">
                 <Plus aria-hidden="true" className="mr-2 h-4 w-4" />
-                Add artist
+                Add first artist
               </Link>
             </Button>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="rounded-xl bg-background px-4 py-12 text-center text-sm">No artists match your search.</div>
+          <div className="space-y-3 rounded-xl bg-background px-4 py-12 text-center text-sm">
+            <p>No artists match your search.</p>
+            <p className="text-muted-foreground">Try another name, genre or location, or clear the search to see all {artists.length} {artists.length === 1 ? "artist" : "artists"}.</p>
+            <Button variant="outline" size="sm" onClick={() => { setQuery(""); setPage(1); searchRef.current?.focus() }}>Show all artists</Button>
+          </div>
         ) : (
           <div role="region" aria-label="Artists table" tabIndex={0} className="min-w-0 overflow-x-auto rounded-xl bg-background focus-visible:outline-2 focus-visible:outline-ring [&_[data-slot=table-container]]:overflow-visible">
             <Table className="min-w-[56rem] table-fixed [&_td]:whitespace-normal [&_td]:break-words [&_td]:py-3 [&_td]:leading-5">

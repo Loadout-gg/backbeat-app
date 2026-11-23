@@ -1,5 +1,5 @@
 "use client"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { X, Plus, ChevronRight, FileText, Upload, Trash2, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { createArtist, type CreateArtistInput, type SocialLink } from "@/lib/actions/artists"
 
 const STEPS = [
@@ -96,6 +96,9 @@ export default function NewArtistPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showSuccess, setShowSuccess] = useState(false)
+  // Set once the artist exists; never cleared, so no close path re-arms a second submit.
+  const [savedArtistId, setSavedArtistId] = useState<string | null>(null)
+  const leaving = useRef(false)
   const [newLinkType, setNewLinkType] = useState("")
   const [newLinkUrl, setNewLinkUrl] = useState("")
 
@@ -145,7 +148,7 @@ export default function NewArtistPage() {
   }
 
   const handleSubmit = async () => {
-    if (isLoading || showSuccess) return
+    if (isLoading || savedArtistId !== null) return
     if (!formData.stage_name.trim()) {
       setError("Stage name is required")
       setCurrentStep(1)
@@ -181,6 +184,8 @@ export default function NewArtistPage() {
     try {
       const result = await createArtist(input)
       if (result.success) {
+        // The profile is the next step (it starts a booking with this artist preselected).
+        setSavedArtistId(result.artistId ?? "")
         setShowSuccess(true)
       } else {
         setError(result.error || "Failed to create artist")
@@ -194,9 +199,12 @@ export default function NewArtistPage() {
     }
   }
 
+  // Ok, the X button and Esc all end here: the form stays locked and the user leaves it.
   const handleSuccessClose = () => {
     setShowSuccess(false)
-    router.push("/dashboard/artists")
+    if (leaving.current) return
+    leaving.current = true
+    router.push(savedArtistId ? `/dashboard/artists/${encodeURIComponent(savedArtistId)}` : "/dashboard/artists")
   }
 
   return (
@@ -256,23 +264,29 @@ export default function NewArtistPage() {
                     <div className="flex gap-6">
                       {/* Image Upload Placeholder */}
                       <div className="flex-shrink-0">
-                        <div className="w-40 h-40 rounded-full bg-border flex items-center justify-center">
-                          <Button variant="secondary" size="sm">
-                            Upload image
-                          </Button>
+                        {/* No image storage exists yet (backlog F7): show the gap, not a dead button. */}
+                        <div className="w-40 h-40 rounded-full bg-border flex items-center justify-center px-4">
+                          <p className="text-center text-xs text-muted-foreground">Image upload is not available yet</p>
                         </div>
                       </div>
 
                       {/* Form Fields */}
                       <div className="flex-1 space-y-4">
                         <div>
-                          <Label htmlFor="stage_name">Stage name</Label>
+                          <Label htmlFor="stage_name">
+                            Stage name
+                            <span aria-hidden="true" className="text-destructive">*</span>
+                          </Label>
                           <Input
                             id="stage_name"
+                            required
+                            aria-required="true"
+                            aria-describedby="stage_name-hint"
                             placeholder="Enter stage name"
                             value={formData.stage_name}
                             onChange={(e) => updateField("stage_name", e.target.value)}
                           />
+                          <p id="stage_name-hint" className="mt-1 text-xs text-muted-foreground">Required. Every other field is optional and can be added later.</p>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                           <div>
@@ -528,16 +542,15 @@ export default function NewArtistPage() {
                   <div className="border rounded-lg p-6">
                     {/* Upload Area */}
                     <div className="bg-muted/50 border-2 border-dashed rounded-lg p-12 text-center">
-                      <FileText className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
-                      <p className="text-sm font-medium mb-1">Drag and drop documents here or click to upload</p>
+                      <FileText aria-hidden="true" className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
+                      <p className="text-sm font-medium mb-1">Document upload is not available yet</p>
                       <p className="text-xs text-muted-foreground mb-4">
-                        Supported formats: PDF, DOC, DOCX, JPG, PNG (Max 10MB)
+                        Documents cannot be attached to an artist for now. You can save the artist without them.
                       </p>
                       <Button variant="outline" disabled>
-                        <Upload className="h-4 w-4 mr-2" />
-                        Upload documents
+                        <Upload aria-hidden="true" className="h-4 w-4 mr-2" />
+                        Upload documents (unavailable)
                       </Button>
-                      <p className="text-xs text-muted-foreground mt-2">Coming soon</p>
                     </div>
 
                     {/* Document List (placeholder for future uploads) */}
@@ -608,16 +621,15 @@ export default function NewArtistPage() {
                   <h2 className="text-lg font-medium mb-4">Supporting documentation</h2>
                   <div className="border rounded-lg p-6">
                     <div className="bg-muted/50 border-2 border-dashed rounded-lg p-12 text-center">
-                      <FileText className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
-                      <p className="text-sm font-medium mb-1">Drag and drop documents here or click to upload</p>
+                      <FileText aria-hidden="true" className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
+                      <p className="text-sm font-medium mb-1">Document upload is not available yet</p>
                       <p className="text-xs text-muted-foreground mb-4">
-                        Supported formats: PDF, DOC, DOCX, JPG, PNG (Max 10MB)
+                        Documents cannot be attached to an artist for now. You can save the artist without them.
                       </p>
                       <Button variant="outline" disabled>
-                        <Upload className="h-4 w-4 mr-2" />
-                        Upload documents
+                        <Upload aria-hidden="true" className="h-4 w-4 mr-2" />
+                        Upload documents (unavailable)
                       </Button>
-                      <p className="text-xs text-muted-foreground mt-2">Coming soon</p>
                     </div>
                   </div>
                 </section>
@@ -635,7 +647,7 @@ export default function NewArtistPage() {
             {currentStep < 4 ? (
               <Button onClick={handleNext}>Continue</Button>
             ) : (
-              <Button onClick={handleSubmit} disabled={isLoading || showSuccess}>
+              <Button onClick={handleSubmit} disabled={isLoading || savedArtistId !== null}>
                 {isLoading ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -651,10 +663,11 @@ export default function NewArtistPage() {
       </div>
 
       {/* Success Dialog */}
-      <Dialog open={showSuccess} onOpenChange={setShowSuccess}>
+      <Dialog open={showSuccess} onOpenChange={(open) => { if (!open) handleSuccessClose() }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-xl">Artist successfully added.</DialogTitle>
+            <DialogDescription>Next you will see the artist&apos;s profile, where you can start a booking.</DialogDescription>
           </DialogHeader>
           <div className="flex justify-end pt-4">
             <Button onClick={handleSuccessClose}>Ok</Button>
