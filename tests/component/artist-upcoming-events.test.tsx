@@ -66,3 +66,12 @@ it("shows a read error with retry instead of claiming there are no events", () =
   expect(within(section).queryByText("No upcoming events.")).toBeNull()
   expect(within(section).queryByRole("link")).toBeNull()
 })
+
+it("opens each listed event on its own event page", () => {
+  const section = renderOverview([
+    event({ id: "event-b", date: "2026-10-09", title: "Winter preview" }),
+    event({ id: "event-a", date: "2026-10-02", title: "Autumn show" }),
+  ])
+  expect(within(section).getByRole("link", { name: "Autumn show" }).getAttribute("href")).toBe("/dashboard/events/event-a")
+  expect(within(section).getByRole("link", { name: "Winter preview" }).getAttribute("href")).toBe("/dashboard/events/event-b")
+})

@@ -137,13 +137,13 @@ it("keeps persisted occupancy separate from selection when occupied and empty da
   expect(bookingRow?.textContent).toContain("Sep30")
   expect(screen.getByText("Autumn show")).toBeTruthy()
 })
-it("reads scoped persisted calendar data and renders a booking link and event without a fabricated detail route", async () => {
+it("reads scoped persisted calendar data and links the booking and the event to their own detail pages", async () => {
   render(await ArtistPage({ params: Promise.resolve({ id: artist.id }) }))
   expect(mocks.getBookings).toHaveBeenCalledWith({ artistId: artist.id, failOnError: true })
   expect(mocks.listEvents).toHaveBeenCalledOnce()
   expect(mocks.listEvents).toHaveBeenCalledWith({ artistId: artist.id })
   expect(screen.getByRole("link", { name: /DJ Alice/ }).getAttribute("href")).toBe("/dashboard/bookings/booking-a")
-  expect(screen.getByText("Autumn show").closest("a")).toBeNull()
+  expect(screen.getByRole("link", { name: "Autumn show" }).getAttribute("href")).toBe("/dashboard/events/event-a")
   expect(screen.queryByText("No upcoming bookings or events for this artist.")).toBeNull()
 })
 it("hydrates a UTC server response in Los Angeles across Rome midnight without changing rows, month or today", async () => {
