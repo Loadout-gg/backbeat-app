@@ -3,7 +3,9 @@
 -- to remove the schema itself. Lossy for the live tables: payments, commissions, tax notes
 -- and artist default commissions are removed. They are first copied to
 -- booking_payments_rollback_backup and booking_finance_rollback_backup (RLS on, no grants,
--- no policies: invisible to the API). Re-running is safe. Same explicit target as 007.
+-- no policies: invisible to the API). Re-running is safe: a later rollback overwrites the
+-- backup of a row that still exists with its current values and keeps the backup of rows
+-- that are already gone. Same explicit target as 007.
 BEGIN;
 SET LOCAL lock_timeout = '3s';
 SET LOCAL statement_timeout = '15s';
@@ -79,7 +81,10 @@ BEGIN
         (id, workspace_id, booking_id, kind, amount_minor, currency, due_on, paid_on, note, created_at, updated_at)
       SELECT id, workspace_id, booking_id, kind, amount_minor, currency, due_on, paid_on, note, created_at, updated_at
       FROM public.booking_payments
-      ON CONFLICT (id) DO NOTHING;
+      ON CONFLICT (id) DO UPDATE SET workspace_id = EXCLUDED.workspace_id, booking_id = EXCLUDED.booking_id,
+        kind = EXCLUDED.kind, amount_minor = EXCLUDED.amount_minor, currency = EXCLUDED.currency,
+        due_on = EXCLUDED.due_on, paid_on = EXCLUDED.paid_on, note = EXCLUDED.note,
+        created_at = EXCLUDED.created_at, updated_at = EXCLUDED.updated_at, backed_up_at = pg_catalog.now();
   END IF;
   IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
       AND table_name = 'bookings' AND column_name = 'commission_type') THEN
@@ -87,7 +92,9 @@ BEGIN
         (source, id, workspace_id, commission_type, commission_value, commission_mode, tax_note)
       SELECT 'booking', id, workspace_id, commission_type, commission_value, commission_mode, tax_note
       FROM public.bookings WHERE commission_type IS NOT NULL OR tax_note IS NOT NULL
-      ON CONFLICT (source, id) DO NOTHING;
+      ON CONFLICT (source, id) DO UPDATE SET workspace_id = EXCLUDED.workspace_id,
+        commission_type = EXCLUDED.commission_type, commission_value = EXCLUDED.commission_value,
+        commission_mode = EXCLUDED.commission_mode, tax_note = EXCLUDED.tax_note, backed_up_at = pg_catalog.now();
   END IF;
   IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
       AND table_name = 'artists' AND column_name = 'default_commission_type') THEN
@@ -95,7 +102,9 @@ BEGIN
         (source, id, workspace_id, commission_type, commission_value)
       SELECT 'artist', id, workspace_id, default_commission_type, default_commission_value
       FROM public.artists WHERE default_commission_type IS NOT NULL
-      ON CONFLICT (source, id) DO NOTHING;
+      ON CONFLICT (source, id) DO UPDATE SET workspace_id = EXCLUDED.workspace_id,
+        commission_type = EXCLUDED.commission_type, commission_value = EXCLUDED.commission_value,
+        backed_up_at = pg_catalog.now();
   END IF;
 END
 $backup$;

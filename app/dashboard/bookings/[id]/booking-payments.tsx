@@ -203,7 +203,10 @@ export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, 
                       </>
                     ) : (
                       <>
-                        {today && (payment.paid_on ? (
+                        {/* Not offered for the payment open in the editor: saving that draft would
+                            overwrite the paid date the shortcut had just changed. */}
+                        {draft?.id === payment.id && <span className="self-center text-sm text-muted-foreground">Open in the editor below</span>}
+                        {today && draft?.id !== payment.id && (payment.paid_on ? (
                           <Button type="button" size="sm" variant="outline" aria-disabled={busy !== null} aria-label={`Mark ${name} as not paid`}
                             onClick={() => run(payment.id, () => updateBookingPayment(payment.id, { paid_on: null }), "Payment marked as not paid.", setRowError)}>
                             Mark as not paid

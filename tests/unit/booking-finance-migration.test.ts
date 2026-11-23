@@ -114,6 +114,9 @@ it("STATIC: rollback backs up before it removes, and the backups are invisible t
   expect(sql).toContain("ALTER TABLE public.booking_finance_rollback_backup ENABLE ROW LEVEL SECURITY;")
   expect(sql).toContain("REVOKE ALL ON TABLE public.booking_payments_rollback_backup,\n  public.booking_finance_rollback_backup FROM PUBLIC, anon, authenticated;")
   expect(sql).not.toMatch(/\bGRANT\b|CREATE POLICY/)
+  // A repeated rollback must not keep stale values for rows that still exist.
+  expect(sql.match(/ON CONFLICT \((?:source, )?id\) DO UPDATE SET/g)).toHaveLength(3)
+  expect(sql).not.toContain("DO NOTHING")
   // The lifecycle schema of 005/006 is left alone.
   expect(sql).not.toMatch(/bookings_enforce_status|bookings_workspace_id_id_key|hold_expires_on/)
 })

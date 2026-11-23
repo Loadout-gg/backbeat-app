@@ -79,7 +79,7 @@ The SQL editor shows only the result of the last statement; each file ends with 
 ## Rollback
 
 1. Redeploy the previous application version (revert the merge through a PR to `staging`). It runs unchanged on the 007 schema, so this step alone is a complete application rollback and loses nothing.
-2. Only to remove the schema as well: run `rollback.sql` with the same target prefix. It copies every payment to `public.booking_payments_rollback_backup` and every booking commission, tax note and artist default to `public.booking_finance_rollback_backup` (RLS on, no grants, no policies), then drops `booking_payments`, the two trigger functions and the six columns. The lifecycle schema of 005/006 is untouched.
+2. Only to remove the schema as well: run `rollback.sql` with the same target prefix. It copies every payment to `public.booking_payments_rollback_backup` and every booking commission, tax note and artist default to `public.booking_finance_rollback_backup` (RLS on, no grants, no policies), then drops `booking_payments`, the two trigger functions and the six columns. A repeated rollback overwrites the backup of a row that still exists with its current values. The lifecycle schema of 005/006 is untouched.
 3. To go forward again: apply 007. There is no restore script; the backup tables keep the removed values until they are copied back or dropped by hand.
 
 ## Tests

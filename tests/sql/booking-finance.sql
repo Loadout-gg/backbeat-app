@@ -266,8 +266,20 @@ SELECT bb_test.eq('re-apply after rollback: schema back, tables empty',
   (SELECT count(*)::text FROM public.booking_payments) || ':' ||
   (SELECT count(*)::text FROM public.bookings WHERE commission_type IS NOT NULL), '0:0');
 
--- Guard: a production-shaped database (no marker table) refuses 007 whatever the setting.
+-- A later rollback refreshes the backup of rows that still exist and keeps the others.
+UPDATE public.bookings SET commission_type = 'fixed', commission_value = 2000, commission_mode = 'on_top'
+  WHERE id = 'a0000000-0000-4000-8000-0000000b0003';
+INSERT INTO public.booking_payments (id, workspace_id, booking_id, kind, amount_minor, currency)
+  SELECT id, workspace_id, booking_id, kind, 777, currency FROM public.booking_payments_rollback_backup
+  WHERE booking_id = 'a0000000-0000-4000-8000-0000000b0003';
 \ir ../../ops/supabase/booking-finance/rollback.sql
+SELECT bb_test.eq('rollback again: live values replace the older backup, missing rows keep theirs',
+  (SELECT string_agg(source || ':' || commission_type || ':' || commission_value || ':' || coalesce(commission_mode, '-') || ':' || coalesce(tax_note, '-'), ',' ORDER BY source)
+   FROM public.booking_finance_rollback_backup)
+  || ' | ' || (SELECT string_agg(amount_minor::text, ',' ORDER BY amount_minor) FROM public.booking_payments_rollback_backup),
+  'artist:fixed:25000:-:-,booking:fixed:2000:on_top:- | 100,777');
+
+-- Guard: a production-shaped database (no marker table) refuses 007 whatever the setting.
 ALTER TABLE public.runtime_environment RENAME TO runtime_environment_real;
 SET backbeat.booking_finance_target = 'hosted:hupkygptbvnzrihrlcxv';
 \set ON_ERROR_STOP off
