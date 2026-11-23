@@ -11,6 +11,42 @@ export function formatBookingTime(value: string | null | undefined): string {
   return match ? match[0] : value
 }
 
+const MINUTES_PER_DAY = 24 * 60
+const pad2 = (value: number) => String(value).padStart(2, "0")
+
+/**
+ * Start time, plus the end time when a duration is stored: "21:30", "21:30–23:00",
+ * or "23:00–01:30 (next day)" when the show ends after midnight.
+ */
+export function formatBookingTimeRange(start: string | null | undefined, durationMinutes: number | null | undefined): string {
+  const startLabel = formatBookingTime(start)
+  const match = TIME_PREFIX.exec(start ?? "")
+  if (!match || !durationMinutes || durationMinutes <= 0) return startLabel
+  const endTotal = bookingTimeSortKey(start) + durationMinutes
+  const daysLater = Math.floor(endTotal / MINUTES_PER_DAY)
+  const endOfDay = endTotal % MINUTES_PER_DAY
+  const end = `${pad2(Math.floor(endOfDay / 60))}:${pad2(endOfDay % 60)}`
+  const suffix = daysLater === 0 ? "" : daysLater === 1 ? " (next day)" : ` (${daysLater} days later)`
+  return `${startLabel}–${end}${suffix}`
+}
+
+/** Sort key for a start time: minutes after midnight; a missing or unreadable time sorts after every real one. */
+export function bookingTimeSortKey(start: string | null | undefined): number {
+  const match = TIME_PREFIX.exec(start ?? "")
+  if (!match) return MINUTES_PER_DAY
+  const [hours, minutes] = match[0].split(":").map(Number)
+  return hours * 60 + minutes
+}
+
+type ScheduledBooking = { id: string; date: string; start_time?: string | null }
+
+/** Date, then start time, then id: same-day bookings read in the order they happen. */
+export function compareBookingSchedule(a: ScheduledBooking, b: ScheduledBooking): number {
+  return a.date.localeCompare(b.date) ||
+    bookingTimeSortKey(a.start_time) - bookingTimeSortKey(b.start_time) ||
+    a.id.localeCompare(b.id)
+}
+
 type ArtistNameSource = { stage_name?: string | null; name?: string | null } | null | undefined
 
 /** Same rule as the bookings list: stage name, then name, then an honest unknown. */
@@ -51,13 +87,10 @@ export function parseBookingStatusFilter(value: string | string[] | undefined): 
   return (BOOKING_STATUSES as readonly string[]).includes(value) ? value as BookingStatus : "all"
 }
 
-type DatedBooking = { id: string; date: string }
-
-/** Upcoming = today or later (ascending); past = before today (most recent first). */
-export function splitBookingsByDate<T extends DatedBooking>(bookings: readonly T[], today: string) {
-  const byDate = (a: T, b: T) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id)
-  const upcoming = bookings.filter((booking) => booking.date >= today).sort(byDate)
-  const past = bookings.filter((booking) => booking.date < today).sort((a, b) => byDate(b, a))
+/** Upcoming = today or later (ascending); past = before today (most recent first). Same day: by start time. */
+export function splitBookingsByDate<T extends ScheduledBooking>(bookings: readonly T[], today: string) {
+  const upcoming = bookings.filter((booking) => booking.date >= today).sort(compareBookingSchedule)
+  const past = bookings.filter((booking) => booking.date < today).sort((a, b) => compareBookingSchedule(b, a))
   return { upcoming, past }
 }
 

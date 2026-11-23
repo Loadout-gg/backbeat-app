@@ -3,8 +3,11 @@ import {
   BOOKING_STATUS_LABELS,
   bookingArtistName,
   bookingStatusBadgeVariant,
+  bookingTimeSortKey,
+  compareBookingSchedule,
   findSameDayBookings,
   formatBookingTime,
+  formatBookingTimeRange,
   isPastBookingDate,
   parseBookingStatusFilter,
   sameDayWarning,
@@ -75,6 +78,39 @@ it("splits bookings into upcoming (today included, ascending) and past (most rec
   expect(upcoming.map(row => row.id)).toEqual(["a", "a2", "b"])
   expect(past.map(row => row.id)).toEqual(["recent", "old"])
   expect(rows.map(row => row.id)).toEqual(["b", "a", "old", "a2", "recent"])
+})
+
+it.each([
+  ["21:30:00", null, "21:30"],
+  ["21:30:00", 0, "21:30"],
+  ["21:30:00", 90, "21:30–23:00"],
+  ["22:00", 120, "22:00–00:00 (next day)"],
+  ["23:00:00", 150, "23:00–01:30 (next day)"],
+  ["00:30:00", 60, "00:30–01:30"],
+  ["", 60, ""],
+  ["not a time", 60, "not a time"],
+] as const)("shows start %j with duration %j as %j", (start, duration, expected) => {
+  expect(formatBookingTimeRange(start, duration)).toBe(expected)
+})
+
+it("orders same-day bookings by start time, untimed last, then id", () => {
+  const rows = [
+    { id: "c", date: "2030-01-02", start_time: "" },
+    { id: "b", date: "2030-01-02", start_time: "23:00:00" },
+    { id: "a", date: "2030-01-02", start_time: "09:00:00" },
+    { id: "z", date: "2030-01-01", start_time: "23:59:00" },
+    { id: "a2", date: "2030-01-02", start_time: "09:00:00" },
+  ]
+  expect([...rows].sort(compareBookingSchedule).map(row => row.id)).toEqual(["z", "a", "a2", "b", "c"])
+  expect(bookingTimeSortKey("09:00:00")).toBeLessThan(bookingTimeSortKey(null))
+})
+
+it("orders a past same-day group latest first", () => {
+  const { past } = splitBookingsByDate([
+    { id: "early", date: "2026-11-10", start_time: "18:00:00" },
+    { id: "late", date: "2026-11-10", start_time: "22:00:00" },
+  ], "2026-11-14")
+  expect(past.map(row => row.id)).toEqual(["late", "early"])
 })
 
 it("treats only dates before today as past", () => {

@@ -339,13 +339,13 @@ export function NewBookingModal({
   // Dynamic width based on step
   const dialogClassName =
     step === "select-artist"
-      ? "w-[calc(100vw-2rem)] max-w-6xl max-h-[calc(100vh-2rem)] overflow-hidden p-0"
+      ? "w-[calc(100vw-2rem)] max-w-6xl max-h-[calc(100dvh-2rem)] overflow-y-auto p-0"
       : step === "success"
-        ? "max-w-2xl p-0"
+        ? "max-w-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto p-0"
         : "w-[calc(100vw-2rem)] max-w-5xl sm:max-w-5xl max-h-[calc(100dvh-2rem)] overflow-y-auto p-0";
 
   return (
-    <Dialog open={open} onOpenChange={step === "success" ? () => {} : handleOpenChange}>
+    <Dialog open={open} onOpenChange={step === "success" ? (next) => { if (!next) handleCloseConfirmation() } : handleOpenChange}>
       <DialogContent aria-describedby={undefined} className={dialogClassName} showCloseButton={step !== "success"}>
         {/* ========== STEP 1: Select Artist ========== */}
         {step === "select-artist" && (
@@ -451,6 +451,7 @@ export function NewBookingModal({
                           size="sm"
                           onClick={() => handleSelectArtist(artist)}
                           className="shrink-0"
+                          aria-label={`Select ${artist.stage_name}`}
                         >
                           Select
                         </Button>
@@ -474,8 +475,8 @@ export function NewBookingModal({
 
             <div className="px-6 pb-6">
               {/* Selected artist header */}
-              <div className="flex items-center justify-between py-4 border-t border-b border-border mb-6">
-                <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-4 py-4 border-t border-b border-border mb-6">
+                <div className="flex min-w-0 items-center gap-4">
                   <Avatar className="h-14 w-14">
                     <AvatarImage
                       src={selectedArtist.profile_image_url || undefined}
@@ -610,9 +611,10 @@ export function NewBookingModal({
 
         {/* ========== STEP 3: Success Confirmation ========== */}
         {step === "success" && createdBooking && selectedArtist && (
-          <div className="px-8 py-10">
+          <div className="px-4 py-6 sm:px-8 sm:py-10">
             <div className="flex justify-end -mt-4 -mr-2 mb-2">
               <button
+                type="button"
                 onClick={handleCloseConfirmation}
                 className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                 aria-label="Close"
@@ -634,11 +636,11 @@ export function NewBookingModal({
               </button>
             </div>
 
-            <div className="border border-border rounded-lg p-8">
+            <div className="border border-border rounded-lg p-4 sm:p-8">
               {/* Title */}
-              <h2 className="text-2xl font-semibold text-foreground text-center mb-3 text-balance">
+              <DialogTitle className="text-2xl font-semibold text-foreground text-center mb-3 text-balance">
                 {`Booking saved for ${selectedArtist.stage_name} on ${formatBookingDate(createdBooking.date)}`}
-              </h2>
+              </DialogTitle>
               <p className="mb-8 text-center text-sm text-muted-foreground">
                 {createdIsPast
                   ? "This date is in the past, so the booking does not appear in the artist\u2019s upcoming calendar. Find it in Bookings."
@@ -648,7 +650,7 @@ export function NewBookingModal({
               </p>
 
               <div className="border-t border-border pt-6 pb-6">
-                <div className="grid grid-cols-2 gap-8">
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 sm:gap-8">
                   {/* Artist */}
                   <div>
                     <h4 className="text-base font-medium text-foreground mb-3">
@@ -690,7 +692,7 @@ export function NewBookingModal({
               </div>
 
               <div className="border-t border-border pt-6">
-                <div className="flex items-center justify-center gap-4">
+                <div className="flex flex-wrap items-center justify-center gap-4">
                   <Button
                     variant="outline"
                     onClick={handleCloseConfirmation}

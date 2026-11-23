@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -15,6 +15,17 @@ export function DeletePromoter({ id, name }: { id: string; name: string }) {
   const [confirming, setConfirming] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const questionId = useId()
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const cancelRef = useRef<HTMLButtonElement>(null)
+  // Keyboard flow: opening moves focus to Cancel (the safe choice); Cancel returns it to the trigger.
+  const focusAfterRender = useRef<"cancel" | "trigger" | null>(null)
+  useEffect(() => {
+    const target = focusAfterRender.current
+    focusAfterRender.current = null
+    if (target === "cancel") cancelRef.current?.focus()
+    if (target === "trigger") triggerRef.current?.focus()
+  }, [confirming])
 
   async function handleDelete() {
     if (inFlight.current) return
@@ -48,17 +59,17 @@ export function DeletePromoter({ id, name }: { id: string; name: string }) {
           <div role="alert" className="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
         )}
         {confirming ? (
-          <div className="space-y-3">
-            <p className="text-sm">Delete {name}?</p>
+          <div role="group" aria-labelledby={questionId} className="space-y-3">
+            <p id={questionId} className="text-sm [overflow-wrap:anywhere]">Delete {name}?</p>
             <div className="flex flex-wrap gap-3">
               <Button type="button" variant="destructive" onClick={handleDelete} disabled={isDeleting}>
                 {isDeleting ? "Deleting..." : "Yes, delete"}
               </Button>
-              <Button type="button" variant="outline" onClick={() => setConfirming(false)} disabled={isDeleting}>Cancel</Button>
+              <Button ref={cancelRef} type="button" variant="outline" onClick={() => { focusAfterRender.current = "trigger"; setConfirming(false) }} disabled={isDeleting}>Cancel</Button>
             </div>
           </div>
         ) : (
-          <Button type="button" variant="outline" onClick={() => { setError(null); setConfirming(true) }}>
+          <Button ref={triggerRef} type="button" variant="outline" onClick={() => { setError(null); focusAfterRender.current = "cancel"; setConfirming(true) }}>
             <Trash2 aria-hidden="true" className="mr-2 h-4 w-4" />
             Delete promoter
           </Button>
