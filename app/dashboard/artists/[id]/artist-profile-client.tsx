@@ -5,7 +5,7 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { parseISO } from "date-fns"
 import { Day, labelGridcell } from "react-day-picker"
-import type { Booking } from "@/lib/actions/bookings"
+import type { BookingCalendarItem } from "@/lib/actions/bookings"
 import type { EventWithRelations } from "@/lib/actions/events"
 import {
   ChevronRight,
@@ -65,7 +65,7 @@ function ArtistCalendarDay({ modifiers, ...props }: ComponentProps<typeof Day>) 
 
 interface ArtistProfileClientProps {
   artist: Artist
-  bookings: Booking[]
+  bookings: BookingCalendarItem[]
   events: EventWithRelations[]
   calendarError?: boolean
   calendarToday: string
@@ -129,7 +129,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
 
   // One server-selected date-only reference is shared with hydration and the day picker.
   const today = parseISO(calendarToday)
-  const isUpcomingActive = (item: Booking | EventWithRelations) =>
+  const isUpcomingActive = (item: BookingCalendarItem | EventWithRelations) =>
     item.artist_id === artist.id &&
     (item.status === "in_progress" || item.status === "hold" || item.status === "option" || item.status === "confirmed") &&
     parseISO(item.date) >= today

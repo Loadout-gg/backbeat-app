@@ -2,7 +2,7 @@
 import React from "react"
 import { afterEach, expect, it, vi } from "vitest"
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
-import type { Booking } from "@/lib/actions/bookings"
+import type { BookingDashboardItem } from "@/lib/actions/bookings"
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }))
 vi.mock("@/lib/actions/artists", () => ({ getArtists: vi.fn().mockResolvedValue([]) }))
 vi.mock("@/lib/actions/bookings", () => ({ createBooking: vi.fn() }))
@@ -96,12 +96,9 @@ it("shows persisted booking venue and address without substituting an artist cit
   expect(screen.getByText(/Synthetic venue/).textContent).toBe("Synthetic address 42, Synthetic venue • 09:45")
   expect(screen.getByRole("link", { name: "Continue setup" }).getAttribute("href")).toBe("/dashboard/bookings/synthetic-booking")
 })
-const booking = (overrides: Partial<Booking> = {}): Booking => ({
-  fee_amount_minor: null, fee_currency: null,
-  id: "synthetic-booking", workspace_id: "synthetic-workspace", artist_id: "synthetic-artist",
-  date: "2030-01-02", start_time: "09:45", duration_minutes: null, notes: null,
-  venue_name: null, venue_address: null, contact_name_main: null, contact_phone_main: null,
-  contact_email_main: null, status: "in_progress", created_at: "", updated_at: "", ...overrides,
+const booking = (overrides: Partial<BookingDashboardItem> = {}): BookingDashboardItem => ({
+  id: "synthetic-booking", artist_id: "synthetic-artist", date: "2030-01-02", start_time: "09:45",
+  status: "in_progress", venue_name: null, venue_address: null, artist: null, ...overrides,
 })
 const props = { welcomeMessage: "Welcome back", stats: { eventsInProgress: 7, bookingsInProgress: 99, totalArtists: 12, totalPromoters: 5 }, eventsInProgress: [], bookings: [], calendarToday: "2026-11-14" }
 it("exposes only the four supported metrics with the filtered booking count", () => {
