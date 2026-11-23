@@ -12,10 +12,16 @@ function block(selector) {
   return css.slice(start, css.indexOf('}', start))
 }
 
-function token(selector, name) {
-  const match = block(selector).match(new RegExp(`--${name}:\\s*oklch\\(([^)]+)\\);`))
+function token(selector, name, seen = new Set()) {
+  assert.ok(!seen.has(name), `circular --${name} in ${selector}`)
+  seen.add(name)
+  const match = block(selector).match(new RegExp(`--${name}:\\s*([^;]+);`))
   assert.ok(match, `missing --${name} in ${selector}`)
-  const [l, c, h] = match[1].trim().split(/\s+/).map(Number)
+  const alias = match[1].trim().match(/^var\(--([a-z-]+)\)$/)
+  if (alias) return token(selector, alias[1], seen)
+  const color = match[1].trim().match(/^oklch\(([^)]+)\)$/)
+  assert.ok(color, `--${name} in ${selector} is not an oklch() colour`)
+  const [l, c, h] = color[1].trim().split(/\s+/).map(Number)
   return { l, c, h }
 }
 
@@ -44,8 +50,36 @@ for (const selector of [':root', '.dark']) {
     assert.ok(ratio >= 3, `ring on background is ${ratio.toFixed(2)}:1`)
   })
 
+  test(`${selector} sidebar focus ring follows --ring and reaches 3:1 on the sidebar`, () => {
+    assert.match(block(selector), /--sidebar-ring:\s*var\(--ring\);/)
+    const ratio = contrast(selector, 'sidebar-ring', 'sidebar')
+    assert.ok(ratio >= 3, `sidebar-ring on sidebar is ${ratio.toFixed(2)}:1`)
+  })
+
   test(`${selector} muted text reaches 4.5:1 on a solid muted surface`, () => {
     const ratio = contrast(selector, 'muted-foreground', 'muted')
     assert.ok(ratio >= 4.5, `muted-foreground on muted is ${ratio.toFixed(2)}:1`)
   })
 }
+
+// The ratios above hold only when the ring renders at full opacity.
+test('no focus ring utility lowers the ring token below full opacity', () => {
+  const root = path.resolve(__dirname, '../..')
+  const offenders = []
+  const walk = dir => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const file = path.join(dir, entry.name)
+      if (entry.isDirectory()) walk(file)
+      else if (/\.(tsx?|jsx?|css)$/.test(entry.name)) {
+        const pattern = /\b(?:ring|outline)-ring\/(\[[^\]]+\]|[\w.]+)/g
+        for (const match of fs.readFileSync(file, 'utf8').matchAll(pattern)) {
+          const raw = match[1].replace(/^\[|\]$/g, '')
+          const value = raw.endsWith('%') ? parseFloat(raw) : raw.includes('.') ? parseFloat(raw) * 100 : parseFloat(raw)
+          if (!(value >= 100)) offenders.push(`${path.relative(root, file)}: ${match[0]}`)
+        }
+      }
+    }
+  }
+  for (const dir of ['app', 'components']) walk(path.join(root, dir))
+  assert.deepEqual(offenders, [])
+})
