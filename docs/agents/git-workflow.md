@@ -41,7 +41,7 @@ git rev-parse HEAD
 4. Se ci sono modifiche non proprie, fermarsi e spiegare a Simone quali file sono coinvolti. Non cancellare, sovrascrivere, committare o mettere in stash il lavoro altrui.
 5. Per una nuova attività indipendente e un checkout pulito: eseguire `git fetch origin`, controllare che `origin/staging` esista e creare un nuovo branch `feat/<descrizione>` o `fix/<descrizione>` da `origin/staging`. Non lavorare direttamente su `main` o `staging`.
 6. Se si sta continuando una PR esistente, leggere prima head, base e dipendenze con `gh pr view <numero> --repo Loadout-gg/backbeat-app`. Non cambiare branch di base, rebase, cherry-pick o catene di PR automaticamente. Le PR dipendenti già aperte vanno coordinate con Alberto.
-7. Riassumere a Simone, in italiano: risultato richiesto, branch di lavoro, base della PR e cosa NON verrà modificato.
+7. Riassumere a Simone, in inglese (terse technical English): risultato richiesto, branch di lavoro, base della PR e cosa NON verrà modificato.
 
 ## Implementazione e controlli
 
@@ -72,7 +72,7 @@ Un controllo non eseguito va indicato come `NOT_RUN`, con motivo. Non disabilita
 - Per creare una PR usare `gh pr create --repo Loadout-gg/backbeat-app --base staging --head <branch-di-lavoro> --title <titolo> --body-file <file-descrizione>`; poi rileggere URL, head e base con `gh pr view`.
 - Descrivere risultato visibile, file modificati, test reali, limiti e passi di collaudo per una persona non tecnica.
 - Attendere il check GitHub `Quality` sul commit corrente. Un check verde su un commit precedente non vale.
-- Non fare merge autonomamente, non attivare auto-merge e non approvare il proprio lavoro. **Simone può autorizzare il merge di una PR verso `staging`**, senza attendere Alberto, dopo che l'agente ha mostrato link della PR, risultato atteso e `Quality` verde sul commit corrente. L'agente deve prima dichiarare: “Questo merge aggiorna solo lo staging, non la live. Confermi il merge della PR indicata?”. Un “sì” in risposta vale per quella PR, non per altre attività. Dopo il consenso verificare nuovamente head/base/check e fare un merge vincolato alla head verificata; non usare `--admin` o bypass. L'autorizzazione a creare una PR non include il merge.
+- Non fare merge autonomamente, non attivare auto-merge e non approvare il proprio lavoro. **Simone può autorizzare il merge di una PR verso `staging`**, senza attendere Alberto, dopo che l'agente ha mostrato link della PR, risultato atteso e `Quality` verde sul commit corrente. L'agente deve prima dichiarare: "This merge updates staging only, not production. Confirm merging the PR above?". Un “sì” in risposta vale per quella PR, non per altre attività. Dopo il consenso verificare nuovamente head/base/check e fare un merge vincolato alla head verificata; non usare `--admin` o bypass. L'autorizzazione a creare una PR non include il merge.
 
 ## Staging e rilascio
 
@@ -133,7 +133,7 @@ Alberto (`DerekLoadout`) ha dato a Simone piena autonomia su `staging` (dichiara
 
 ## Consegna a Simone
 
-Fornire sempre, in italiano:
+Gli agenti rispondono a Simone solo in inglese (agents reply in English only; Simone, 2026-11-23). Fornire sempre, in inglese:
 
 1. Cosa cambia per l'utente, in poche righe.
 2. Link PR, branch di base e commit verificato.
