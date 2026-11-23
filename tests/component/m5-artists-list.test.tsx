@@ -6,11 +6,18 @@ const server = vi.hoisted(() => ({ list: vi.fn(), directory: vi.fn() }))
 vi.mock("@/lib/actions/artists", () => ({ listArtists: server.list }))
 vi.mock("@/lib/actions/artist-directory", () => ({ listArtistDirectory: server.directory }))
 vi.mock("@/lib/actions/artist-export", () => ({ exportArtistsCsv: vi.fn() }))
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...await importOriginal<typeof import("next/navigation")>(),
+  useRouter: () => ({ refresh: vi.fn() }),
+}))
 import ArtistsPage from "@/app/dashboard/artists/page"
 afterEach(cleanup)
 it("does not render an empty roster when the dedicated read fails", async () => {
   server.directory.mockRejectedValueOnce(new Error("directory incomplete"))
-  await expect(ArtistsPage()).rejects.toThrow("directory incomplete")
+  render(await ArtistsPage())
+  expect(screen.getByRole("alert").textContent).toContain("Unable to load artists")
+  expect(screen.queryByText("No artists yet. Add your first artist to get started.")).toBeNull()
+  expect(screen.queryByText("directory incomplete")).toBeNull()
 })
 it("keeps every searchable genre visible in its artist row", async () => {
   server.directory.mockResolvedValue([{ ...artist("a", "Aurora"), genres: ["House", "Techno", "Jazz", "Ambient"] }])

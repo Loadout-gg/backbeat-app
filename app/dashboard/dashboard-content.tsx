@@ -47,6 +47,7 @@ export function DashboardContent({
 
   // Filter bookings in progress
   const bookingsInProgress = bookings.filter((b) => b.status === "in_progress")
+  const hasArtists = stats.totalArtists > 0
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
@@ -69,7 +70,7 @@ export function DashboardContent({
         <div className="grid min-w-0 grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_16rem]">
           {/* Right column - Quick Actions */}
           <div className="row-start-1 min-w-0 xl:col-start-2 xl:row-start-1">
-            <QuickActions onNewBooking={() => setIsBookingModalOpen(true)} />
+            <QuickActions onNewBooking={() => setIsBookingModalOpen(true)} hasArtists={hasArtists} />
           </div>
           {/* Left column - Events and Bookings */}
           <div className="min-w-0 space-y-7">
@@ -136,14 +137,28 @@ export function DashboardContent({
                   <p className="text-sm text-muted-foreground">
                     No bookings in progress at the moment
                   </p>
-                  <p className="text-sm text-muted-foreground">Create a booking to choose an artist and add a date.</p>
-                  <Button
-                    className="gap-2"
-                    onClick={() => setIsBookingModalOpen(true)}
-                  >
-                    <Plus className="h-4 w-4" />
-                    New booking
-                  </Button>
+                  {hasArtists ? (
+                    <>
+                      <p className="text-sm text-muted-foreground">Create a booking to choose an artist and add a date.</p>
+                      <Button
+                        className="gap-2"
+                        onClick={() => setIsBookingModalOpen(true)}
+                      >
+                        <Plus className="h-4 w-4" />
+                        New booking
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-muted-foreground">A booking starts from an artist. Add your first artist, then create a booking from their profile.</p>
+                      <Button className="gap-2" asChild>
+                        <Link href="/dashboard/artists/new">
+                          <Plus className="h-4 w-4" />
+                          Add first artist
+                        </Link>
+                      </Button>
+                    </>
+                  )}
                 </div>
               ) : (
                 <ul className="space-y-2 rounded-xl bg-muted/60 p-2">

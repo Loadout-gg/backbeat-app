@@ -95,7 +95,7 @@ export default function NewEventPage() {
         </Button>
         <div>
           <h1 className="text-2xl font-semibold">New event</h1>
-          <p className="text-sm text-muted-foreground">Create a new booking or performance</p>
+          <p className="text-sm text-muted-foreground">Create an event for an artist</p>
         </div>
       </div>
 

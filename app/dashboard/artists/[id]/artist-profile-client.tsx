@@ -154,7 +154,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
     })),
     ...events.filter(isUpcomingActive).map((event) => ({
       id: `event-${event.id}`, date: parseISO(event.date), title: event.title,
-      location: event.location || "", time: "", href: null, sameDayCount: 0,
+      location: event.location || "", time: "", href: `/dashboard/events/${event.id}`, sameDayCount: 0,
     })),
   ].sort((a, b) => a.date.getTime() - b.date.getTime() || a.time.localeCompare(b.time))
   const hasCalendarItems = calendarEvents.length > 0
@@ -479,7 +479,11 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                                 <span className="text-lg font-semibold">{day}</span>
                               </div>
                               <div className="min-w-0">
-                                <p className="font-medium">{event.title}</p>
+                                <p className="font-medium">
+                                  <Link href={`/dashboard/events/${event.id}`} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                                    {event.title}
+                                  </Link>
+                                </p>
                                 {event.location && <p className="text-sm text-muted-foreground">{event.location}</p>}
                               </div>
                             </div>
@@ -540,7 +544,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                             </div>
                             <div className="min-w-0">
                               <p className="font-medium">
-                                {event.href ? <Link href={event.href} className="hover:underline">{event.title}</Link> : event.title}
+                                <Link href={event.href} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">{event.title}</Link>
                               </p>
                               <p className="text-sm text-muted-foreground">
                                 {[event.location, event.time].filter(Boolean).join(" • ")}
