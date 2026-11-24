@@ -122,7 +122,7 @@ The correction and candidate preparation are local only. If Alberto separately a
 
 ## Decision authority on staging
 
-The broad delegation reported in #25 is superseded. Simone decides non-security product/UX and may authorize additive, contract-preserving migrations on the verified staging target only. An additive SQL statement that changes behavior, access, isolation or existing data is not eligible.
+Follow the [staging decision matrix](../../AGENTS.md#staging-decision-authority). Simone may merge ordinary product/UX after required checks without an owner batch. Alberto approves exact migration bytes and target; Simone may trigger only a verified path bound to both, never generic SQL. An additive SQL statement that changes behavior, access, isolation or existing data is not eligible.
 
 Only Alberto authorizes workflow/policy, roles and permissions, Auth/RLS and isolation, sensitive-data handling changes, destructive operations, infrastructure and production. Staging does not exempt these cases. Use the architecture stop line and request package for unapproved reserved choices. Keep normal PR, current-head `Quality` and Codex review; version each migration and describe its what, why and rollback. Neither PR readiness nor an environment guard grants execution authority.
 

@@ -1,0 +1,30 @@
+{
+  "format_version": 1,
+  "request_id": "GOV-20261123-staging-delegation-revision",
+  "revision": "r02",
+  "status": "REQUESTED_NOT_APPROVED",
+  "decision_owner": "Alberto",
+  "requester": "Backbeat governance request from Simone; revision prepared on Alberto’s side",
+  "task_reference": "https://github.com/Loadout-gg/backbeat-app/pull/41",
+  "source": {
+    "head": "e4befe7a327bcda16fbf2f14cf6cf08397fa491e",
+    "branch": "docs/staging-delegation-r2",
+    "worktree_state": "Published Git objects only; this package does not use the local working tree."
+  },
+  "architecture_approved": false,
+  "implementation_authorized": false,
+  "external_actions_authorized": false,
+  "files": [
+    {
+      "path": "REQUEST.md",
+      "bytes": 3580,
+      "sha256": "27e77a435b735fd9e37adb3e69e13e43880b7df4418fbe51b93164a4146bc1bc"
+    },
+    {
+      "path": "EVIDENCE.md",
+      "bytes": 3352,
+      "sha256": "5f7a5695c81ef14b661f80cca198d8e23c7e285242365afae5cfae3366b7672e"
+    }
+  ],
+  "manifest_self_excluded": true
+}

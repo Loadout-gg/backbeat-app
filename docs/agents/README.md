@@ -2,7 +2,7 @@
 
 ## Purpose and authority
 
-**Alberto decides architecture and reserved changes; Simone decides non-security product/UX and may authorize additive staging migrations within approved contracts.** Follow [the current decision authority](decision-register.md#governance-correction-and-supersession), not the superseded #25 delegation. Agents implement an authorized task inside an existing contract or an Alberto-approved plan. An unresolved architectural decision requires a complete decision package, not an improvised implementation.
+**Alberto decides architecture and reserved changes; Simone decides non-security product/UX and may prepare ordinary staging migrations for Alberto’s exact approval.** Follow [the current decision authority](decision-register.md#governance-correction-and-supersession), not the superseded #25 delegation. Agents implement an authorized task inside an existing contract or an Alberto-approved plan. An unresolved architectural decision requires a complete decision package, not an improvised implementation.
 
 These documents describe source inspected at `41d124e47fcf2463ff30ce7e53e981a4bd862aa9` on 2026-10-26. That is an accepted local remediation baseline, not evidence that a remote branch or production deployment has those bytes. Read the current checkout before each task. Later approved changes can supersede individual contracts; this commit is provenance, not a permanent pin against legitimate development.
 

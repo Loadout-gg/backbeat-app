@@ -1,6 +1,6 @@
 # Backbeat backlog
 
-Single list of known work; listing an item is not authorization to implement or merge it. An item moves to `Ready` only when its "Needs first" is resolved by the responsible owner: Simone for non-security product/UX and additive staging migrations within approved contracts; Alberto for architecture and reserved decisions, including on staging. The [governance correction](agents/decision-register.md#governance-correction-and-supersession) supersedes the broad #25 report; historical implementation, green CI and merged PRs do not supply owner approval. Architectural items follow `AGENTS.md` (stop line + request package); integration and release follow [the Git and staging workflow](agents/git-workflow.md). Effort and impact are zone estimates from a code read at `7e0db2b`, not measurements.
+Single list of known work; listing an item is not authorization to implement or merge it. An item moves to `Ready` only when its "Needs first" is resolved by the responsible owner: Simone for non-security product/UX; Alberto for approval of exact ordinary staging migrations; Alberto for architecture and reserved decisions, including on staging. The [governance correction](agents/decision-register.md#governance-correction-and-supersession) supersedes the broad #25 report; historical implementation, green CI and merged PRs do not supply owner approval. Architectural items follow `AGENTS.md` (stop line + request package); integration and release follow [the Git and staging workflow](agents/git-workflow.md). Effort and impact are zone estimates from a code read at `7e0db2b`, not measurements.
 
 Status values: `Proposed` (not yet discussed) · `Needs decision` · `Ready` · `In progress` · `In review` (PR open) · `Done` · `Dropped`.
 
@@ -71,6 +71,13 @@ Status values: `Proposed` (not yet discussed) · `Needs decision` · `Ready` · 
 | C1 | CI annotation on #12: `actions/checkout`, `actions/setup-node` and `pnpm/action-setup` are pinned to SHAs that target Node 20; GitHub forces them onto Node 24 and is deprecating Node 20 for actions | CI change (`architecture-decisions.md`: material CI change) | Approval to bump the pinned action SHAs | Needs decision |
 | C2 | Post-#24 realignment: the initial dry run against staging `7ab53ac` showed 11 conflicting files of 61 changed. Alberto authorized the [one-time two-parent integration-branch exception](agents/git-workflow.md#one-time-conflict-resolution-for-the-post-24-sync) for this sync only; future syncs use `main` → `staging`. | Release workflow | Separate Alberto authorization for publication and integration; normal review, CI, merge and post-merge checks | In progress (local preparation only; staging not yet realigned) |
 | C3 | The `AGENTS.md` architecture stop line (`chiedere ad alberto  il piano architetturale`) remains an exact-string contract (two spaces kept, GOV-001). #32 left it untouched; the historical English-only instruction (`AGENT-LANGUAGE-EN`) is not authority to change it | Agent instructions | Keep verbatim unless Alberto explicitly authorizes a change | Needs decision only if a change is proposed |
+
+## Governance
+
+| ID | Finding | Classification | Needs first | Status |
+|---|---|---|---|---|
+| G1 | Adopt [r02](agents/requests/GOV-20261123-staging-delegation-revision/r02/REQUEST.md) for staging only; r01 is historical. No feature or migration approval. | Workflow/policy, reserved | Alberto approval of exact adoption commit and integration into staging | See decision register |
+| G2 | Review payment deletion (#33) and document access/retention (#36 or its replacement) on their own evidence. Address an active permission risk independently of G1. | Reserved controls | Current target and exact candidate; owner decision for any sensitive change | Tracked separately; not approved by G1 |
 
 ## Booking domain (ARCH-20261114-booking-domain r02): status and open items (2026-11-23)
 
