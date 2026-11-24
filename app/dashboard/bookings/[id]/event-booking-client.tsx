@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { BOOKING_FEE_CURRENCIES, parseBookingFee, formatBookingFeeInput, type BookingFeeError } from "@/lib/booking-fee";
 import { createBookingSchema } from "@/lib/booking-validation";
 import Link from "next/link";
@@ -94,6 +94,17 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
   const deleteInFlight = useRef(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const deleteQuestionId = useId();
+  const deleteTriggerRef = useRef<HTMLButtonElement>(null);
+  const deleteCancelRef = useRef<HTMLButtonElement>(null);
+  // Keyboard flow: opening moves focus to Cancel (the safe choice); Cancel returns it to Delete.
+  const deleteFocusAfterRender = useRef<"cancel" | "trigger" | null>(null);
+  useEffect(() => {
+    const target = deleteFocusAfterRender.current;
+    deleteFocusAfterRender.current = null;
+    if (target === "cancel") deleteCancelRef.current?.focus();
+    if (target === "trigger") deleteTriggerRef.current?.focus();
+  }, [showDeleteConfirm]);
   const [pendingStatus, setPendingStatus] = useState<BookingStatus | null>(null);
   const statusInFlight = useRef(false);
   const [statusError, setStatusError] = useState<string | null>(null);
@@ -343,9 +354,9 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
           <Link
             href="/dashboard/bookings"
             className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-            aria-label="Close"
+            aria-label="Close booking, back to Bookings"
           >
-            <X className="h-5 w-5" />
+            <X aria-hidden="true" className="h-5 w-5" />
           </Link>
         </div>
 
@@ -926,9 +937,9 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
               </p>
             )}
             {showDeleteConfirm ? (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm text-muted-foreground">
-                  Are you sure?
+              <div role="group" aria-labelledby={deleteQuestionId} className="flex flex-wrap items-center gap-2">
+                <span id={deleteQuestionId} className="text-sm text-muted-foreground">
+                  Delete this booking?
                 </span>
                 <Button
                   variant="destructive"
@@ -939,9 +950,13 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
                   {isDeleting ? "Deleting..." : "Yes, delete"}
                 </Button>
                 <Button
+                  ref={deleteCancelRef}
                   variant="outline"
                   size="sm"
-                  onClick={() => setShowDeleteConfirm(false)}
+                  onClick={() => {
+                    deleteFocusAfterRender.current = "trigger";
+                    setShowDeleteConfirm(false);
+                  }}
                   disabled={isDeleting}
                 >
                   Cancel
@@ -949,13 +964,15 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
               </div>
             ) : (
               <Button
+                ref={deleteTriggerRef}
                 variant="outline"
                 onClick={() => {
                   setDeleteError(null);
+                  deleteFocusAfterRender.current = "cancel";
                   setShowDeleteConfirm(true);
                 }}
               >
-                <Trash2 className="h-4 w-4 mr-2" />
+                <Trash2 aria-hidden="true" className="h-4 w-4 mr-2" />
                 Delete
               </Button>
             )}

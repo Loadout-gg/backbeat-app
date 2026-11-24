@@ -53,7 +53,7 @@ it.each([
 ])("reads the artist stage name with %s so lists can show it", async (_label, read) => {
   mocks.query.select.mockClear()
   await read()
-  const projection = String(mocks.query.select.mock.calls[0][0]).replace(/\s+/g, " ")
-  expect(projection).toContain("artists:artist_id (id, name, stage_name)")
-  expect(projection).toContain("promoters:promoter_id (id, name, company_name)")
+  const projection = String(mocks.query.select.mock.calls[0][0]).replace(/\s+/g, "")
+  expect(projection).toContain("artists:artist_id(id,name,stage_name)")
+  expect(projection).toContain("promoters:promoter_id(id,name,company_name)")
 })
