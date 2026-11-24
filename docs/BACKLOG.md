@@ -1,6 +1,6 @@
 # Backbeat backlog
 
-Single list of known work; listing an item is not authorization to implement or merge it. An item moves to `Ready` only when its "Needs first" is resolved by the responsible owner: Simone for non-security product/UX and additive staging migrations within approved contracts; Alberto for architecture and reserved decisions, including on staging. The [governance correction](agents/decision-register.md#governance-correction-and-supersession) supersedes the broad #25 report; historical implementation, green CI and merged PRs do not supply owner approval. Architectural items follow `AGENTS.md` (stop line + request package); integration and release follow [the Git and staging workflow](agents/git-workflow.md). Effort and impact are zone estimates from a code read at `7e0db2b`, not measurements.
+Single list of known work; listing an item is not authorization to implement or merge it. An item moves to `Ready` only when its "Needs first" is resolved by the responsible owner: Simone for non-security product/UX; Alberto for approval of exact ordinary staging migrations; Alberto for architecture and reserved decisions, including on staging. The [governance correction](agents/decision-register.md#governance-correction-and-supersession) supersedes the broad #25 report; historical implementation, green CI and merged PRs do not supply owner approval. Architectural items follow `AGENTS.md` (stop line + request package); integration and release follow [the Git and staging workflow](agents/git-workflow.md). Effort and impact are zone estimates from a code read at `7e0db2b`, not measurements.
 
 Status values: `Proposed` (not yet discussed) · `Needs decision` · `Ready` · `In progress` · `In review` (PR open) · `Done` · `Dropped`.
 
@@ -76,8 +76,8 @@ Status values: `Proposed` (not yet discussed) · `Needs decision` · `Ready` · 
 
 | ID | Finding | Classification | Needs first | Status |
 |---|---|---|---|---|
-| G1 | Revision of `GOV-STAGING-20261123` reported by Simone from a 2026-11-23 phone call with Alberto: staging schema/migrations incl. RLS, grants, policies, triggers, roles, contracts back to Simone; `@codex review` + `@codex security review` clean on current head for security-relevant PRs; travel identity documents with lazy read, reasoned and logged downloads (retention open); payments visible to all active members, void instead of hard delete. [Request r01](agents/requests/GOV-20261123-staging-delegation-revision/r01/REQUEST.md), register `GOV-20261123-STAGING-REVISION` | Workflow/policy, reserved | Alberto's approval of the PR carrying r01; retention rule | Needs decision |
-| G2 | If G1 is approved: open PR #33 (migration 007 grants `DELETE` on `booking_payments`) and PR #36 (no download reason/log for `artist_travel_documents`) do not yet meet R4/R3 | Follows G1 | G1 | Proposed |
+| G1 | Adopt [r02](agents/requests/GOV-20261123-staging-delegation-revision/r02/REQUEST.md) for staging only; r01 is historical. No feature or migration approval. | Workflow/policy, reserved | Alberto approval of exact adoption commit and integration into staging | See decision register |
+| G2 | Review payment deletion (#33) and document access/retention (#36 or its replacement) on their own evidence. Address an active permission risk independently of G1. | Reserved controls | Current target and exact candidate; owner decision for any sensitive change | Tracked separately; not approved by G1 |
 
 ## Booking domain (ARCH-20261114-booking-domain r02): status and open items (2026-11-23)
 

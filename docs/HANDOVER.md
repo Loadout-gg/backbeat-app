@@ -4,7 +4,7 @@ Read this first when picking up work, then `AGENTS.md` and `docs/agents/README.m
 
 ## Current state (2026-10-28, with 2026-11-21 and 2026-11-23 notes)
 
-- 2026-11-23 pending governance request (not in force): `GOV-20261123-STAGING-REVISION` records Simone's report of a phone agreement with Alberto revising `GOV-STAGING-20261123` (staging schema/RLS/roles back to Simone, two Codex reviews on security-relevant PRs, travel-document and payment-void policies). It grants nothing until Alberto (`DerekLoadout`) approves its PR; see [request r01](agents/requests/GOV-20261123-staging-delegation-revision/r01/REQUEST.md) and [backlog G1](BACKLOG.md#governance).
+- Governance #41: [r02](agents/requests/GOV-20261123-staging-delegation-revision/r02/REQUEST.md) is the sole adoption candidate; r01 remains a historical proposal. See the [register](agents/decision-register.md#governance-correction-and-supersession) for the exact approval and activation boundary.
 - 2026-11-23 governance correction: Alberto superseded the broad delegation reported in #25 and authorized the [one-time conflict resolution](agents/git-workflow.md#one-time-conflict-resolution-for-the-post-24-sync) for the post-#24 realignment. Candidate preparation is local; staging is not yet realigned. See [backlog C2](BACKLOG.md#ci-and-tooling) and the [current decision register](agents/decision-register.md#governance-correction-and-supersession).
 - Earlier 2026-11-23 snapshot (read from GitHub): `staging` HEAD `7ab53ac` (PRs #26–#31 merged, no other open PRs when `fix/dashboard-promoters-favicon-tokens` started). `main` `89639af` was not an ancestor of that staging head; the direct sync was blocked. The historical English-only instruction is not owner-approved workflow policy (decision register `AGENT-LANGUAGE-EN`).
 - 2026-11-21 note (read from GitHub, not re-qualified): PRs #13–#18, #20, #21, #22, #25, #26, #27, #28, #30 and #29 are merged into `staging` (HEAD `5ad87f0`, deployed on `backbeat-staging`); #23 and release PR #24 were merged into `main` on 2026-11-19. Runtime pin is now Node 26.13.1 (`.node-version`). The bullets below are the 2026-10-28 snapshot and are stale where they name `7e0db2b`, Node 24 or open PRs.
@@ -24,7 +24,7 @@ Read this first when picking up work, then `AGENTS.md` and `docs/agents/README.m
 5. Only Alberto can authorize a release toward `main`/live. Follow the approved release and reverse-synchronization procedure; no direct pushes or CI bypasses.
 6. Update `docs/BACKLOG.md` status and this file.
 
-Current decision authority: Simone decides non-security product/UX and may authorize additive staging migrations within approved contracts. Only Alberto authorizes workflow/policy, roles and permissions, Auth/RLS and isolation, sensitive-data handling changes, destructive operations, infrastructure and production, including reserved changes proposed on staging. The log below remains historical.
+Current decision authority: Simone decides non-security product/UX and may prepare ordinary staging migrations for Alberto’s exact approval. Only Alberto authorizes workflow/policy, roles and permissions, Auth/RLS and isolation, sensitive-data handling changes, destructive operations, infrastructure and production, including reserved changes proposed on staging. The log below remains historical.
 
 ## Open questions for Alberto
 
@@ -33,7 +33,7 @@ Current decision authority: Simone decides non-security product/UX and may autho
 - Order for R1-R3, R5, R8, R9 and for the candidate features in the backlog.
 - Answered (Simone, 2026-11-21, from the project owner's environment map; not verified by an agent): the project referenced by migration 004 (`jttrznlbbjyufzyqmzzs`) is PRODUCTION. See "Supabase projects" below.
 - Fix V1-V3 now, or leave visual consistency for later? V2 and V3 are done; V1 is done with provisional artwork in #32 (Simone, 2026-11-23).
-- `GOV-20261123-STAGING-REVISION` r01: approve, change or reject R1–R4; set the travel-document retention rule; say whether "roles" covers workspace roles/Auth on staging and whether the two-review gate applies to open PRs #33 and #36.
+- Governance adoption approves no feature migration. Track finance permissions and travel-document retention separately from #41; existing review gates still apply.
 - Main-to-staging realignment after release #24 (BACKLOG C2): Alberto resolved the method for this sync only. The initial dry run against `7ab53ac` showed 11 conflicting files of 61. Publication, integration and staging readback remain pending; normal review/CI/merge gates apply.
 - F18 (#40): `updateBooking` returns one "Booking not found" for zero affected rows, whether the booking was deleted, is outside the current workspace selection or was filtered by RLS. Should the action distinguish these (action contract change), or is the honest combined message enough?
 - Production release of migrations 005/006 (booking lifecycle): pending Alberto; the 005/006 guard currently allows only development and staging targets.
