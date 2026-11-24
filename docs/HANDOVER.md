@@ -2,9 +2,9 @@
 
 Read this first when picking up work, then `AGENTS.md` and `docs/agents/README.md`. Update it at the end of every PR.
 
-## Current state (2026-10-28, with 2026-11-21 and 2026-11-23 notes)
+## Current state (2026-10-28, with 2026-11-21 to 2026-11-24 notes)
 
-- Governance #41: [r02](agents/requests/GOV-20261123-staging-delegation-revision/r02/REQUEST.md) is the sole adoption candidate; r01 remains a historical proposal. See the [register](agents/decision-register.md#governance-correction-and-supersession) for the exact approval and activation boundary.
+- Governance #41 (2026-11-24): [r02](agents/requests/GOV-20261123-staging-delegation-revision/r02/REQUEST.md) is in force on staging after Alberto approved the exact #41 head and it merged as `dfa388ff441f`. [Adoption record](agents/decisions/GOV-20261123-STAGING-REVISION-r02.md); r01 remains historical. This does not approve a later point-3 split, a feature, migration or production action.
 - 2026-11-23 governance correction: Alberto superseded the broad delegation reported in #25 and authorized the [one-time conflict resolution](agents/git-workflow.md#one-time-conflict-resolution-for-the-post-24-sync) for the post-#24 realignment. Candidate preparation is local; staging is not yet realigned. See [backlog C2](BACKLOG.md#ci-and-tooling) and the [current decision register](agents/decision-register.md#governance-correction-and-supersession).
 - Earlier 2026-11-23 snapshot (read from GitHub): `staging` HEAD `7ab53ac` (PRs #26–#31 merged, no other open PRs when `fix/dashboard-promoters-favicon-tokens` started). `main` `89639af` was not an ancestor of that staging head; the direct sync was blocked. The historical English-only instruction is not owner-approved workflow policy (decision register `AGENT-LANGUAGE-EN`).
 - 2026-11-21 note (read from GitHub, not re-qualified): PRs #13–#18, #20, #21, #22, #25, #26, #27, #28, #30 and #29 are merged into `staging` (HEAD `5ad87f0`, deployed on `backbeat-staging`); #23 and release PR #24 were merged into `main` on 2026-11-19. Runtime pin is now Node 26.13.1 (`.node-version`). The bullets below are the 2026-10-28 snapshot and are stale where they name `7e0db2b`, Node 24 or open PRs.
