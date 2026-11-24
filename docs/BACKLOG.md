@@ -78,6 +78,7 @@ Status values: `Proposed` (not yet discussed) · `Needs decision` · `Ready` · 
 |---|---|---|---|---|
 | G1 | Adopt [r02](agents/requests/GOV-20261123-staging-delegation-revision/r02/REQUEST.md) for staging only; r01 is historical. No feature or migration approval. | Workflow/policy, reserved | Alberto approved the exact #41 head; [adoption record](agents/decisions/GOV-20261123-STAGING-REVISION-r02.md) | Done on staging (#41, `dfa388ff441f`) |
 | G2 | Review payment deletion (#33) and document access/retention (#36 or its replacement) on their own evidence. Address an active permission risk independently of G1. | Reserved controls | Current target and exact candidate; owner decision for any sensitive change | Tracked separately; not approved by G1 |
+| G3 | Apply the [r03 division of responsibility](agents/decisions/GOV-20261123-POINT3-R03.md) to staging point 3. | Workflow/policy, reserved | Alberto’s decision; no new access or migration | Effective on integration of #47 into staging |
 
 ## Booking domain (ARCH-20261114-booking-domain r02): status and open items (2026-11-23)
 
