@@ -2,7 +2,7 @@
 
 ## Purpose and authority
 
-**Alberto decides architecture and reserved changes; Simone decides non-security product/UX and may prepare ordinary staging migrations for Alberto’s exact approval.** Follow [the current decision authority](decision-register.md#governance-correction-and-supersession), not the superseded #25 delegation. r02 remains the staging rule unless the [conditional r03 gates](../../AGENTS.md#proposed-point-3-split-r03-conditional-not-adopted) are verified. If operative, that split gives Simone functional read/write decisions by role within approved scope only, not approval or execution of a reserved change. Agents implement an authorized task inside an existing contract or an Alberto-approved plan. An unresolved architectural decision requires a complete decision package, not an improvised implementation.
+**Simone owns product/UX and functional visibility within an approved scope; Alberto owns architecture and reserved security changes.** See the [staging matrix](../../AGENTS.md#staging-decision-authority) and [r03 decision](decisions/GOV-20261123-POINT3-R03.md). A product requirement is not an access grant. Ordinary staging migrations still require Alberto’s approval of the exact bytes and target. Agents implement only within an existing contract or approved plan.
 
 These documents describe source inspected at `41d124e47fcf2463ff30ce7e53e981a4bd862aa9` on 2026-10-26. That is an accepted local remediation baseline, not evidence that a remote branch or production deployment has those bytes. Read the current checkout before each task. Later approved changes can supersede individual contracts; this commit is provenance, not a permanent pin against legitimate development.
 

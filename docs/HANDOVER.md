@@ -4,8 +4,7 @@ Read this first when picking up work, then `AGENTS.md` and `docs/agents/README.m
 
 ## Current state (2026-10-28, with 2026-11-21 to 2026-11-24 notes)
 
-- Governance #41 (2026-11-24): [r02](agents/requests/GOV-20261123-staging-delegation-revision/r02/REQUEST.md) is in force on staging after Alberto approved the exact #41 head and it merged as `dfa388ff441f`. [Adoption record](agents/decisions/GOV-20261123-STAGING-REVISION-r02.md); r01 remains historical. This does not approve a later point-3 split, a feature, migration or production action.
-- [r03 point-3 split](agents/requests/GOV-20261123-staging-delegation-revision/r03/REQUEST.md): conditional proposal, not adopted. See the [activation gates](../AGENTS.md#proposed-point-3-split-r03-conditional-not-adopted); the r02 record above remains controlling until verified adoption.
+- Staging governance: [r02](agents/decisions/GOV-20261123-STAGING-REVISION-r02.md) remains in force for points 1, 2, 4 and 5. [Alberto’s r03 decision](agents/decisions/GOV-20261123-POINT3-R03.md) replaces point 3 on integration of #47. The frozen proposal is not a bilateral agreement.
 - 2026-11-23 governance correction: Alberto superseded the broad delegation reported in #25 and authorized the [one-time conflict resolution](agents/git-workflow.md#one-time-conflict-resolution-for-the-post-24-sync) for the post-#24 realignment. Candidate preparation is local; staging is not yet realigned. See [backlog C2](BACKLOG.md#ci-and-tooling) and the [current decision register](agents/decision-register.md#governance-correction-and-supersession).
 - Earlier 2026-11-23 snapshot (read from GitHub): `staging` HEAD `7ab53ac` (PRs #26–#31 merged, no other open PRs when `fix/dashboard-promoters-favicon-tokens` started). `main` `89639af` was not an ancestor of that staging head; the direct sync was blocked. The historical English-only instruction is not owner-approved workflow policy (decision register `AGENT-LANGUAGE-EN`).
 - 2026-11-21 note (read from GitHub, not re-qualified): PRs #13–#18, #20, #21, #22, #25, #26, #27, #28, #30 and #29 are merged into `staging` (HEAD `5ad87f0`, deployed on `backbeat-staging`); #23 and release PR #24 were merged into `main` on 2026-11-19. Runtime pin is now Node 26.13.1 (`.node-version`). The bullets below are the 2026-10-28 snapshot and are stale where they name `7e0db2b`, Node 24 or open PRs.
@@ -25,7 +24,7 @@ Read this first when picking up work, then `AGENTS.md` and `docs/agents/README.m
 5. Only Alberto can authorize a release toward `main`/live. Follow the approved release and reverse-synchronization procedure; no direct pushes or CI bypasses.
 6. Update `docs/BACKLOG.md` status and this file.
 
-Current decision authority: Simone decides non-security product/UX and may prepare ordinary staging migrations for Alberto’s exact approval. Only Alberto authorizes workflow/policy, roles and permissions, Auth/RLS and isolation, sensitive-data handling changes, destructive operations, infrastructure and production, including reserved changes proposed on staging. The log below remains historical.
+Current decision authority: Simone owns ordinary product/UX and functional read/write needs by role within approved scope. Alberto approves new or expanded sensitive access before activation, controls enforcement, verifies and applies reserved changes. Migration and release rules are unchanged. See [the operating matrix](../AGENTS.md#staging-decision-authority); the log below is historical.
 
 ## Open questions for Alberto
 

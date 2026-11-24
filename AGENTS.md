@@ -28,19 +28,15 @@ Resume only against Alberto's explicit decision for the exact request revision a
 
 ## Staging decision authority
 
-On staging, follow [r02](docs/agents/requests/GOV-20261123-staging-delegation-revision/r02/REQUEST.md), adopted in [PR #41](https://github.com/Loadout-gg/backbeat-app/pull/41) after Alberto approved its exact head. See the [adoption record](docs/agents/decisions/GOV-20261123-STAGING-REVISION-r02.md). Neither r01 nor the earlier delegation reported in #25 is current authority.
+On staging, follow [r02](docs/agents/decisions/GOV-20261123-STAGING-REVISION-r02.md) for points 1, 2, 4 and 5. For point 3 follow [Alberto’s r03 decision](docs/agents/decisions/GOV-20261123-POINT3-R03.md). Neither r01 nor #25 is current authority.
 
 - Simone owns ordinary product/UX and may merge those PRs after current-head Quality and the required clean review, without waiting for an owner batch. Classify by effect, not file type. Keep normal PRs to `staging`, green `Quality` and clean current-head Codex review. Version each migration in the repository and describe what, why and rollback in the PR.
 - For ordinary, non-destructive migrations within existing contracts, Simone may prepare the script. Alberto authorizes its exact bytes and staging target. Simone may trigger only a verified path bound to both. No such path is certified here; no manual SQL or privileged credentials for this purpose.
-- Simone may propose a sensitive patch. Alberto decides, verifies and applies changes to Auth, roles, membership, RLS/grants, isolation, sensitive data, retention/restore, destructive operations, secrets, infrastructure and workflow. Production apply and promotion to `main` remain Alberto's alone. A report, green check, review or merge is not owner approval. Branch protections and the architecture stop remain in force.
+- For sensitive work, use the [point 3 rule below](#point-3-functional-visibility-and-security). Production apply and promotion to `main` remain Alberto’s alone. Branch protection and the architecture stop remain in force.
 - Split mixed PRs only if each intermediate state is safe. Otherwise Simone may merge the combined PR only after Alberto clears the exact commit and rollout order; a merge by Simone cannot substitute for owner-controlled application of a reserved change.
 - Batch ready reserved items by PR/head, migration digest and target where applicable, owner, operation and order. Changed inputs invalidate that item's clearance. Address active risks immediately. This policy approves no feature PR, migration or release.
 
-### Proposed point-3 split (r03; conditional, not adopted)
-
-[r03](docs/agents/requests/GOV-20261123-staging-delegation-revision/r03/REQUEST.md) does not change authority by itself. Use the r02 matrix above unless **all** of the following are verified: Simone's and Alberto's explicit assent to r03 against manifest SHA-256 `29640f22f6477ff3cb8c5da8db9a3f880557762a9cc7ef20f69ad41a517e6244`; a genuine, separate owner decision record; Alberto's explicit approval of the exact adoption head; and integration into `staging` under existing current-head review and `Quality` gates, with exact staging readback. A package, local patch, green check, earlier approval or silence satisfies none of these conditions on its own. If any evidence is missing, inconsistent or stale, r02 controls. Do not integrate this proposal on the strength of the earlier #41 approval.
-
-Only after those conditions, the following replaces **point 3 only** on staging:
+### Point 3: functional visibility and security
 
 - Simone decides functional read/write needs by role within an already-approved scope: actor, data, operation, tenant or booking scope, and product reason. This is not permission to implement a reserved change, broaden access or activate it.
 - Alberto retains explicit approval **before activation** of new or expanded sensitive access, any destructive operation and any reserved security change (including Auth, roles/membership, RLS/grants, isolation, sensitive-data exposure/storage, external disclosure, retention/restore, secrets, infrastructure and workflow). Bind approval to exact candidate, actors, data and operations, staging target and order; a reserved effect of merge or automatic deployment is not exempt. Alberto records the reason for a refusal; silence is not approval.
