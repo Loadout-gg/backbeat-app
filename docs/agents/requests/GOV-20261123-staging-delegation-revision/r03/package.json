@@ -1,0 +1,31 @@
+{
+  "format_version": 1,
+  "request_id": "GOV-20261123-staging-delegation-revision",
+  "revision": "r03",
+  "status": "REQUESTED_NOT_APPROVED",
+  "decision_owner": "Alberto",
+  "requester": "Hermes Agent, local governance follow-up delegated on Alberto’s instruction",
+  "task_reference": "Local governance follow-up to https://github.com/Loadout-gg/backbeat-app/pull/41 (not submitted)",
+  "source": {
+    "head": "dfa388ff441f009a302cdae12e44f31d90d68e3e",
+    "branch": "staging",
+    "worktree_state": "Fresh bare clone, no checked-out worktree or primary index."
+  },
+  "architecture_approved": false,
+  "implementation_authorized": false,
+  "external_actions_authorized": false,
+  "files": [
+    {
+      "path": "REQUEST.md",
+      "bytes": 12570,
+      "sha256": "2445cf6d8dd890810ab07e06c8db41c165ec55a32d35383a6b77474c3992dc9c"
+    },
+    {
+      "path": "EVIDENCE.md",
+      "bytes": 8410,
+      "sha256": "ced3bc4a769efed2fff7be79d71a8292e43b8c02728d1184e0b9af09ef530efa"
+    }
+  ],
+  "manifest_self_excluded": true,
+  "notes": "Only a proposed point-3 staging governance split. Explicit assent from Simone and Alberto and separately authorized exact-head adoption are not recorded here. r02 remains operative."
+}

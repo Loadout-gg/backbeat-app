@@ -28,7 +28,7 @@ Resume only against Alberto's explicit decision for the exact request revision a
 
 ## Staging decision authority
 
-On staging, follow [r02](docs/agents/requests/GOV-20261123-staging-delegation-revision/r02/REQUEST.md), not r01 or the earlier delegation in #25. This adoption takes effect only when Alberto approves this exact adoption revision and it is integrated into staging.
+On staging, follow [r02](docs/agents/requests/GOV-20261123-staging-delegation-revision/r02/REQUEST.md), adopted in [PR #41](https://github.com/Loadout-gg/backbeat-app/pull/41) after Alberto approved its exact head. See the [adoption record](docs/agents/decisions/GOV-20261123-STAGING-REVISION-r02.md). Neither r01 nor the earlier delegation reported in #25 is current authority.
 
 - Simone owns ordinary product/UX and may merge those PRs after current-head Quality and the required clean review, without waiting for an owner batch. Classify by effect, not file type. Keep normal PRs to `staging`, green `Quality` and clean current-head Codex review. Version each migration in the repository and describe what, why and rollback in the PR.
 - For ordinary, non-destructive migrations within existing contracts, Simone may prepare the script. Alberto authorizes its exact bytes and staging target. Simone may trigger only a verified path bound to both. No such path is certified here; no manual SQL or privileged credentials for this purpose.
