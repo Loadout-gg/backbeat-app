@@ -1,6 +1,8 @@
 import { notFound, unstable_rethrow } from "next/navigation";
 import { getBooking, getBookings } from "@/lib/actions/bookings";
+import { getBookingPayments } from "@/lib/actions/booking-payments";
 import { holdRank } from "@/lib/booking-display";
+import type { BookingPayment } from "@/lib/booking-finance";
 import { configuredCalendarDay } from "@/lib/calendar-day";
 import { EventBookingClient } from "./event-booking-client";
 
@@ -38,5 +40,13 @@ export default async function EventBookingPage({ params }: EventBookingPageProps
     unstable_rethrow(error);
   }
 
-  return <EventBookingClient booking={booking} sameDayBookingCounts={sameDayBookingCounts} holdPosition={holdPosition} today={configuredCalendarDay()} />;
+  // A failed payments read is reported in the Financial tab, never shown as "no payments".
+  let payments: BookingPayment[] | null = null;
+  try {
+    payments = await getBookingPayments(booking.id);
+  } catch (error) {
+    unstable_rethrow(error);
+  }
+
+  return <EventBookingClient booking={booking} sameDayBookingCounts={sameDayBookingCounts} holdPosition={holdPosition} today={configuredCalendarDay()} payments={payments} />;
 }

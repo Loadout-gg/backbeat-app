@@ -25,6 +25,7 @@ import { type Artist } from "@/lib/actions/artists"
 import { parseSocialLinks, parseDocuments, artistMetadataHref } from "@/lib/artist-validation"
 import { NewBookingModal } from "@/components/dashboard/new-booking-modal"
 import { RetryButton } from "@/components/retry-button"
+import { ArtistDefaultCommission } from "./artist-default-commission"
 import { formatArtistBaseRate } from "@/lib/artist-base-rate"
 import { bookingTimeSortKey, formatBookingTimeRange } from "@/lib/booking-display"
 import { eventDateParts } from "@/lib/event-date-display"
@@ -329,6 +330,13 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                   <p className="text-sm mt-1">{artist.pricing_notes}</p>
                 </div>
               )}
+              <ArtistDefaultCommission
+                artistId={artist.id}
+                type={artist.default_commission_type}
+                value={artist.default_commission_value}
+                mode={artist.default_commission_mode}
+                currency={artist.default_commission_currency}
+              />
             </div>
           </CardContent>
         </Card>

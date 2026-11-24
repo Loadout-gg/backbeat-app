@@ -4,10 +4,12 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import type { Booking, BookingWithArtist } from "@/lib/actions/bookings"
 import type { Artist } from "@/lib/actions/artists"
+import type { BookingPayment } from "@/lib/booking-finance"
 
 const mocks = vi.hoisted(() => ({
   getBookings: vi.fn(), getBooking: vi.fn(), createBooking: vi.fn(), updateBooking: vi.fn(), deleteBooking: vi.fn(),
   getArtist: vi.fn(), listEvents: vi.fn(), push: vi.fn(), refresh: vi.fn(),
+  getBookingPayments: vi.fn(),
 }))
 vi.mock("@/lib/actions/bookings", () => ({
   getBookings: mocks.getBookings, getBooking: mocks.getBooking, createBooking: mocks.createBooking,
@@ -15,6 +17,7 @@ vi.mock("@/lib/actions/bookings", () => ({
 }))
 vi.mock("@/lib/actions/artists", () => ({ getArtist: mocks.getArtist, getArtists: vi.fn(async () => []) }))
 vi.mock("@/lib/actions/events", () => ({ listEvents: mocks.listEvents }))
+vi.mock("@/lib/actions/booking-payments", () => ({ getBookingPayments: mocks.getBookingPayments }))
 vi.mock("next/navigation", async (importOriginal) => ({
   ...await importOriginal<typeof import("next/navigation")>(),
   useRouter: () => ({ push: mocks.push, refresh: mocks.refresh, back: vi.fn() }),
@@ -44,6 +47,7 @@ const modalArtist = { id: artistId, stage_name: "DJ Moon", name: "Luna", base_ra
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] })
   vi.setSystemTime(new Date("2026-11-14T12:00:00Z"))
+  mocks.getBookingPayments.mockResolvedValue([])
 })
 afterEach(() => {
   cleanup()
@@ -134,6 +138,7 @@ const otherBooking = (id: string, overrides: Partial<Booking>) => ({
     id, notes: `Synthetic note ${id}`, contact_name_main: `Fixture ${id}`,
     contact_phone_main: "+12025550142", contact_email_main: `${id}@example.invalid`,
     fee_amount_minor: 12345, fee_currency: "EUR",
+    commission_type: "fixed", commission_value: 625, commission_mode: "included", tax_note: `Synthetic tax note ${id}`,
     ...overrides,
   }),
   event: { title: `Synthetic related event ${id}` },
@@ -149,19 +154,26 @@ const artistBookings = [
 ]
 const editorParams = { params: Promise.resolve({ id: editorBooking.id }) }
 
-it("passes only the selected booking and exact date counts, rank and calendar context to the editor client", async () => {
+it("passes only the selected booking, its payments and exact date counts, rank and calendar context to the editor client", async () => {
+  const payments: BookingPayment[] = [{
+    id: "fixture-payment", booking_id: editorBooking.id, kind: "deposit", amount_minor: 1500,
+    currency: "EUR", due_on: null, paid_on: null, note: null,
+  }]
   mocks.getBooking.mockResolvedValueOnce(editorBooking)
   mocks.getBookings.mockResolvedValueOnce(artistBookings)
+  mocks.getBookingPayments.mockResolvedValueOnce(payments)
   const page = await EventBookingPage(editorParams)
   expect(page.type).toBe(EventBookingClient)
   expect(mocks.getBooking).toHaveBeenCalledWith(editorBooking.id)
   expect(mocks.getBookings).toHaveBeenCalledExactlyOnceWith({ artistId, failOnError: true })
+  expect(mocks.getBookingPayments).toHaveBeenCalledExactlyOnceWith(editorBooking.id)
   const { booking, ...notice } = page.props
   expect(booking).toBe(editorBooking)
   expect(notice).toStrictEqual({
     sameDayBookingCounts: { "2026-11-20": 1, "2026-11-21": 2 },
     holdPosition: null,
     today: "2026-11-14",
+    payments,
   })
 })
 
@@ -191,7 +203,7 @@ it("says the same-day check could not run when the artist read failed, without b
   mocks.getBooking.mockResolvedValueOnce(editorBooking)
   mocks.getBookings.mockRejectedValueOnce(new Error("private detail"))
   const page = await EventBookingPage(editorParams)
-  expect(page.props).toStrictEqual({ booking: editorBooking, sameDayBookingCounts: null, holdPosition: null, today: "2026-11-14" })
+  expect(page.props).toStrictEqual({ booking: editorBooking, sameDayBookingCounts: null, holdPosition: null, today: "2026-11-14", payments: [] })
   render(page)
   expect(mocks.getBookings).toHaveBeenCalledWith({ artistId, failOnError: true })
   expect(screen.getByText("Other bookings for this date could not be checked.")).toBeTruthy()
@@ -203,12 +215,32 @@ it("does not load other bookings when the selected booking is unavailable", asyn
   mocks.getBooking.mockResolvedValueOnce(null)
   await expect(EventBookingPage(editorParams)).rejects.toMatchObject({ digest: "NEXT_HTTP_ERROR_FALLBACK;404" })
   expect(mocks.getBookings).not.toHaveBeenCalled()
+  expect(mocks.getBookingPayments).not.toHaveBeenCalled()
 })
 
 it("preserves the framework redirect when the artist read redirects to workspace selection", async () => {
   const redirect = Object.assign(new Error("NEXT_REDIRECT"), { digest: "NEXT_REDIRECT;replace;/onboarding;307;" })
   mocks.getBooking.mockResolvedValueOnce(editorBooking)
   mocks.getBookings.mockRejectedValueOnce(redirect)
+  await expect(EventBookingPage(editorParams)).rejects.toBe(redirect)
+})
+
+it("keeps date counts after a payment read failure and passes unavailable, not empty", async () => {
+  mocks.getBooking.mockResolvedValueOnce(editorBooking)
+  mocks.getBookings.mockResolvedValueOnce(artistBookings)
+  mocks.getBookingPayments.mockRejectedValueOnce(new Error("private payment read detail"))
+  const page = await EventBookingPage(editorParams)
+  expect(page.props).toStrictEqual({
+    booking: editorBooking, sameDayBookingCounts: { "2026-11-20": 1, "2026-11-21": 2 },
+    holdPosition: null, today: "2026-11-14", payments: null,
+  })
+})
+
+it("preserves the framework redirect from the payment read", async () => {
+  const redirect = Object.assign(new Error("NEXT_REDIRECT"), { digest: "NEXT_REDIRECT;replace;/onboarding;307;" })
+  mocks.getBooking.mockResolvedValueOnce(editorBooking)
+  mocks.getBookings.mockResolvedValueOnce(artistBookings)
+  mocks.getBookingPayments.mockRejectedValueOnce(redirect)
   await expect(EventBookingPage(editorParams)).rejects.toBe(redirect)
 })
 

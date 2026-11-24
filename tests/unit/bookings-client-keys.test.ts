@@ -68,7 +68,16 @@ beforeEach(() => {
   selects = []
   const fetcher: typeof fetch = async (input, init) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url)
-    if (url.origin !== "https://backbeat.invalid" || url.pathname !== "/rest/v1/bookings") throw new Error("Unexpected test request")
+    if (url.origin !== "https://backbeat.invalid") throw new Error("Unexpected test origin")
+    if (url.pathname === "/rest/v1/artists") {
+      expect(init?.method).toBe("GET")
+      expect(url.searchParams.get("id")).toBe(`eq.${ARTIST}`)
+      expect(url.searchParams.get("workspace_id")).toBe(`eq.${WORKSPACE}`)
+      expect(url.searchParams.get("select")).toBe("id,default_commission_type,default_commission_value,default_commission_mode,default_commission_currency")
+      return Response.json([{ id: ARTIST, default_commission_type: "percent", default_commission_value: 1500,
+        default_commission_mode: "included", default_commission_currency: null }])
+    }
+    if (url.pathname !== "/rest/v1/bookings") throw new Error("Unexpected test request")
     const select = url.searchParams.get("select") ?? "*"
     selects.push(select)
     const body = init?.method === "POST" ? project(select, FULL_BOOKING) : [project(select, FULL_BOOKING)]
@@ -92,7 +101,7 @@ beforeEach(() => {
 })
 
 const keys = (value: unknown) => Object.keys(value as object).sort()
-const PRIVATE = /notes|contact_|fee|driver_|workspace_id|event_type|expected_audience|updated_at|surname|location|currency|profile_image_url/
+const PRIVATE = /notes|contact_|fee|commission|driver_|workspace_id|event_type|expected_audience|updated_at|surname|location|currency|profile_image_url/
 
 describe("booking rows that reach the browser", () => {
   it("dashboard client receives only the card and same-day fields", async () => {
