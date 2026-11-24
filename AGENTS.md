@@ -36,6 +36,17 @@ On staging, follow [r02](docs/agents/requests/GOV-20261123-staging-delegation-re
 - Split mixed PRs only if each intermediate state is safe. Otherwise Simone may merge the combined PR only after Alberto clears the exact commit and rollout order; a merge by Simone cannot substitute for owner-controlled application of a reserved change.
 - Batch ready reserved items by PR/head, migration digest and target where applicable, owner, operation and order. Changed inputs invalidate that item's clearance. Address active risks immediately. This policy approves no feature PR, migration or release.
 
+### Proposed point-3 split (r03; conditional, not adopted)
+
+[r03](docs/agents/requests/GOV-20261123-staging-delegation-revision/r03/REQUEST.md) does not change authority by itself. Use the r02 matrix above unless **all** of the following are verified: Simone's and Alberto's explicit assent to r03 against manifest SHA-256 `29640f22f6477ff3cb8c5da8db9a3f880557762a9cc7ef20f69ad41a517e6244`; a genuine, separate owner decision record; Alberto's explicit approval of the exact adoption head; and integration into `staging` under existing current-head review and `Quality` gates, with exact staging readback. A package, local patch, green check, earlier approval or silence satisfies none of these conditions on its own. If any evidence is missing, inconsistent or stale, r02 controls. Do not integrate this proposal on the strength of the earlier #41 approval.
+
+Only after those conditions, the following replaces **point 3 only** on staging:
+
+- Simone decides functional read/write needs by role within an already-approved scope: actor, data, operation, tenant or booking scope, and product reason. This is not permission to implement a reserved change, broaden access or activate it.
+- Alberto retains explicit approval **before activation** of new or expanded sensitive access, any destructive operation and any reserved security change (including Auth, roles/membership, RLS/grants, isolation, sensitive-data exposure/storage, external disclosure, retention/restore, secrets, infrastructure and workflow). Bind approval to exact candidate, actors, data and operations, staging target and order; a reserved effect of merge or automatic deployment is not exempt. Alberto records the reason for a refusal; silence is not approval.
+- Simone may propose a patch. Alberto controls technical enforcement, verifies the exact candidate and applies reserved changes. No credentials, generic SQL or runner are conferred. The ordinary-migration and mixed-PR/batch rules above and the architecture stop line still apply.
+- Preserve existing in-workspace travel-document reads for active agency members and Simone's choice of representation. No document write, deletion, new disclosure, retention term or storage rollout is approved. A promoter is external, not an agency member: any separately approved access is limited to the specifically assigned booking(s) and approved fields/operations, without implied travel-document access. No finance roles, payment grants, migrations `007`/`008`/`009`, `main` or production activity are authorized.
+
 ## Non-negotiable boundaries
 
 Preserve tenant isolation, ordinary-session authorization, DTO privacy, validation semantics, data integrity and honest error/unavailable states. Do not weaken tests, security checks or these instructions to obtain approval or a green run.
