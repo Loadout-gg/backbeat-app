@@ -1,7 +1,8 @@
 -- P2 of ARCH-20261114-booking-domain r02 (staging delegation, decisions of 2026-11-23).
 -- Additive: booking_payments child table (RLS, grants, currency rule), agency commission and
 -- tax note on bookings, default commission on artists. No row is rewritten, nothing is backfilled.
--- Idempotent: safe to re-run. Requires 004 and 005. Prefix with an explicit target:
+-- Clean install only. Never replay over a deployed 007. Requires 004 and 005.
+-- Prefix with an explicit target:
 --   SET backbeat.booking_finance_target = 'development';                 -- synthetic local
 --   SET backbeat.booking_finance_target = 'hosted:hupkygptbvnzrihrlcxv'; -- staging
 -- Each target must match its own synthetic marker row in public.runtime_environment;
@@ -57,6 +58,15 @@ BEGIN
       WHERE conrelid = 'public.bookings'::pg_catalog.regclass
         AND conname = 'bookings_workspace_id_id_key' AND contype = 'u') THEN
     RAISE EXCEPTION 'BOOKING_FINANCE_REQUIRES_005';
+  END IF;
+  IF pg_catalog.to_regclass('public.booking_payments') IS NOT NULL OR EXISTS (
+    SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND (
+      (table_name = 'bookings' AND column_name IN ('commission_type', 'commission_value', 'commission_mode', 'tax_note'))
+      OR (table_name = 'artists' AND column_name IN ('default_commission_type', 'default_commission_value',
+        'default_commission_mode', 'default_commission_currency'))
+    )
+  ) THEN
+    RAISE EXCEPTION 'BOOKING_FINANCE_ALREADY_PRESENT';
   END IF;
 END
 $guard$;
@@ -202,10 +212,10 @@ DROP TRIGGER IF EXISTS bookings_enforce_fee_currency ON public.bookings;
 CREATE TRIGGER bookings_enforce_fee_currency BEFORE UPDATE ON public.bookings
   FOR EACH ROW EXECUTE FUNCTION public.backbeat_enforce_booking_fee_currency();
 
--- Decision 9: same access shape as migration 001. Every active member, no role-specific policy.
+-- Keep the active-member predicate and the deployed DELETE containment.
 ALTER TABLE public.booking_payments ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.booking_payments FROM PUBLIC, anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.booking_payments TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.booking_payments TO authenticated;
 DROP POLICY IF EXISTS booking_payment_access ON public.booking_payments;
 CREATE POLICY booking_payment_access ON public.booking_payments FOR ALL TO authenticated
   USING (public.backbeat_is_active_member(workspace_id))

@@ -73,7 +73,7 @@ it.each(["returned", "thrown"])(
     }))
     expect(screen.queryByRole("alert")).toBeNull()
     fireEvent.click(screen.getByRole("button", { name: "Ok" }))
-    expect(router.push).toHaveBeenCalledExactlyOnceWith("/dashboard/artists")
+    expect(router.push).toHaveBeenCalledExactlyOnceWith("/dashboard/artists/saved-artist")
   },
 )
 

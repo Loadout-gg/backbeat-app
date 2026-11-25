@@ -5,7 +5,7 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { parseISO } from "date-fns"
 import { Day, labelGridcell } from "react-day-picker"
-import type { Booking } from "@/lib/actions/bookings"
+import type { BookingCalendarItem } from "@/lib/actions/bookings"
 import type { EventWithRelations } from "@/lib/actions/events"
 import {
   ChevronRight,
@@ -27,7 +27,7 @@ import { NewBookingModal } from "@/components/dashboard/new-booking-modal"
 import { RetryButton } from "@/components/retry-button"
 import { ArtistDefaultCommission } from "./artist-default-commission"
 import { formatArtistBaseRate } from "@/lib/artist-base-rate"
-import { formatBookingTime } from "@/lib/booking-display"
+import { bookingTimeSortKey, formatBookingTimeRange } from "@/lib/booking-display"
 import { eventDateParts } from "@/lib/event-date-display"
 
 const UPCOMING_EVENTS_LIMIT = 5
@@ -66,7 +66,7 @@ function ArtistCalendarDay({ modifiers, ...props }: ComponentProps<typeof Day>) 
 
 interface ArtistProfileClientProps {
   artist: Artist
-  bookings: Booking[]
+  bookings: BookingCalendarItem[]
   events: EventWithRelations[]
   calendarError?: boolean
   calendarToday: string
@@ -130,7 +130,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
 
   // One server-selected date-only reference is shared with hydration and the day picker.
   const today = parseISO(calendarToday)
-  const isUpcomingActive = (item: Booking | EventWithRelations) =>
+  const isUpcomingActive = (item: BookingCalendarItem | EventWithRelations) =>
     item.artist_id === artist.id &&
     (item.status === "in_progress" || item.status === "hold" || item.status === "option" || item.status === "confirmed") &&
     parseISO(item.date) >= today
@@ -149,15 +149,20 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
   const calendarEvents = [
     ...calendarBookings.map((booking) => ({
       id: `booking-${booking.id}`, date: parseISO(booking.date),
-      title: `${displayName} · Booking`, location: "", time: formatBookingTime(booking.start_time),
+      title: `${displayName} · Booking`, location: "",
+      time: formatBookingTimeRange(booking.start_time, booking.duration_minutes),
+      sortTime: bookingTimeSortKey(booking.start_time),
       href: `/dashboard/bookings/${booking.id}`,
       sameDayCount: bookingsPerDay.get(booking.date) ?? 1,
     })),
+    // Events store a date only: on a shared day they follow the timed bookings.
     ...events.filter(isUpcomingActive).map((event) => ({
       id: `event-${event.id}`, date: parseISO(event.date), title: event.title,
-      location: event.location || "", time: "", href: null, sameDayCount: 0,
+      location: event.location || "", time: "", sortTime: bookingTimeSortKey(null),
+      href: `/dashboard/events/${event.id}`, sameDayCount: 0,
     })),
-  ].sort((a, b) => a.date.getTime() - b.date.getTime() || a.time.localeCompare(b.time))
+  ].sort((a, b) =>
+    a.date.getTime() - b.date.getTime() || a.sortTime - b.sortTime || a.id.localeCompare(b.id))
   const hasCalendarItems = calendarEvents.length > 0
 
   // Overview: the artist's next active events (events only, not bookings), soonest first.
@@ -487,7 +492,11 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                                 <span className="text-lg font-semibold">{day}</span>
                               </div>
                               <div className="min-w-0">
-                                <p className="font-medium">{event.title}</p>
+                                <p className="font-medium">
+                                  <Link href={`/dashboard/events/${event.id}`} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                                    {event.title}
+                                  </Link>
+                                </p>
                                 {event.location && <p className="text-sm text-muted-foreground">{event.location}</p>}
                               </div>
                             </div>
@@ -548,7 +557,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                             </div>
                             <div className="min-w-0">
                               <p className="font-medium">
-                                {event.href ? <Link href={event.href} className="hover:underline">{event.title}</Link> : event.title}
+                                <Link href={event.href} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">{event.title}</Link>
                               </p>
                               <p className="text-sm text-muted-foreground">
                                 {[event.location, event.time].filter(Boolean).join(" • ")}
@@ -665,8 +674,9 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
                           size="icon"
                           className="text-destructive"
                           disabled
+                          aria-label={`Delete ${doc.name} (not available yet)`}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 aria-hidden="true" className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
@@ -742,6 +752,7 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
         preselectedArtist={artist}
         existingBookings={calendarError ? null : bookings}
         calendarToday={calendarToday}
+        returnTo="artist"
       />
 
       {/* Footer */}

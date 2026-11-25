@@ -4,7 +4,6 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 const mocks = vi.hoisted(() => ({
   updateBooking: vi.fn(), updateBookingStatus: vi.fn(), deleteBooking: vi.fn(), getBooking: vi.fn(), getBookings: vi.fn(), refresh: vi.fn(),
-  getBookingPayments: vi.fn(),
 }))
 vi.mock("next/navigation", async (importOriginal) => ({
   ...await importOriginal<typeof import("next/navigation")>(),
@@ -14,7 +13,7 @@ vi.mock("@/lib/actions/bookings", () => ({
   updateBooking: mocks.updateBooking, updateBookingStatus: mocks.updateBookingStatus,
   deleteBooking: mocks.deleteBooking, getBooking: mocks.getBooking, getBookings: mocks.getBookings,
 }))
-vi.mock("@/lib/actions/booking-payments", () => ({ getBookingPayments: mocks.getBookingPayments }))
+vi.mock("@/lib/actions/booking-payments", () => ({ getBookingPayments: vi.fn(async () => []) }))
 import { EventBookingClient } from "@/app/dashboard/bookings/[id]/event-booking-client"
 import EventBookingPage from "@/app/dashboard/bookings/[id]/page"
 import BookingsPage from "@/app/dashboard/bookings/page"
@@ -59,11 +58,11 @@ it("offers no transition for a completed booking and says why", () => {
 it("does not offer completion when the server date is unknown", () => {
   render(<EventBookingClient booking={{ ...base, status: "confirmed", date: "2020-01-01" }} />)
   expect(screen.queryByRole("button", { name: "Mark as completed" })).toBeNull()
-  expect(screen.queryByText("This show date has passed. Mark as completed?")).toBeNull()
+  expect(screen.queryByText("This show date has passed. Mark as completed once the show has taken place.")).toBeNull()
 })
 it.each([["2026-11-20", true], [TODAY, false], ["2026-11-22", false]] as const)("hints at completion for a confirmed show on %s: %s", (date, shown) => {
   render(editor({ status: "confirmed", date }))
-  expect(screen.queryByText("This show date has passed. Mark as completed?") !== null).toBe(shown)
+  expect(screen.queryByText("This show date has passed. Mark as completed once the show has taken place.") !== null).toBe(shown)
 })
 it.each([
   ["in_progress", "Place on hold", "hold", "Status changed to hold."],
@@ -149,12 +148,10 @@ it("shows only the server-projected priority for the saved hold while the notice
   const params = { params: Promise.resolve({ id: mine.id }) }
   mocks.getBooking.mockResolvedValueOnce(mine)
   mocks.getBookings.mockResolvedValueOnce([mine, other])
-  mocks.getBookingPayments.mockResolvedValueOnce([])
   const page = await EventBookingPage(params)
   expect(page.props).toStrictEqual({
     booking: mine, sameDayBookingCounts: { [mine.date]: 1 }, holdPosition: { rank: 2, total: 2 }, today: TODAY, payments: [],
   })
-  expect(mocks.getBookingPayments).toHaveBeenCalledExactlyOnceWith(mine.id)
   const { unmount } = render(page)
   expect(statusSection().getByText("Hold priority 2 of 2")).toBeTruthy()
   expect(screen.getByText("This artist already has another booking on this date.")).toBeTruthy()

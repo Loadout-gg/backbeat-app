@@ -26,14 +26,22 @@ Explain the decision needed, current contracts, options, recommendation, impacts
 
 Resume only against Alberto's explicit decision for the exact request revision and authorized scope. An experiment PASS, reviewer GO, deadline or silence is not architectural approval. Changed assumptions or scope require a new decision.
 
-## Staging delegation (owner clarification, 2026-11-23)
+## Staging decision authority
 
-This section supersedes the broad delegation recorded in PR #25. Simone may decide non-security product and UX work on staging, including additive migrations within approved contracts on the verified staging database. This authority does not extend to production.
+On staging, follow [r02](docs/agents/decisions/GOV-20261123-STAGING-REVISION-r02.md) for points 1, 2, 4 and 5. For point 3 follow [Alberto’s r03 decision](docs/agents/decisions/GOV-20261123-POINT3-R03.md). Neither r01 nor #25 is current authority.
 
-- Only Alberto authorizes workflow or policy changes, roles, Auth, RLS, tenant isolation, sensitive-data handling, destructive operations, infrastructure and production. These boundaries apply on staging too. If a change crosses one of them, obtain Alberto's explicit decision before implementation.
-- Preconditions are unchanged: PR to `staging`, `Quality` green on the current head, Codex review clean, and every migration versioned in the repository and described in the PR body (what, why, rollback).
-- Migrations are applied to the staging Supabase project only, never to production. Production apply and promotion to `main` remain Alberto's alone; he reviews the full diff, migrations included, at release and can require changes before live.
-- A reported statement, successful CI, clean review or merged PR does not establish owner approval. Neither a contributor nor an agent may expand their own delegation. The Git workflow, branch protection and architectural stop remain in force.
+- Simone owns ordinary product/UX and may merge those PRs after current-head Quality and the required clean review, without waiting for an owner batch. Classify by effect, not file type. Keep normal PRs to `staging`, green `Quality` and clean current-head Codex review. Version each migration in the repository and describe what, why and rollback in the PR.
+- For ordinary, non-destructive migrations within existing contracts, Simone may prepare the script. Alberto authorizes its exact bytes and staging target. Simone may trigger only a verified path bound to both. No such path is certified here; no manual SQL or privileged credentials for this purpose.
+- For sensitive work, use the [point 3 rule below](#point-3-functional-visibility-and-security). Production apply and promotion to `main` remain Alberto’s alone. Branch protection and the architecture stop remain in force.
+- Split mixed PRs only if each intermediate state is safe. Otherwise Simone may merge the combined PR only after Alberto clears the exact commit and rollout order; a merge by Simone cannot substitute for owner-controlled application of a reserved change.
+- Batch ready reserved items by PR/head, migration digest and target where applicable, owner, operation and order. Changed inputs invalidate that item's clearance. Address active risks immediately. This policy approves no feature PR, migration or release.
+
+### Point 3: functional visibility and security
+
+- Simone decides functional read/write needs by role within an already-approved scope: actor, data, operation, tenant or booking scope, and product reason. This is not permission to implement a reserved change, broaden access or activate it.
+- Alberto retains explicit approval **before activation** of new or expanded sensitive access, any destructive operation and any reserved security change (including Auth, roles/membership, RLS/grants, isolation, sensitive-data exposure/storage, external disclosure, retention/restore, secrets, infrastructure and workflow). Bind approval to exact candidate, actors, data and operations, staging target and order; a reserved effect of merge or automatic deployment is not exempt. Alberto records the reason for a refusal; silence is not approval.
+- Simone may propose a patch. Alberto controls technical enforcement, verifies the exact candidate and applies reserved changes. No credentials, generic SQL or runner are conferred. The ordinary-migration and mixed-PR/batch rules above and the architecture stop line still apply.
+- Preserve existing in-workspace travel-document reads for active agency members and Simone's choice of representation. No document write, deletion, new disclosure, retention term or storage rollout is approved. A promoter is external, not an agency member: any separately approved access is limited to the specifically assigned booking(s) and approved fields/operations, without implied travel-document access. No finance roles, payment grants, migrations `007`/`008`/`009`, `main` or production activity are authorized.
 
 ## Non-negotiable boundaries
 

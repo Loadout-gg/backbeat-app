@@ -4,18 +4,20 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import type { Booking, BookingWithArtist } from "@/lib/actions/bookings"
 import type { Artist } from "@/lib/actions/artists"
+import type { BookingPayment } from "@/lib/booking-finance"
 
 const mocks = vi.hoisted(() => ({
   getBookings: vi.fn(), getBooking: vi.fn(), createBooking: vi.fn(), updateBooking: vi.fn(), deleteBooking: vi.fn(),
-  getArtist: vi.fn(), listEvents: vi.fn(), push: vi.fn(), refresh: vi.fn(), getBookingPayments: vi.fn(),
+  getArtist: vi.fn(), listEvents: vi.fn(), push: vi.fn(), refresh: vi.fn(),
+  getBookingPayments: vi.fn(),
 }))
-vi.mock("@/lib/actions/booking-payments", () => ({ getBookingPayments: mocks.getBookingPayments }))
 vi.mock("@/lib/actions/bookings", () => ({
   getBookings: mocks.getBookings, getBooking: mocks.getBooking, createBooking: mocks.createBooking,
   updateBooking: mocks.updateBooking, deleteBooking: mocks.deleteBooking,
 }))
 vi.mock("@/lib/actions/artists", () => ({ getArtist: mocks.getArtist, getArtists: vi.fn(async () => []) }))
 vi.mock("@/lib/actions/events", () => ({ listEvents: mocks.listEvents }))
+vi.mock("@/lib/actions/booking-payments", () => ({ getBookingPayments: mocks.getBookingPayments }))
 vi.mock("next/navigation", async (importOriginal) => ({
   ...await importOriginal<typeof import("next/navigation")>(),
   useRouter: () => ({ push: mocks.push, refresh: mocks.refresh, back: vi.fn() }),
@@ -45,6 +47,7 @@ const modalArtist = { id: artistId, stage_name: "DJ Moon", name: "Luna", base_ra
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] })
   vi.setSystemTime(new Date("2026-11-14T12:00:00Z"))
+  mocks.getBookingPayments.mockResolvedValue([])
 })
 afterEach(() => {
   cleanup()
@@ -60,11 +63,11 @@ it("shows dashboard booking times as HH:MM and falls back to the artist name", (
     stats={{ eventsInProgress: 0, bookingsInProgress: 0, totalArtists: 1, totalPromoters: 0 }}
     eventsInProgress={[]}
     calendarToday="2026-11-14"
-    bookings={[row({ artist: { ...row().artist!, stage_name: null, name: "Luna" } })]}
+    bookings={[{ id: "booking-a", artist_id: artistId, date: "2026-11-20", start_time: "21:30:00", duration_minutes: 60, status: "in_progress", venue_name: null, venue_address: null, artist: { stage_name: null, name: "Luna" } }]}
   />)
   const section = screen.getByRole("region", { name: "Bookings in progress" })
   expect(within(section).getByRole("heading", { name: "Luna" })).toBeTruthy()
-  expect(within(section).getByText("21:30", { exact: true })).toBeTruthy()
+  expect(within(section).getByText("21:30–22:30", { exact: true })).toBeTruthy()
   expect(within(section).queryByText(/21:30:00/)).toBeNull()
 })
 
@@ -125,7 +128,7 @@ it("shows a read-only status badge and closes to the bookings list", () => {
   render(<EventBookingClient booking={{ ...editorBooking, status: "confirmed" }} />)
   expect(screen.getByLabelText("Status: Confirmed").textContent).toBe("Confirmed")
   expect(screen.queryByRole("combobox", { name: /status/i })).toBeNull()
-  expect(screen.getByRole("link", { name: "Close" }).getAttribute("href")).toBe("/dashboard/bookings")
+  expect(screen.getByRole("link", { name: "Close booking, back to Bookings" }).getAttribute("href")).toBe("/dashboard/bookings")
   expect((screen.getByLabelText("End time") as HTMLInputElement).readOnly).toBe(true)
   expect((screen.getByLabelText("End time") as HTMLInputElement).value).toBe("22:30")
 })
@@ -135,6 +138,7 @@ const otherBooking = (id: string, overrides: Partial<Booking>) => ({
     id, notes: `Synthetic note ${id}`, contact_name_main: `Fixture ${id}`,
     contact_phone_main: "+12025550142", contact_email_main: `${id}@example.invalid`,
     fee_amount_minor: 12345, fee_currency: "EUR",
+    commission_type: "fixed", commission_value: 625, commission_mode: "included", tax_note: `Synthetic tax note ${id}`,
     ...overrides,
   }),
   event: { title: `Synthetic related event ${id}` },
@@ -150,15 +154,18 @@ const artistBookings = [
 ]
 const editorParams = { params: Promise.resolve({ id: editorBooking.id }) }
 
-it("passes only the selected booking and exact date counts, rank and calendar context to the editor client", async () => {
+it("passes only the selected booking, its payments and exact date counts, rank and calendar context to the editor client", async () => {
+  const payments: BookingPayment[] = [{
+    id: "fixture-payment", booking_id: editorBooking.id, kind: "deposit", amount_minor: 1500,
+    currency: "EUR", due_on: null, paid_on: null, note: null,
+  }]
   mocks.getBooking.mockResolvedValueOnce(editorBooking)
   mocks.getBookings.mockResolvedValueOnce(artistBookings)
-  mocks.getBookingPayments.mockResolvedValueOnce([])
+  mocks.getBookingPayments.mockResolvedValueOnce(payments)
   const page = await EventBookingPage(editorParams)
   expect(page.type).toBe(EventBookingClient)
   expect(mocks.getBooking).toHaveBeenCalledWith(editorBooking.id)
   expect(mocks.getBookings).toHaveBeenCalledExactlyOnceWith({ artistId, failOnError: true })
-  // Payments are a separate read of the selected booking only, never of the other bookings.
   expect(mocks.getBookingPayments).toHaveBeenCalledExactlyOnceWith(editorBooking.id)
   const { booking, ...notice } = page.props
   expect(booking).toBe(editorBooking)
@@ -166,7 +173,7 @@ it("passes only the selected booking and exact date counts, rank and calendar co
     sameDayBookingCounts: { "2026-11-20": 1, "2026-11-21": 2 },
     holdPosition: null,
     today: "2026-11-14",
-    payments: [],
+    payments,
   })
 })
 
@@ -195,7 +202,6 @@ it("shows no notice when the artist read succeeds with no other bookings", async
 it("says the same-day check could not run when the artist read failed, without blocking the editor", async () => {
   mocks.getBooking.mockResolvedValueOnce(editorBooking)
   mocks.getBookings.mockRejectedValueOnce(new Error("private detail"))
-  mocks.getBookingPayments.mockResolvedValueOnce([])
   const page = await EventBookingPage(editorParams)
   expect(page.props).toStrictEqual({ booking: editorBooking, sameDayBookingCounts: null, holdPosition: null, today: "2026-11-14", payments: [] })
   render(page)
@@ -219,6 +225,25 @@ it("preserves the framework redirect when the artist read redirects to workspace
   await expect(EventBookingPage(editorParams)).rejects.toBe(redirect)
 })
 
+it("keeps date counts after a payment read failure and passes unavailable, not empty", async () => {
+  mocks.getBooking.mockResolvedValueOnce(editorBooking)
+  mocks.getBookings.mockResolvedValueOnce(artistBookings)
+  mocks.getBookingPayments.mockRejectedValueOnce(new Error("private payment read detail"))
+  const page = await EventBookingPage(editorParams)
+  expect(page.props).toStrictEqual({
+    booking: editorBooking, sameDayBookingCounts: { "2026-11-20": 1, "2026-11-21": 2 },
+    holdPosition: null, today: "2026-11-14", payments: null,
+  })
+})
+
+it("preserves the framework redirect from the payment read", async () => {
+  const redirect = Object.assign(new Error("NEXT_REDIRECT"), { digest: "NEXT_REDIRECT;replace;/onboarding;307;" })
+  mocks.getBooking.mockResolvedValueOnce(editorBooking)
+  mocks.getBookings.mockResolvedValueOnce(artistBookings)
+  mocks.getBookingPayments.mockRejectedValueOnce(redirect)
+  await expect(EventBookingPage(editorParams)).rejects.toBe(redirect)
+})
+
 // 5 + 6: create modal
 it("labels the note and search, and warns without blocking about past dates and same-day bookings", () => {
   render(<NewBookingModal
@@ -231,7 +256,7 @@ it("labels the note and search, and warns without blocking about past dates and 
   expect(screen.getByLabelText("Note").tagName).toBe("TEXTAREA")
   const date = screen.getByLabelText("Select date")
   fireEvent.change(date, { target: { value: "2026-11-10" } })
-  expect(screen.getByText("This date is in the past. You can still save the booking.")).toBeTruthy()
+  expect(screen.getByText("This date is in the past. You can still save the booking; it will be listed in Bookings, not in the upcoming calendar.")).toBeTruthy()
   expect(screen.queryByText(/already has/)).toBeNull()
   expect(date.getAttribute("aria-describedby")).toBe("new-booking-past-date")
   fireEvent.change(date, { target: { value: "2026-11-20" } })
@@ -264,8 +289,8 @@ it("shows calendar times as HH:MM and marks days with more than one booking", as
     row({ id: "single", date: "2026-11-25", start_time: "19:00:00" }),
   ])
   const { container } = render(await ArtistPage({ params: Promise.resolve({ id: artistId }) }))
-  expect(screen.getByText("20:00", { exact: true })).toBeTruthy()
-  expect(screen.getByText("23:15", { exact: true })).toBeTruthy()
+  expect(screen.getByText("20:00–21:00", { exact: true })).toBeTruthy()
+  expect(screen.getByText("23:15–00:15 (next day)", { exact: true })).toBeTruthy()
   expect(screen.queryByText(/:00:00/)).toBeNull()
   expect(screen.getAllByText("2 bookings this day")).toHaveLength(2)
   expect(screen.getByText("More than one booking on this day")).toBeTruthy()

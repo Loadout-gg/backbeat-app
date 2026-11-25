@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest"
 const { db, query, workspace } = vi.hoisted(() => {
   const query: Record<string, ReturnType<typeof vi.fn>> = {}
-  for (const method of ["insert", "update", "delete", "select", "eq", "lte", "single", "maybeSingle", "order", "range"]) query[method] = vi.fn()
+  for (const method of ["insert", "update", "delete", "select", "eq", "is", "lte", "single", "maybeSingle", "order", "range"]) query[method] = vi.fn()
   return { query, workspace: vi.fn(async () => "selected-workspace"), db: { from: vi.fn(), auth: { getUser: vi.fn() } } }
 })
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn(async () => db) }))
@@ -155,6 +155,7 @@ it.each([
   { fee_amount_minor: null, fee_currency: null },
 ])("persists only the scoped booking fee pair %j", async patch => {
   // A currency change first counts the booking's payments (awaited query builder): none here.
+  query.maybeSingle.mockResolvedValueOnce({ data: null, error: null })
   Object.assign(query, { then: (resolve: (value: unknown) => void) => resolve({ count: 0, error: null }) })
   expect(await updateBooking(id, patch)).toEqual({ success: true })
   expect(query.update).toHaveBeenCalledWith({ ...patch, updated_at: expect.any(String) })

@@ -31,7 +31,7 @@ function builder(name: string) {
     return Promise.resolve(pending.shift())
   }
   const query: Record<string, ReturnType<typeof vi.fn>> = {}
-  for (const method of ["select", "insert", "update", "delete", "eq", "order"]) query[method] = vi.fn(() => query)
+  for (const method of ["select", "insert", "update", "delete", "eq", "is", "order"]) query[method] = vi.fn(() => query)
   for (const method of ["maybeSingle", "single", "range"]) query[method] = vi.fn(next)
   Object.assign(query, { then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => next().then(resolve, reject) })
   return query
@@ -73,13 +73,23 @@ it("does not read payments for a malformed booking id or without a session", asy
 })
 
 // --- payments: create ---
+it("adopts only the identical payment after a unique-key conflict, scoped to the booking and workspace", async () => {
+  queue("bookings", { data: { id: BOOKING } })
+  queue("booking_payments", { error: { code: "23505" } }, { data: row })
+  expect(await createBookingPayment(BOOKING, payment, PAYMENT)).toEqual({ success: true })
+  const query = table("booking_payments")
+  expect(query.insert).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ id: PAYMENT }))
+  expect(query.eq.mock.calls).toEqual([["id", PAYMENT], ["workspace_id", WORKSPACE], ["booking_id", BOOKING]])
+  expect(query.update).not.toHaveBeenCalled()
+  expect(mocks.revalidatePath).toHaveBeenCalledWith(`/dashboard/bookings/${BOOKING}`)
+})
 it("records a payment in the fee currency, inside the selected workspace", async () => {
   queue("bookings", { data: { id: BOOKING, fee_currency: "EUR" }, error: null })
   queue("booking_payments", { data: { id: PAYMENT }, error: null })
-  expect(await createBookingPayment(BOOKING, { ...payment, due_on: "2026-12-01", note: " first half " })).toEqual({ success: true })
-  expect(table("bookings").eq.mock.calls).toEqual([["id", BOOKING], ["workspace_id", WORKSPACE]])
+  expect(await createBookingPayment(BOOKING, { ...payment, due_on: "2026-12-01", note: " first half " }, PAYMENT)).toEqual({ success: true })
+  expect(table("bookings").eq.mock.calls).toEqual([["id", BOOKING], ["workspace_id", WORKSPACE], ["fee_currency", "EUR"]])
   expect(table("booking_payments").insert).toHaveBeenCalledExactlyOnceWith({
-    kind: "deposit", amount_minor: 30000, currency: "EUR", due_on: "2026-12-01", note: "first half",
+    kind: "deposit", amount_minor: 30000, currency: "EUR", due_on: "2026-12-01", note: "first half", paid_on: null, id: PAYMENT,
     workspace_id: WORKSPACE, booking_id: BOOKING,
   })
   expect(mocks.revalidatePath).toHaveBeenCalledWith(`/dashboard/bookings/${BOOKING}`)
@@ -89,14 +99,14 @@ it.each([
   [{ fee_currency: "JPY" }, "A payment must be in the booking fee currency."],
   [{ fee_currency: null }, "Set and save a booking fee before recording payments."],
 ])("refuses a EUR payment on a booking with %j before writing", async (booking, error) => {
-  queue("bookings", { data: { id: BOOKING, ...booking }, error: null })
-  expect(await createBookingPayment(BOOKING, payment)).toEqual({ success: false, error })
+  queue("bookings", { data: null }, { data: booking.fee_currency === null ? { id: BOOKING } : null }, { data: { id: BOOKING } })
+  expect(await createBookingPayment(BOOKING, payment, PAYMENT)).toEqual({ success: false, error })
   expect(table("booking_payments").insert).not.toHaveBeenCalled()
   expect(mocks.revalidatePath).not.toHaveBeenCalled()
 })
 it("reports a missing or out-of-workspace booking", async () => {
-  queue("bookings", { data: null, error: null })
-  expect(await createBookingPayment(BOOKING, payment)).toEqual({ success: false, error: "Booking not found" })
+  queue("bookings", { data: null }, { data: null }, { data: null })
+  expect(await createBookingPayment(BOOKING, payment, PAYMENT)).toEqual({ success: false, error: "Booking not found" })
   expect(table("booking_payments").insert).not.toHaveBeenCalled()
 })
 it.each([
@@ -107,29 +117,29 @@ it.each([
 ])("maps database error %s on insert to fixed copy and never returns the provider message", async (code, error) => {
   queue("bookings", { data: { id: BOOKING, fee_currency: "EUR" }, error: null })
   queue("booking_payments", { data: null, error: { code, message: "secret provider detail" } })
-  expect(await createBookingPayment(BOOKING, payment)).toEqual({ success: false, error })
+  expect(await createBookingPayment(BOOKING, payment, PAYMENT)).toEqual({ success: false, error })
   expect(logged).toHaveBeenCalled()
   expect(mocks.revalidatePath).not.toHaveBeenCalled()
 })
 it("does not report success when the insert returns no row", async () => {
   queue("bookings", { data: { id: BOOKING, fee_currency: "EUR" }, error: null })
   queue("booking_payments", { data: null, error: null })
-  expect(await createBookingPayment(BOOKING, payment)).toEqual({ success: false, error: "Unable to save the payment. Please try again." })
+  expect(await createBookingPayment(BOOKING, payment, PAYMENT)).toEqual({ success: false, error: "Unable to save the payment. Please try again." })
 })
 it.each([
   { amount_minor: 0 }, { amount_minor: -5 }, { amount_minor: 10.5 }, { kind: "refund" }, { currency: "CHF" },
   { due_on: "2026-13-01" }, { paid_on: "soon" }, { note: "n".repeat(501) }, { workspace_id: "other" }, { booking_id: "other" },
 ])("rejects invalid payment input %j before authentication or backend access", async (patch) => {
-  const result = await createBookingPayment(BOOKING, { ...payment, ...patch } as Parameters<typeof createBookingPayment>[1])
+  const result = await createBookingPayment(BOOKING, { ...payment, ...patch } as Parameters<typeof createBookingPayment>[1], PAYMENT)
   expect(result.success).toBe(false)
   expect(result.error).toBeTruthy()
   untouched()
 })
 it("rejects a malformed booking id and a signed-out caller", async () => {
-  expect(await createBookingPayment("nope", payment)).toEqual({ success: false, error: "Invalid booking ID" })
+  expect(await createBookingPayment("nope", payment, PAYMENT)).toEqual({ success: false, error: "Invalid booking ID" })
   untouched()
   mocks.getUser.mockResolvedValueOnce({ data: { user: null } })
-  expect(await createBookingPayment(BOOKING, payment)).toEqual({ success: false, error: "Not authenticated" })
+  expect(await createBookingPayment(BOOKING, payment, PAYMENT)).toEqual({ success: false, error: "Not authenticated" })
   expect(mocks.from).not.toHaveBeenCalled()
 })
 
@@ -142,25 +152,22 @@ it("updates only allowlisted payment fields, scoped to the workspace, with an af
   expect(query.eq.mock.calls).toEqual([["id", PAYMENT], ["workspace_id", WORKSPACE]])
   expect(mocks.revalidatePath).toHaveBeenCalledWith(`/dashboard/bookings/${BOOKING}`)
 })
-it("clears the paid date with an explicit null", async () => {
-  queue("booking_payments", { data: { id: PAYMENT, booking_id: BOOKING }, error: null })
-  await updateBookingPayment(PAYMENT, { paid_on: null })
-  expect(table("booking_payments").update).toHaveBeenCalledExactlyOnceWith({ paid_on: null })
+it("rejects clearing the paid date without backend access", async () => {
+  expect(await updateBookingPayment(PAYMENT, { paid_on: null })).toEqual({ success: false, error: "Recorded payment history cannot be changed here." })
+  untouched()
 })
-it.each([
-  ["update", () => updateBookingPayment(PAYMENT, { amount_minor: 100 })],
-  ["delete", () => deleteBookingPayment(PAYMENT)],
-])("reports a missing or out-of-workspace payment on %s instead of false success", async (_label, action) => {
+it("reports a missing or out-of-workspace payment on update instead of false success", async () => {
   queue("booking_payments", { data: null, error: null })
-  expect(await action()).toEqual({ success: false, error: "Payment not found" })
+  expect(await updateBookingPayment(PAYMENT, { amount_minor: 100 })).toEqual({ success: false, error: "Payment not found" })
   expect(mocks.revalidatePath).not.toHaveBeenCalled()
 })
 it.each([
-  ["update", () => updateBookingPayment(PAYMENT, { amount_minor: 100 }), "Unable to save the payment. Please try again."],
-  ["delete", () => deleteBookingPayment(PAYMENT), "Unable to delete the payment. Please try again."],
-])("returns fixed copy when %s fails in the database", async (_label, action, error) => {
-  queue("booking_payments", { data: null, error: { code: "XX000", message: "secret provider detail" } })
-  expect(await action()).toEqual({ success: false, error })
+  ["XX000", "Unable to save the payment. Please try again."],
+  ["BB006", "Recorded payment history cannot be changed here."],
+])("returns fixed copy when an update fails with %s", async (code, error) => {
+  queue("booking_payments", { data: null, error: { code, message: "secret provider detail" } })
+  expect(await updateBookingPayment(PAYMENT, { amount_minor: 100 })).toEqual({ success: false, error })
+  expect(mocks.revalidatePath).not.toHaveBeenCalled()
 })
 it.each([
   [{}], [{ currency: "USD" }], [{ booking_id: BOOKING }], [{ workspace_id: "other" }], [{ amount_minor: 0 }], [{ paid_on: "2026-02-30" }],
@@ -168,18 +175,33 @@ it.each([
   expect((await updateBookingPayment(PAYMENT, patch as Parameters<typeof updateBookingPayment>[1])).success).toBe(false)
   untouched()
 })
-it("deletes one payment inside the workspace and rejects malformed ids", async () => {
-  queue("booking_payments", { data: { id: PAYMENT, booking_id: BOOKING }, error: null })
-  expect(await deleteBookingPayment(PAYMENT)).toEqual({ success: true })
-  expect(table("booking_payments").eq.mock.calls).toEqual([["id", PAYMENT], ["workspace_id", WORKSPACE]])
+it("fails closed on legacy hard-delete calls, including malformed ids", async () => {
+  expect(await deleteBookingPayment(PAYMENT)).toEqual({ success: false, error: "Recorded payment history cannot be changed here." })
   expect(await deleteBookingPayment("nope")).toEqual({ success: false, error: "Invalid payment ID" })
   expect(await updateBookingPayment("nope", { paid_on: null })).toEqual({ success: false, error: "Invalid payment ID" })
+  untouched()
+})
+it("rejects a malformed retry identity before backend access", async () => {
+  expect(await createBookingPayment(BOOKING, payment, "not-an-id")).toEqual({ success: false, error: "Invalid payment ID" })
+  untouched()
+})
+it.each([
+  { data: { ...row, amount_minor: 1 } }, { data: { ...row, paid_on: "2026-12-01" } },
+  { data: null }, { error: { code: "42501", message: "private detail" } },
+])("does not adopt or overwrite a different, invisible or unreadable payment (%j)", async (collision) => {
+  queue("bookings", { data: { id: BOOKING } })
+  queue("booking_payments", { error: { code: "23505" } }, collision)
+  expect(await createBookingPayment(BOOKING, payment, PAYMENT)).toEqual({ success: false,
+    error: "Unable to confirm this payment. Check the booking before starting another payment." })
+  expect(table("booking_payments").insert).toHaveBeenCalledOnce()
+  expect(table("booking_payments").update).not.toHaveBeenCalled()
+  expect(mocks.revalidatePath).not.toHaveBeenCalled()
 })
 
 // --- bookings: fee currency lock, delete, commission, prefill ---
 const LOCKED = "The fee currency cannot be changed while payments are recorded for this booking. The fee amount can still be changed."
 it("blocks a fee currency change while payments exist, before writing (decision 6)", async () => {
-  queue("bookings", { data: { id: BOOKING, fee_currency: "EUR" }, error: null })
+  queue("bookings", { data: null, error: null })
   queue("booking_payments", { count: 2, error: null })
   expect(await updateBooking(BOOKING, { fee_amount_minor: 100000, fee_currency: "USD" })).toEqual({ success: false, error: LOCKED })
   expect(table("bookings").update).not.toHaveBeenCalled()
@@ -187,7 +209,7 @@ it("blocks a fee currency change while payments exist, before writing (decision 
   expect(table("booking_payments").eq.mock.calls).toEqual([["booking_id", BOOKING], ["workspace_id", WORKSPACE]])
 })
 it("blocks clearing the fee while payments exist", async () => {
-  queue("bookings", { data: { id: BOOKING, fee_currency: "EUR" }, error: null })
+  queue("bookings", { data: null, error: null })
   queue("booking_payments", { count: 1, error: null })
   expect(await updateBooking(BOOKING, { fee_amount_minor: null, fee_currency: null })).toEqual({ success: false, error: LOCKED })
   expect(table("bookings").update).not.toHaveBeenCalled()
@@ -199,12 +221,12 @@ it("lets the fee amount change in the same currency without counting payments", 
   expect(table("bookings").update).toHaveBeenCalledExactlyOnceWith({ fee_amount_minor: 120000, fee_currency: "EUR", updated_at: expect.any(String) })
 })
 it("lets the currency change when no payment exists", async () => {
-  queue("bookings", { data: { id: BOOKING, fee_currency: "EUR" }, error: null }, { data: { id: BOOKING }, error: null })
+  queue("bookings", { data: null, error: null }, { data: { id: BOOKING }, error: null })
   queue("booking_payments", { count: 0, error: null })
   expect(await updateBooking(BOOKING, { fee_amount_minor: 100000, fee_currency: "JPY" })).toEqual({ success: true })
 })
 it("fails closed when the payment count is unavailable", async () => {
-  queue("bookings", { data: { id: BOOKING, fee_currency: "EUR" }, error: null })
+  queue("bookings", { data: null, error: null })
   queue("booking_payments", { count: null, error: { message: "secret" } })
   expect(await updateBooking(BOOKING, { fee_amount_minor: 1, fee_currency: "USD" })).toEqual({ success: false, error: "Unable to save booking. Please try again." })
   expect(table("bookings").update).not.toHaveBeenCalled()
@@ -241,13 +263,13 @@ it.each([
   expect((await updateBooking(BOOKING, patch)).success).toBe(false)
   untouched()
 })
-it("returns the fixed has-payments copy when the foreign key blocks a booking delete (decision 8)", async () => {
-  queue("bookings", { data: null, error: { code: "23503", message: 'violates foreign key constraint "booking_payments_booking_fkey"' } })
+it.each(["23503", "23001"])("returns the fixed has-payments copy when the payment FK blocks a booking delete (%s)", async (code) => {
+  queue("bookings", { data: null, error: { code, message: 'violates foreign key constraint "booking_payments_booking_fkey"' } })
   expect(await deleteBooking(BOOKING)).toEqual({
     success: false,
-    error: "This booking has recorded payments and cannot be deleted. Remove its payments first, or cancel the booking instead.",
+    error: "This booking has recorded payments and cannot be deleted. You can cancel the booking without removing its payments.",
   })
-  queue("bookings", { data: null, error: { code: "XX000", message: "secret" } })
+  queue("bookings", { data: null, error: { code, message: 'violates unrelated constraint "hidden_relation"' } })
   expect(await deleteBooking(BOOKING)).toEqual({ success: false, error: "Unable to delete booking. Please try again." })
 })
 

@@ -8,6 +8,7 @@ import {
 } from "@/lib/booking-finance"
 const read = (path: string) => readFileSync(path, "utf8")
 const migration = read("migrations/007_booking_finance.sql")
+const forward = read("ops/supabase/booking-finance/007-forward-payment-history.sql")
 const [preflight, postflight, verify, rollback] = ["preflight", "postflight", "verify", "rollback"]
   .map(name => read(`ops/supabase/booking-finance/${name}.sql`))
 const list = (values: readonly string[]) => values.map(value => `'${value}'`).join(", ")
@@ -35,7 +36,7 @@ it("STATIC: 007 and its rollback need an explicit development or staging target,
     for (const forbidden of ["jttrznlbbjyufzyqmzzs", "ngwkmrfmivvgwtnpadmj", "xcastozqncxdauelquep"]) expect(sql).not.toContain(forbidden)
   }
 })
-it("STATIC: 007 is additive and re-runnable: no backfill, no row rewrite, no destructive statement", () => {
+it("STATIC: 007 is additive and refuses a deployed or partial shape: no backfill, no row rewrite, no destructive statement", () => {
   const sql = code(migration)
   expect(sql).not.toMatch(/\bUPDATE public\.|\bDELETE FROM\b|\bINSERT INTO\b|\bTRUNCATE\b|\bDROP (?:TABLE|COLUMN)\b|\bSECURITY DEFINER\b/)
   expect(sql).toContain("CREATE TABLE IF NOT EXISTS public.booking_payments")
@@ -48,7 +49,7 @@ it("STATIC: 007 is additive and re-runnable: no backfill, no row rewrite, no des
     expect(sql).toContain(`DROP TRIGGER IF EXISTS ${trigger}`)
   }
   expect(migration).toContain("Requires 004 and 005")
-  for (const requirement of ["BOOKING_FINANCE_REQUIRES_004", "BOOKING_FINANCE_REQUIRES_005"]) expect(sql).toContain(requirement)
+  for (const requirement of ["BOOKING_FINANCE_REQUIRES_004", "BOOKING_FINANCE_REQUIRES_005", "BOOKING_FINANCE_ALREADY_PRESENT"]) expect(sql).toContain(requirement)
 })
 it("STATIC: 007 mirrors the application value sets and limits", () => {
   expect(migration).toContain(`CHECK (commission_type IN (${list(COMMISSION_TYPES)}))`)
@@ -66,12 +67,12 @@ it("STATIC: 007 mirrors the application value sets and limits", () => {
   expect(migration).toContain(`CHECK (pg_catalog.char_length(tax_note) <= ${MAX_TAX_NOTE_LENGTH})`)
   expect(migration).toContain(`CHECK (pg_catalog.char_length(note) <= ${MAX_PAYMENT_NOTE_LENGTH})`)
 })
-it("STATIC: payments use the same-workspace key, RESTRICT, and the migration 001 access shape", () => {
+it("STATIC: payments use the same-workspace key, RESTRICT, and ordinary writes without DELETE", () => {
   expect(migration).toContain("CONSTRAINT booking_payments_booking_fkey FOREIGN KEY (workspace_id, booking_id)\n    REFERENCES public.bookings(workspace_id, id) ON DELETE RESTRICT")
   expect(migration).toContain("CONSTRAINT booking_payments_workspace_id_id_key UNIQUE (workspace_id, id)")
   expect(migration).toContain("ALTER TABLE public.booking_payments ENABLE ROW LEVEL SECURITY;")
   expect(migration).toContain("REVOKE ALL ON TABLE public.booking_payments FROM PUBLIC, anon, authenticated;")
-  expect(migration).toContain("GRANT SELECT, INSERT, UPDATE, DELETE ON public.booking_payments TO authenticated;")
+  expect(migration).toContain("GRANT SELECT, INSERT, UPDATE ON public.booking_payments TO authenticated;")
   expect(migration).toContain("CREATE POLICY booking_payment_access ON public.booking_payments FOR ALL TO authenticated\n  USING (public.backbeat_is_active_member(workspace_id))\n  WITH CHECK (public.backbeat_is_active_member(workspace_id));")
   expect(code(migration).match(/CREATE POLICY/g)).toHaveLength(1)
   expect(code(migration).match(/\bGRANT\b/g)).toHaveLength(1)
@@ -85,6 +86,14 @@ it("STATIC: the currency rule raises its own SQLSTATEs and nothing couples payme
   expect(code(migration)).not.toMatch(/status/i)
   // Derived values are never stored.
   expect(code(migration)).not.toMatch(/promoter_total|paid_total|outstanding|artist_net|commission_amount/)
+})
+it("STATIC: forward DDL preserves ACL, policy, rows and dependencies", () => {
+  const sql = keywords(forward)
+  expect(sql).not.toMatch(/\b(?:GRANT|DELETE FROM|INSERT INTO|TRUNCATE|ALTER TABLE|DROP)\b|\bUPDATE public\.|\bSECURITY DEFINER\b/)
+  expect(sql).toContain("SECURITY INVOKER SET search_path = ''")
+  expect(sql).toContain("BEFORE UPDATE ON public.booking_payments")
+  expect(forward).toContain("PAYMENT_HISTORY_ACL_MISMATCH")
+  expect(forward).toContain("pg_catalog.pg_control_system()")
 })
 it("STATIC: every summary counts the same 11 objects of 007", () => {
   const columns = [...code(migration).matchAll(/ADD COLUMN IF NOT EXISTS (\w+)/g)].map(match => match[1])

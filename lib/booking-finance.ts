@@ -23,7 +23,8 @@ export const DEFAULT_COMMISSION_MODE: CommissionMode = "on_top"
 
 // Fixed user-facing copy shared by server actions and the editor (never a provider message).
 export const BOOKING_HAS_PAYMENTS_MESSAGE =
-  "This booking has recorded payments and cannot be deleted. Remove its payments first, or cancel the booking instead."
+  "This booking has recorded payments and cannot be deleted. You can cancel the booking without removing its payments."
+export const PAYMENT_HISTORY_RESERVED_MESSAGE = "Recorded payment history cannot be changed here."
 export const FEE_CURRENCY_LOCKED_MESSAGE =
   "The fee currency cannot be changed while payments are recorded for this booking. The fee amount can still be changed."
 export const PAYMENT_NEEDS_FEE_MESSAGE = "Set and save a booking fee before recording payments."

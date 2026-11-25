@@ -59,8 +59,7 @@ SELECT bb_test.eq('guard: refused targets add nothing',
 
 SET backbeat.booking_finance_target = 'development';
 \ir ../../migrations/007_booking_finance.sql
--- Idempotency: a second run must succeed and change nothing.
-\ir ../../migrations/007_booking_finance.sql
+\ir ../../ops/supabase/booking-finance/007-forward-payment-history.sql
 
 SELECT bb_test.eq('existing rows: bookings untouched, no backfill',
   (SELECT count(*)::text FROM public.bookings AS b JOIN bb_test.before AS o USING (id)
@@ -129,7 +128,8 @@ BEGIN
   SELECT id INTO payment FROM public.booking_payments WHERE booking_id = eur AND kind = 'deposit';
   PERFORM bb_test.eq('payment: mark as paid', bb_test.run_as(ua, format('UPDATE public.booking_payments SET paid_on = ''2030-04-02'' WHERE id = %L', payment)), 'OK:1');
   PERFORM bb_test.eq('payment: paid_on stored', (SELECT paid_on::text FROM public.booking_payments WHERE id = payment), '2030-04-02');
-  PERFORM bb_test.eq('payment: unmark paid', bb_test.run_as(ua, format('UPDATE public.booking_payments SET paid_on = NULL WHERE id = %L', payment)), 'OK:1');
+  PERFORM bb_test.eq('payment: paid date cannot be cleared', bb_test.run_as(ua, format('UPDATE public.booking_payments SET paid_on = NULL WHERE id = %L', payment)), 'BB006');
+  PERFORM bb_test.eq('payment: paid amount cannot be overwritten', bb_test.run_as(ua, format('UPDATE public.booking_payments SET amount_minor = 1 WHERE id = %L', payment)), 'BB006');
   PERFORM bb_test.eq('payment: currency update rejected', bb_test.run_as(ua, format('UPDATE public.booking_payments SET currency = ''USD'' WHERE id = %L', payment)), 'BB004');
   PERFORM bb_test.eq('payment: moving to a booking in another currency rejected', bb_test.run_as(ua, format('UPDATE public.booking_payments SET booking_id = %L WHERE id = %L', jpy, payment)), 'BB004');
 
@@ -198,11 +198,11 @@ BEGIN
   PERFORM bb_test.run_as(ub, 'CREATE TEMP TABLE seen AS SELECT count(*) AS n FROM public.booking_payments');
   PERFORM bb_test.eq('rls: outsider sees no payment', (SELECT n::text FROM seen), '0');
   PERFORM bb_test.eq('rls: outsider cannot update', bb_test.run_as(ub, format('UPDATE public.booking_payments SET amount_minor = 1 WHERE id = %L', payment)), 'OK:0');
-  PERFORM bb_test.eq('rls: outsider cannot delete', bb_test.run_as(ub, format('DELETE FROM public.booking_payments WHERE id = %L', payment)), 'OK:0');
+  PERFORM bb_test.eq('grants: outsider cannot delete', bb_test.run_as(ub, format('DELETE FROM public.booking_payments WHERE id = %L', payment)), '42501');
   PERFORM bb_test.eq('rls: outsider cannot insert into workspace A', bb_test.run_as(ub, format(ins, '', wa, eur, 'other', 100, 'EUR', '')), '42501');
   PERFORM bb_test.eq('fk: own workspace with a booking of another workspace rejected', bb_test.run_as(ub, format(ins, '', wb, eur, 'other', 100, 'EUR', '')), '23503');
   PERFORM bb_test.eq('rls: outsider can use the own workspace', bb_test.run_as(ub, format(ins, '', wb, other_ws, 'deposit', 100, 'EUR', '')), 'OK:1');
-  PERFORM bb_test.eq('rls: member cannot move a payment to another workspace', bb_test.run_as(ua, format('UPDATE public.booking_payments SET workspace_id = %L, booking_id = %L WHERE id = %L', wb, other_ws, payment)), '42501');
+  PERFORM bb_test.eq('payment: parent/workspace cannot change', bb_test.run_as(ua, format('UPDATE public.booking_payments SET workspace_id = %L, booking_id = %L WHERE id = %L', wb, other_ws, payment)), 'BB006');
   PERFORM bb_test.eq('rls: signed-out caller is rejected', bb_test.run_as(NULL, format(ins, '', wa, eur, 'other', 100, 'EUR', '')), '42501');
   PERFORM bb_test.eq('payments: stored rows after the isolation checks', (SELECT count(*)::text FROM public.booking_payments WHERE workspace_id = wa), '5');
 
@@ -222,15 +222,15 @@ BEGIN
   RESET ROLE;
   PERFORM bb_test.eq('grants: anon cannot read payments', outcome, '42501');
 
-  -- Once the payments are gone the booking can change currency and be deleted.
-  PERFORM bb_test.eq('payment: delete all of one booking', bb_test.run_as(ua, format('DELETE FROM public.booking_payments WHERE booking_id = %L', eur)), 'OK:4');
-  PERFORM bb_test.eq('fee: currency change after payments are removed', bb_test.run_as(ua, format('UPDATE public.bookings SET fee_currency = ''USD'' WHERE id = %L', eur)), 'OK:1');
-  PERFORM bb_test.eq('delete: booking after payments are removed', bb_test.run_as(ua, format('DELETE FROM public.bookings WHERE id = %L', eur)), 'OK:1');
+  PERFORM bb_test.eq('payment: active member cannot hard-delete', bb_test.run_as(ua, format('DELETE FROM public.booking_payments WHERE booking_id = %L', eur)), '42501');
+  PERFORM bb_test.eq('payment: hard-delete denial retains all rows', (SELECT count(*)::text FROM public.booking_payments WHERE booking_id = eur), '4');
 END
 $$;
 SELECT bb_test.eq('grants: API role privileges on booking_payments',
-  has_table_privilege('authenticated', 'public.booking_payments', 'SELECT, INSERT, UPDATE, DELETE')::text || ':' ||
-  (has_table_privilege('anon', 'public.booking_payments', 'SELECT') OR has_table_privilege('authenticated', 'public.booking_payments', 'TRUNCATE'))::text, 'true:false');
+  (has_table_privilege('authenticated', 'public.booking_payments', 'SELECT') AND
+   has_table_privilege('authenticated', 'public.booking_payments', 'INSERT') AND
+   has_table_privilege('authenticated', 'public.booking_payments', 'UPDATE'))::text || ':' ||
+  (has_table_privilege('anon', 'public.booking_payments', 'SELECT, DELETE') OR has_table_privilege('authenticated', 'public.booking_payments', 'DELETE, TRUNCATE'))::text, 'true:false');
 SELECT bb_test.eq('schema: trigger functions not callable by API roles',
   (has_function_privilege('authenticated', 'public.backbeat_enforce_payment_currency()', 'EXECUTE')
    OR has_function_privilege('anon', 'public.backbeat_enforce_booking_fee_currency()', 'EXECUTE'))::text, 'false');
@@ -252,7 +252,10 @@ BEGIN
 END
 $$;
 
--- Rollback: backs up, removes the 007 schema, is re-runnable, and 007 applies again.
+-- Private fixture cleanup only, to keep the original two-row rollback oracle independent.
+DELETE FROM public.booking_payments WHERE booking_id = 'a0000000-0000-4000-8000-0000000b0001';
+DELETE FROM public.bookings WHERE id = 'a0000000-0000-4000-8000-0000000b0001';
+-- Rollback: backs up, removes the 007 schema and forward trigger, and is re-runnable.
 UPDATE public.bookings SET commission_type = 'percent', commission_value = 1000, commission_mode = 'included', tax_note = 'VAT reverse charge'
   WHERE id = 'a0000000-0000-4000-8000-0000000b0003';
 \ir ../../ops/supabase/booking-finance/rollback.sql
@@ -261,7 +264,7 @@ SELECT bb_test.eq('rollback: 007 schema removed',
   coalesce(to_regclass('public.booking_payments')::text, 'absent') || ':' ||
   (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name IN ('bookings', 'artists')
    AND column_name IN ('commission_type', 'commission_value', 'commission_mode', 'tax_note', 'default_commission_type', 'default_commission_value', 'default_commission_mode', 'default_commission_currency'))::text
-  || ':' || (SELECT count(*) FROM pg_proc WHERE proname IN ('backbeat_enforce_payment_currency', 'backbeat_enforce_booking_fee_currency'))::text
+  || ':' || (SELECT count(*) FROM pg_proc WHERE proname IN ('backbeat_enforce_payment_currency', 'backbeat_enforce_booking_fee_currency', 'backbeat_guard_booking_payment_history'))::text
   || ':' || (SELECT count(*) FROM pg_trigger WHERE tgname = 'bookings_enforce_fee_currency')::text, 'absent:0:0:0');
 SELECT bb_test.eq('rollback: payments backed up',
   (SELECT count(*)::text FROM public.booking_payments_rollback_backup), '2');
@@ -277,7 +280,8 @@ SELECT bb_test.eq('rollback: backups invisible to API roles',
 SELECT bb_test.eq('rollback: lifecycle trigger and booking rows kept',
   (SELECT count(*)::text FROM pg_trigger WHERE tgname = 'bookings_enforce_status') || ':' || (SELECT count(*)::text FROM public.bookings), '1:2');
 \ir ../../migrations/007_booking_finance.sql
-SELECT bb_test.eq('re-apply after rollback: schema back, tables empty',
+\ir ../../ops/supabase/booking-finance/007-forward-payment-history.sql
+SELECT bb_test.eq('clean install after fixture rollback: schema back, tables empty',
   (SELECT count(*)::text FROM public.booking_payments) || ':' ||
   (SELECT count(*)::text FROM public.bookings WHERE commission_type IS NOT NULL), '0:0');
 

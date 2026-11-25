@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RetryButton } from "@/components/retry-button";
-import { createBookingPayment, deleteBookingPayment, updateBookingPayment } from "@/lib/actions/booking-payments";
+import { createBookingPayment, updateBookingPayment } from "@/lib/actions/booking-payments";
 import { formatBookingFeeInput, type BookingFeeCurrency } from "@/lib/booking-fee";
 import {
   COMMISSION_MODE_LABELS, MAX_PAYMENT_NOTE_LENGTH, PAYMENT_CURRENCY_PENDING_MESSAGE, PAYMENT_KINDS, PAYMENT_KIND_LABELS, PAYMENT_NEEDS_FEE_MESSAGE,
@@ -33,8 +33,9 @@ interface BookingPaymentsProps {
   currencyChangePending?: boolean;
 }
 
-type Draft = { id: string | null; kind: PaymentKind; amount: string; dueOn: string; paidOn: string; note: string };
-const EMPTY_DRAFT: Draft = { id: null, kind: "deposit", amount: "", dueOn: "", paidOn: "", note: "" };
+type Draft = { kind: PaymentKind; amount: string; dueOn: string; paidOn: string; note: string }
+  & ({ id: string; operationId?: never } | { id: null; operationId: string });
+const EMPTY_DRAFT = { id: null, kind: "deposit", amount: "", dueOn: "", paidOn: "", note: "" } as const;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const fieldClass = "h-9 min-w-0 text-sm";
 const selectClass = "h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50";
@@ -52,13 +53,13 @@ export function useBookingPaymentsState() {
   const [rowError, setRowError] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
   const inFlight = useRef(false);
 
   // One mutation at a time; a thrown action is reported as unconfirmed, never as success.
   // While it runs the editor cannot be opened, replaced or closed (see `locked` below), so
   // a completion always belongs to the editor that is still on screen.
-  const run = async (key: string, action: () => Promise<{ success: boolean; error?: string }>, done: string, onError: (message: string) => void) => {
+  const run = async (key: string, action: () => Promise<{ success: boolean; error?: string }>, done: string, onError: (message: string) => void, retrySameDraft = false) => {
     if (inFlight.current) return false;
     inFlight.current = true;
     setBusy(key);
@@ -75,7 +76,9 @@ export function useBookingPaymentsState() {
       router.refresh();
       return true;
     } catch {
-      onError("Unable to confirm the change. Reload the booking before retrying.");
+      onError(retrySameDraft
+        ? "Unable to confirm the change. Retry this draft or check the booking before starting another payment."
+        : "Unable to confirm the change. Reload the booking before retrying.");
       return false;
     } finally {
       inFlight.current = false;
@@ -85,12 +88,12 @@ export function useBookingPaymentsState() {
   /** Runs an editor change only when no request is pending. */
   const unlessBusy = (change: () => void) => { if (!inFlight.current) change(); };
 
-  return { draft, setDraft, formError, setFormError, rowError, setRowError, notice, busy, confirmDelete, setConfirmDelete, run, unlessBusy };
+  return { draft, setDraft, formError, setFormError, rowError, setRowError, notice, busy, run, unlessBusy };
 }
 export type BookingPaymentsState = ReturnType<typeof useBookingPaymentsState>;
 
 export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, payments, today, state, currencyChangePending = false }: BookingPaymentsProps) {
-  const { draft, setDraft, formError, setFormError, rowError, setRowError, notice, busy, confirmDelete, setConfirmDelete, run, unlessBusy } = state;
+  const { draft, setDraft, formError, setFormError, rowError, setRowError, notice, busy, run, unlessBusy } = state;
   const locked = busy !== null;
 
   const totals = payments ? bookingFinanceTotals({ feeMinor, currency: feeCurrency, commission, payments }) : null;
@@ -108,17 +111,17 @@ export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, 
     }
     const fields = {
       kind: draft.kind, amount_minor: amount.data,
-      due_on: draft.dueOn || null, paid_on: draft.paidOn || null, note: draft.note,
+      due_on: draft.dueOn || null, note: draft.note,
     };
-    const saved = draft.id
-      ? await run("form", () => updateBookingPayment(draft.id!, fields), "Payment saved.", setFormError)
-      : await run("form", () => createBookingPayment(bookingId, { ...fields, currency: feeCurrency }), "Payment added.", setFormError);
+    const saved = draft.id !== null
+      ? await run("form", () => updateBookingPayment(draft.id, { ...fields, ...(draft.paidOn ? { paid_on: draft.paidOn } : {}) }), "Payment saved.", setFormError)
+      : await run("form", () => createBookingPayment(bookingId, { ...fields, paid_on: draft.paidOn || null, currency: feeCurrency }, draft.operationId), "Payment added.", setFormError, true);
     if (saved) setDraft(null);
   };
 
   const startEdit = (payment: BookingPayment) => unlessBusy(() => {
+    if (payment.paid_on !== null) return;
     setFormError(null);
-    setConfirmDelete(null);
     setDraft({
       id: payment.id, kind: payment.kind, amount: formatBookingFeeInput(payment.amount_minor, payment.currency),
       dueOn: payment.due_on ?? "", paidOn: payment.paid_on ?? "", note: payment.note ?? "",
@@ -198,36 +201,18 @@ export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, 
                     {payment.note && <p className="text-sm text-foreground">{payment.note}</p>}
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {confirmDelete === payment.id ? (
-                      <>
-                        <span className="self-center text-sm text-muted-foreground">Delete this payment?</span>
-                        <Button type="button" size="sm" variant="destructive" aria-disabled={busy !== null}
-                          onClick={async () => { if (await run(payment.id, () => deleteBookingPayment(payment.id), "Payment deleted.", setRowError)) setConfirmDelete(null); }}>
-                          {busy === payment.id ? "Deleting..." : "Yes, delete"}
-                        </Button>
-                        <Button type="button" size="sm" variant="outline" aria-disabled={locked} onClick={() => unlessBusy(() => setConfirmDelete(null))}>Keep</Button>
-                      </>
-                    ) : (
+                    {!payment.paid_on && (
                       <>
                         {/* Not offered for the payment open in the editor: saving that draft would
                             overwrite the paid date the shortcut had just changed. */}
                         {draft?.id === payment.id && <span className="self-center text-sm text-muted-foreground">Open in the editor below</span>}
-                        {today && draft?.id !== payment.id && (payment.paid_on ? (
-                          <Button type="button" size="sm" variant="outline" aria-disabled={busy !== null} aria-label={`Mark ${name} as not paid`}
-                            onClick={() => run(payment.id, () => updateBookingPayment(payment.id, { paid_on: null }), "Payment marked as not paid.", setRowError)}>
-                            Mark as not paid
-                          </Button>
-                        ) : (
+                        {today && draft?.id !== payment.id && (
                           <Button type="button" size="sm" variant="outline" aria-disabled={busy !== null} aria-label={`Mark ${name} as paid today`}
                             onClick={() => run(payment.id, () => updateBookingPayment(payment.id, { paid_on: today }), "Payment marked as paid.", setRowError)}>
                             Mark as paid today
                           </Button>
-                        ))}
+                        )}
                         <Button type="button" size="sm" variant="outline" aria-disabled={locked} aria-label={`Edit ${name}`} onClick={() => startEdit(payment)}>Edit</Button>
-                        <Button type="button" size="sm" variant="outline" aria-disabled={locked} aria-label={`Delete ${name}`}
-                          onClick={() => unlessBusy(() => { setRowError(null); setDraft(null); setConfirmDelete(payment.id); })}>
-                          Delete
-                        </Button>
                       </>
                     )}
                   </div>
@@ -247,7 +232,7 @@ export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, 
         )}
         {payments !== null && feeCurrency && !currencyChangePending && draft === null && (
           <Button type="button" variant="outline" aria-disabled={locked}
-            onClick={() => unlessBusy(() => { setFormError(null); setConfirmDelete(null); setDraft(EMPTY_DRAFT); })}>
+            onClick={() => unlessBusy(() => { setFormError(null); setDraft({ ...EMPTY_DRAFT, operationId: crypto.randomUUID() }); })}>
             Add payment
           </Button>
         )}

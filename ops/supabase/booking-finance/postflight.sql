@@ -32,8 +32,9 @@ WITH checks(ord, item, ok, detail) AS (
          coalesce(string_agg(policyname || ':' || cmd || ':' || array_to_string(roles, ','), ', '), 'none')
   FROM pg_policies WHERE schemaname = 'public' AND tablename = 'booking_payments'
   UNION ALL
-  SELECT 8, 'booking_payments: authenticated has exactly SELECT, INSERT, UPDATE, DELETE',
-         coalesce(string_agg(privilege_type, ',' ORDER BY privilege_type), '') = 'DELETE,INSERT,SELECT,UPDATE',
+  SELECT 8, 'booking_payments: authenticated has SELECT, INSERT, UPDATE but no effective DELETE or TRUNCATE',
+         coalesce(string_agg(privilege_type, ',' ORDER BY privilege_type), '') = 'INSERT,SELECT,UPDATE'
+           AND NOT has_table_privilege('authenticated', to_regclass('public.booking_payments'), 'DELETE, TRUNCATE'),
          coalesce(string_agg(privilege_type, ',' ORDER BY privilege_type), 'none')
   FROM information_schema.role_table_grants
   WHERE table_schema = 'public' AND table_name = 'booking_payments' AND grantee = 'authenticated'
@@ -68,10 +69,16 @@ WITH checks(ord, item, ok, detail) AS (
          coalesce(string_agg(policyname || ':' || cmd, ',' ORDER BY policyname), 'none')
   FROM pg_policies WHERE schemaname = 'public' AND tablename = 'bookings'
   UNION ALL
-  SELECT 15, 'no backfill: no booking or artist carries a commission, no payment exists yet (first apply only)',
-         true, (SELECT count(*)::text FROM public.bookings WHERE commission_type IS NOT NULL OR tax_note IS NOT NULL)
-           || ' bookings, ' || (SELECT count(*)::text FROM public.artists WHERE default_commission_type IS NOT NULL)
-           || ' artists, ' || (SELECT count(*)::text FROM public.booking_payments) || ' payments'
+  SELECT 15, 'payment history guard enabled and not exposed to API roles',
+         count(*) = 1 AND bool_and(t.tgenabled = 'O' AND t.tgtype = 19 AND NOT f.prosecdef
+           AND NOT has_function_privilege('anon', f.oid, 'EXECUTE')
+           AND NOT has_function_privilege('authenticated', f.oid, 'EXECUTE')
+           AND NOT has_function_privilege('service_role', f.oid, 'EXECUTE')),
+         count(*)::text || '/1'
+  FROM pg_trigger AS t JOIN pg_proc AS f ON f.oid = t.tgfoid
+  WHERE NOT t.tgisinternal AND t.tgrelid = to_regclass('public.booking_payments')
+    AND t.tgname = 'booking_payments_z_guard_history' AND f.pronamespace = 'public'::regnamespace
+    AND f.proname = 'backbeat_guard_booking_payment_history'
 )
 SELECT ord, item, CASE WHEN ok THEN 'PASS' ELSE 'FAIL' END AS result, detail FROM checks
 UNION ALL

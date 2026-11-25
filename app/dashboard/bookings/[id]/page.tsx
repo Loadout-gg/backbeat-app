@@ -48,13 +48,5 @@ export default async function EventBookingPage({ params }: EventBookingPageProps
     unstable_rethrow(error);
   }
 
-  return (
-    <EventBookingClient
-      booking={booking}
-      sameDayBookingCounts={sameDayBookingCounts}
-      holdPosition={holdPosition}
-      today={configuredCalendarDay()}
-      payments={payments}
-    />
-  );
+  return <EventBookingClient booking={booking} sameDayBookingCounts={sameDayBookingCounts} holdPosition={holdPosition} today={configuredCalendarDay()} payments={payments} />;
 }

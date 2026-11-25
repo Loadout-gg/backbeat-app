@@ -114,6 +114,7 @@ $backup$;
 
 DROP TRIGGER IF EXISTS bookings_enforce_fee_currency ON public.bookings;
 DROP TABLE IF EXISTS public.booking_payments;
+DROP FUNCTION IF EXISTS public.backbeat_guard_booking_payment_history();
 DROP FUNCTION IF EXISTS public.backbeat_enforce_payment_currency();
 DROP FUNCTION IF EXISTS public.backbeat_enforce_booking_fee_currency();
 ALTER TABLE public.bookings

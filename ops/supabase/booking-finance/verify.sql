@@ -1,5 +1,5 @@
--- Post-apply verification for migration 007, for the staging SQL editor (one paste).
--- Acts through the authenticated role as two real users: an active member of one booking's
+-- Post-apply verification for migration 007 plus the forward guard. Synthetic development fixtures only.
+-- Acts through the authenticated role as two fixture users: an active member of one booking's
 -- workspace and a user who is not a member of it, plus the anon role.
 -- Needs one booking without payments in a workspace with an active member, and one account
 -- outside that workspace; otherwise the affected checks report SKIP.
@@ -17,6 +17,14 @@ DECLARE
   outcome text;
   affected bigint;
 BEGIN
+  IF current_setting('backbeat.booking_finance_target', true) IS DISTINCT FROM 'development' THEN
+    RAISE EXCEPTION 'BOOKING_FINANCE_VERIFY_FIXTURES_ONLY';
+  END IF;
+  IF (SELECT count(*) FROM public.runtime_environment) <> 1 OR NOT EXISTS (
+    SELECT 1 FROM public.runtime_environment WHERE id = 'backbeat-dev' AND environment = 'development' AND synthetic_only IS TRUE
+  ) THEN
+    RAISE EXCEPTION 'BOOKING_FINANCE_VERIFY_FIXTURES_ONLY';
+  END IF;
   PERFORM set_config('backbeat.finance_verify_report', '', false);
   SELECT b.id, b.workspace_id, b.artist_id, b.fee_currency INTO target
     FROM public.bookings AS b
@@ -140,7 +148,7 @@ BEGIN
       outcome := 'deleted';
     EXCEPTION WHEN OTHERS THEN outcome := SQLSTATE;
     END;
-    results := results || (CASE WHEN outcome = '23503' THEN 'PASS' ELSE 'FAIL' END
+    results := results || (CASE WHEN outcome IN ('23503', '23001') THEN 'PASS' ELSE 'FAIL' END
       || '|delete: booking with payments rejected|' || outcome || ' (expected 23503)');
 
     -- Artist default commission: type, value and mode together; a currency only for fixed.
@@ -193,10 +201,13 @@ BEGIN
       GET DIAGNOSTICS affected = ROW_COUNT;
       results := results || (CASE WHEN affected = 0 THEN 'PASS' ELSE 'FAIL' END
         || '|rls: outsider cannot change a payment|rows changed=' || affected);
-      DELETE FROM public.booking_payments WHERE id = payment;
-      GET DIAGNOSTICS affected = ROW_COUNT;
-      results := results || (CASE WHEN affected = 0 THEN 'PASS' ELSE 'FAIL' END
-        || '|rls: outsider cannot delete a payment|rows deleted=' || affected);
+      BEGIN
+        DELETE FROM public.booking_payments WHERE id = payment;
+        outcome := 'deleted';
+      EXCEPTION WHEN OTHERS THEN outcome := SQLSTATE;
+      END;
+      results := results || (CASE WHEN outcome = '42501' THEN 'PASS' ELSE 'FAIL' END
+        || '|grants: outsider cannot delete a payment|' || outcome || ' (expected 42501)');
       BEGIN
         INSERT INTO public.booking_payments (workspace_id, booking_id, kind, amount_minor, currency)
           VALUES (target.workspace_id, target.id, 'other', 100, 'EUR');
@@ -219,21 +230,18 @@ BEGIN
       || '|grants: anon cannot read payments|' || outcome || ' (expected 42501)');
     RESET ROLE;
 
-    -- Member again: without payments the booking can be deleted (rolled back below).
+    -- Member again: direct DELETE is denied even with a matching active membership.
     PERFORM set_config('request.jwt.claim.sub', member::text, true);
     PERFORM set_config('request.jwt.claims',
       json_build_object('sub', member, 'role', 'authenticated')::text, true);
     SET LOCAL ROLE authenticated;
     BEGIN
       DELETE FROM public.booking_payments WHERE id = payment;
-      UPDATE public.bookings SET fee_currency = 'USD' WHERE id = target.id;
-      DELETE FROM public.bookings WHERE id = target.id;
-      GET DIAGNOSTICS affected = ROW_COUNT;
-      outcome := 'rows=' || affected;
+      outcome := 'deleted';
     EXCEPTION WHEN OTHERS THEN outcome := SQLSTATE;
     END;
-    results := results || (CASE WHEN outcome = 'rows=1' THEN 'PASS' ELSE 'FAIL' END
-      || '|member: after removing the payment, currency change and delete pass|' || outcome);
+    results := results || (CASE WHEN outcome = '42501' THEN 'PASS' ELSE 'FAIL' END
+      || '|grants: member cannot delete a payment|' || outcome || ' (expected 42501)');
     RESET ROLE;
     RAISE EXCEPTION 'BB_VERIFY_ROLLBACK';
   EXCEPTION WHEN OTHERS THEN

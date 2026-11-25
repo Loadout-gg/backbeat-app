@@ -1,6 +1,6 @@
 # Booking finance (P2)
 
-P2 of the reference plan `ARCH-20261114-booking-domain` r02, implemented under the staging delegation of 2026-11-21 (superseded on 2026-11-23 by `GOV-STAGING-20261123`; the reserved parts of this PR now need Alberto's authorization) with Simone's decisions 1–13 of 2026-11-23 (see the [decision register](agents/decision-register.md), row `BOOKING-P2-FINANCE`). Staging only: production apply and promotion to `main` remain Alberto's.
+Unmerged #33 candidate: P2 of the reference plan `ARCH-20261114-booking-domain` r02. The [decision register](agents/decision-register.md) records Simone's proposed behavior, not Alberto's approval. Its [current authority](agents/decision-register.md#governance-correction-and-supersession) controls: migration 007, RLS and financial data access, deletes/cascades and destructive rollback require Alberto's approval even on staging. Production apply and promotion to `main` are separate.
 
 ## Contract
 
@@ -32,7 +32,9 @@ Nothing derived is stored: no totals, no commission amount, no balance, no paid 
 - **Commission**: per booking, edited in the Financial tab and saved with "Update booking". Per artist, a default on the profile: type, value and mode (decision 13), plus its own currency when the type is fixed (decision 12). Later changes of the default never rewrite existing bookings.
 - **Prefill on a new booking**: a percent default is copied by `createBooking` with the artist's mode. A fixed default is in its own currency and a booking is created without a fee, so it cannot be copied at creation: the booking editor prefills it (type, amount, mode) when a booking that has no saved fee and no saved commission gets a fee in the default currency, and it is stored by that "Update booking". With a fee in any other currency nothing is prefilled and the editor shows a neutral notice; nothing is converted and no amount is reinterpreted in another currency's minor units (a EUR default never becomes yen). An untouched prefill is withdrawn if the fee currency is changed again before saving. While a booking has a saved fee the default is not offered, so a commission removed from a priced booking stays removed. The prefill is never silent: it fills the visible commission fields, shows a notice and can be changed or cleared before saving. The rule is `defaultCommissionPrefill` in `lib/booking-finance.ts`.
 - **Taxes**: one free-text note per booking. No tax is calculated.
-- **Visibility**: every active member of the workspace reads and writes payments, commission and tax note. `booking_payments` has the same `FOR ALL` active-member policy and explicit `REVOKE`/`GRANT` as the tables of migration 001; no role-specific policy.
+- **Visibility**: active members retain visibility of payments, commission and tax note. For payments the active-member policy is unchanged, with table-level SELECT/INSERT/UPDATE and no ordinary DELETE. No new role, grant, or change to tenant membership rules.
+- **Payment history**: paid rows cannot be overwritten or unmarked (`BB006`). Open rows still accept ordinary edits and the first paid date, but the payment ID and its parent cannot change. Void and correction are unavailable pending a decision on authority, audit history and totals. The existing record continues to count as paid; there is no backfill.
+- **Retry**: the open new-payment draft keeps one ID through tab changes, failure and retry. A primary-key conflict confirms success only if the selected workspace and booking contain an exact normalized match. It never overwrites another row, and two distinct new drafts can have identical amounts. A full reload, abandoned draft, new tab or distinct ID is not deduplicated; check the booking before starting another payment after an uncertain response.
 - **Out of scope**: invoicing, online payments, FX, file storage, promoter accounts.
 
 ### Known behaviour
@@ -46,13 +48,13 @@ Nothing derived is stored: no totals, no commission amount, no balance, no paid 
 
 | Piece | Behaviour |
 |---|---|
-| `lib/actions/booking-payments.ts` | `getBookingPayments` (workspace-scoped complete read, explicit columns, rejects on failure), `createBookingPayment`, `updateBookingPayment` (allowlist without currency, booking or workspace), `deleteBookingPayment`. Zod validation before any backend access, affected-row witness, fixed error copy; provider and database messages are logged server-side only |
-| `lib/actions/bookings.ts` | `updateBooking` accepts the commission triple and `tax_note`, refuses a fee currency change while payments exist, and maps `BB005` and the commission-within-fee CHECK to fixed copy; `deleteBooking` maps `23503` to fixed copy; `createBooking` reads the artist inside the workspace and copies a percent default commission with its mode; `getBooking` also returns the artist's default commission for the editor prefill |
+| `lib/actions/booking-payments.ts` | Scoped read, create and update. Legacy `deleteBookingPayment` denies without a read or write. Validation and row witnesses precede success. Provider messages are not returned to the client |
+| `lib/actions/bookings.ts` | `updateBooking` accepts the commission triple and `tax_note`, refuses a fee currency change while payments exist, and maps `BB005` and the commission-within-fee CHECK to fixed copy; `deleteBooking` maps the named payment FK (`23503`/`23001`) to fixed copy; `createBooking` reads the artist inside the workspace and copies a percent default commission with its mode; `getBooking` also returns the artist's default commission for the editor prefill |
 | `lib/actions/artists.ts` | `updateArtistDefaultCommission(id, { type, value, mode, currency } \| null)` |
-| Booking editor, Financial tab | fee (currency locked while payments exist), commission control, tax note, totals (booking fee, agency commission, promoter total, paid, outstanding or overpaid, artist net), payments list with add, edit, mark as paid today / not paid and delete with confirmation. Totals use saved values only |
+| Booking editor, Financial tab | fee, commission, tax note and totals from saved values. Payments: add and edit unpaid entries, mark paid, and read the original paid record. No delete, unmark, void or correction control |
 | Artist profile, Pricing card | default agency commission: type, value, mode, and for a fixed amount its currency (EUR preselected); the amount is entered in the minor units of the chosen currency, so JPY takes whole numbers |
 
-SQLSTATE raised by the triggers: `BB004` payment currency differs from the booking fee currency or the booking has no fee, `BB005` fee currency changed or cleared while payments exist.
+SQLSTATEs: `BB004` invalid payment currency for this booking, `BB005` fee currency changed or cleared while payments exist, `BB006` attempted overwrite of payment history or identity.
 
 ### Ready for the next PR: payment receipts
 
@@ -62,35 +64,28 @@ SQLSTATE raised by the triggers: `BB004` payment currency differs from the booki
 
 | File | Purpose |
 |---|---|
-| `migrations/007_booking_finance.sql` | columns, `booking_payments`, triggers, RLS, grants, policy |
+| `migrations/007_booking_finance.sql` | clean install only, with no DELETE grant. Refuses existing or partially installed finance relations/columns |
+| `ops/supabase/booking-finance/007-forward-payment-history.sql` | separate forward candidate: adds an invoker guard to an existing 007 with DELETE already denied. No grants, DML, or changes to cascade |
 | `ops/supabase/booking-finance/preflight.sql` | read-only state report before applying (one SELECT) |
 | `ops/supabase/booking-finance/postflight.sql` | read-only catalog checks after applying (one SELECT, last row is the summary) |
-| `ops/supabase/booking-finance/verify.sql` | 22 behaviour checks as a member, an outsider and `anon`; every write is rolled back; the result is the final SELECT |
+| `ops/supabase/booking-finance/verify.sql` | development fixtures only; 22 checks as a member, an outsider and `anon`, rolling back its writes. Never run on hosted |
 | `ops/supabase/booking-finance/rollback.sql` | removes the 007 schema after copying its data to two backup tables |
-| `tests/sql/booking-finance.sql` | executed SQL contract test for a throwaway local PostgreSQL 17 |
+| `tests/sql/booking-finance.sql` | optional SQL contract for a throwaway PostgreSQL 17 fixture, not CI |
 
-The migration and the rollback are idempotent and refuse to run without `backbeat.booking_finance_target` set to `development` or `hosted:hupkygptbvnzrihrlcxv` (staging). The target must match the synthetic marker of the database it names, exactly as for 005/006 (see [booking lifecycle](booking-lifecycle.md)): a missing marker table (production shape), a marker of the other target, zero or several rows are all refused. 004 and 005 are required. The setting is an accidental-target guard, not identity proof. A production apply needs Alberto's decision and a guard change.
+The target must have the corresponding synthetic marker; production is refused. The forward file additionally verifies staging's exact cluster identity, the 007 shape and effective payment ACL, and aborts transactionally if a prerequisite is missing. It does not repair drift or repeat the existing containment. Versioned separately in `ops` to avoid occupying the next product migration number.
 
-## Order
+## Proposed rollout order; not execution authorization
 
-Schema first, then code. The current staging code runs unchanged on the migrated schema. The new code reads `booking_payments` and the new columns, so it must not be merged before 007 is applied on staging.
-
-1. Preflight: expect marker class `staging`, `007 objects present` = `0/11`, last row `READY_FOR_007`.
-2. Apply 007: `SET backbeat.booking_finance_target = 'hosted:hupkygptbvnzrihrlcxv';` followed by the file content, in one run.
-3. Postflight: last row `SUMMARY | ALL PASS | 15/15`.
-4. Verify: first row `SUMMARY | ALL PASS | pass=22 fail=0 skip=0`. `INCOMPLETE` means missing test data (a booking without payments in a workspace with an active member, and an account outside that workspace); `FAILED` means do not merge.
-5. Merge the PR to `staging`, verify the deployment commit.
-
-The SQL editor shows only the result of the last statement; each file ends with one summarizing SELECT for that reason.
+- **Already deployed 007 (including staging)**: never run either version of 007 again. Use read-only catalog evidence for the existing 007 and DELETE containment. Only the separate forward file is a candidate for owner-authorized application; confirm its catalog postconditions before enabling the matching frontend. Do not run `verify.sql` on hosted.
+- **Fresh synthetic database**: preflight requires `0/11` and `READY_FOR_007`. Use corrected 007 once, then the forward file, then catalog postflight (`15/15`). Behaviour verification is development-fixture only (`22` passes, zero fail/skip). Do not treat this sequence as authorization to create or modify an environment.
 
 ## Rollback
 
-1. Redeploy the previous application version (revert the merge through a PR to `staging`). It runs unchanged on the 007 schema, so this step alone is a complete application rollback and loses nothing.
-2. Only to remove the schema as well: run `rollback.sql` with the same target prefix. It copies every payment to `public.booking_payments_rollback_backup` and every booking commission, tax note and artist default to `public.booking_finance_rollback_backup` (RLS on, no grants, no policies), then drops `booking_payments`, the two trigger functions and the eight columns. A repeated rollback overwrites the backup of a row that still exists with its current values. The lifecycle schema of 005/006 is untouched.
-3. To go forward again: apply 007. There is no restore script; the backup tables keep the removed values until they are copied back or dropped by hand.
+1. Prefer qualifying a frontend revert to the pre-#33 staging code while retaining the schema, history guard and DELETE containment. Do not revert to the unsafe intermediate finance tree.
+2. `rollback.sql` is destructive and not a default reversal. It backs up rows and drops payment schema, trigger functions and finance columns. The backups' declared privileges do not prove technical/inherited access boundaries; absent or now-blank rows may leave older backup values. There is no restore script. Retention, audit access, verified restoration and any destructive authorization remain separate gates.
 
 ## Tests
 
 - `pnpm test`: commission and totals math (JPY, half-up rounding, values above `Number.MAX_SAFE_INTEGER`), currency rule, parsers and formatters, Zod allowlists, server actions (scope, witness, fixed copy, fee currency lock, delete mapping, default prefill), the default prefill rule (currency match, mismatch, JPY), the Financial tab and the artist default commission, static contracts of 007 and its ops files.
-- `PG_BIN=<postgresql-17 bin> sh tests/sql/run-local.sh`: applies 001–007 to a throwaway local cluster and executes the guard, idempotency, untouched existing rows, postflight and verify, currency rule, fee currency lock, delete rules, commission and tax note CHECKs, workspace isolation, inactive membership, `anon`, rollback and re-apply. The `auth` schema there is a stub, so it does not prove hosted Auth or PostgREST behaviour. Not part of CI.
+- `tests/sql/run-local.sh` is an optional socket-based PostgreSQL 17 runner, not part of CI. The local review instead used in-memory PostgreSQL WASM and a synthetic Auth stub. Neither replaces target catalog readback or proves hosted Auth or PostgREST behaviour.
 - `tests/integration` and `tests/e2e` need an authorized synthetic stack.

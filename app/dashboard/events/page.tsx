@@ -40,7 +40,7 @@ export default async function EventsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Events</h1>
-          <p className="text-sm text-muted-foreground">Manage bookings and performances</p>
+          <p className="text-sm text-muted-foreground">The events you create for your artists</p>
         </div>
         <Button asChild>
           <Link href="/dashboard/events/new">

@@ -143,7 +143,7 @@ it.each([
     expect((screen.getByLabelText("Select date") as HTMLInputElement).value).toBe("2030-01-03")
     expect((screen.getByRole("button", { name: "Saving..." }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.queryByRole("alert")).toBeNull()
-    expect(screen.queryByText(/Booking successfully added/)).toBeNull()
+    expect(screen.queryByText(/Booking saved for/)).toBeNull()
     expect(router.push).not.toHaveBeenCalled()
     expect(onOpenChange).not.toHaveBeenCalled()
 
@@ -154,7 +154,7 @@ it.each([
       })
     })
     expect(screen.getByText(nextArtist.stage_name, { exact: true })).toBeTruthy()
-    fireEvent.click(screen.getByRole("button", { name: "Start event setup" }))
+    fireEvent.click(screen.getByRole("button", { name: "Open booking" }))
     expect(router.push).toHaveBeenCalledExactlyOnceWith("/dashboard/bookings/current-booking")
     expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false)
   },
@@ -183,7 +183,7 @@ it.each(["success", "thrown"] as const)(
 
     view.rerender(<NewBookingModal {...props} />)
     expect((screen.getByLabelText("Select date") as HTMLInputElement).value).toBe("")
-    expect(screen.queryByText(/Booking successfully added/)).toBeNull()
+    expect(screen.queryByText(/Booking saved for/)).toBeNull()
     expect(screen.queryByRole("alert")).toBeNull()
   },
 )
@@ -244,7 +244,7 @@ it("BB-09: rejects mismatched response identity rather than presenting a mixed c
   enterDate("2030-01-02")
   submit()
   expect((await screen.findByRole("alert")).textContent).toContain("Unable to confirm")
-  expect(screen.queryByRole("button", { name: "Start event setup" })).toBeNull()
+  expect(screen.queryByRole("button", { name: "Open booking" })).toBeNull()
   expect(router.push).not.toHaveBeenCalled()
 })
 
