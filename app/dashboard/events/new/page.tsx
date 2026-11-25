@@ -89,13 +89,13 @@ export default function NewEventPage() {
     <div className="space-y-6">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild>
-          <Link href="/dashboard/events">
-            <ArrowLeft className="h-4 w-4" />
+          <Link href="/dashboard/events" aria-label="Back to events">
+            <ArrowLeft aria-hidden="true" className="h-4 w-4" />
           </Link>
         </Button>
         <div>
           <h1 className="text-2xl font-semibold">New event</h1>
-          <p className="text-sm text-muted-foreground">Create a new booking or performance</p>
+          <p className="text-sm text-muted-foreground">Create an event for an artist</p>
         </div>
       </div>
 
@@ -137,7 +137,7 @@ export default function NewEventPage() {
             <div className="space-y-2">
               <Label htmlFor="status">Status</Label>
               <Select value={selectedStatus} onValueChange={setSelectedStatus} disabled={isLoading}>
-                <SelectTrigger>
+                <SelectTrigger id="status">
                   <SelectValue placeholder="Select status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -151,7 +151,7 @@ export default function NewEventPage() {
             <div className="space-y-2">
               <Label htmlFor="artist">Artist</Label>
               <Select value={selectedArtist} onValueChange={setSelectedArtist} disabled={isLoading || lookupState !== "ready"}>
-                <SelectTrigger>
+                <SelectTrigger id="artist">
                   <SelectValue placeholder="Select artist (optional)" />
                 </SelectTrigger>
                 <SelectContent>
@@ -174,7 +174,7 @@ export default function NewEventPage() {
               </div>
               {/* "none" is the explicit empty choice. Radix reports "" while a just-added option is still registering; ignore it. */}
               <Select value={selectedPromoter} onValueChange={(value) => { if (value) setSelectedPromoter(value) }} disabled={isLoading || lookupState !== "ready"}>
-                <SelectTrigger>
+                <SelectTrigger id="promoter">
                   <SelectValue placeholder="Select promoter (optional)" />
                 </SelectTrigger>
                 <SelectContent>

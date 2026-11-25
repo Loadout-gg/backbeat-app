@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { BOOKING_FEE_CURRENCIES, parseBookingFee, formatBookingFeeInput, type BookingFeeError } from "@/lib/booking-fee";
 import { createBookingSchema } from "@/lib/booking-validation";
 import Link from "next/link";
@@ -14,10 +14,10 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
-import { updateBooking, updateBookingStatus, deleteBooking, type Booking, type BookingWithArtist } from "@/lib/actions/bookings";
+import { updateBooking, updateBookingStatus, deleteBooking, type BookingWithArtist } from "@/lib/actions/bookings";
 import {
-  BOOKING_STATUS_LABELS, BOOKING_TRANSITION_LABELS, bookingStatusBadgeVariant, findSameDayBookings,
-  holdRank, holdRankLabel, isHoldExpired, isPastBookingDate, sameDayWarning,
+  BOOKING_STATUS_LABELS, BOOKING_TRANSITION_LABELS, bookingStatusBadgeVariant,
+  holdRankLabel, isHoldExpired, isPastBookingDate, sameDayWarning,
 } from "@/lib/booking-display";
 import { allowedBookingTransitions, type BookingStatus } from "@/lib/booking-status";
 import { formatArtistBaseRate } from "@/lib/artist-base-rate";
@@ -28,8 +28,10 @@ import { BookingEventLink } from "./booking-event-link";
 
 interface EventBookingClientProps {
   booking: BookingWithArtist;
-  /** This artist's bookings from the existing scoped read; null when that read failed. */
-  artistBookings?: readonly Booking[] | null;
+  /** Counts of other non-cancelled bookings by date; null when the scoped read failed. */
+  sameDayBookingCounts?: Readonly<Partial<Record<string, number>>> | null;
+  /** Server-calculated priority for the persisted hold, without peer booking records. */
+  holdPosition?: Readonly<{ rank: number; total: number }> | null;
   /** Server "today" (configured calendar zone). Without it, completion is not offered. */
   today?: string;
   /** Promoter directory options; null when that read failed. Omitted: no promoter selector. */
@@ -37,6 +39,47 @@ interface EventBookingClientProps {
   /** Event created from this booking; null = none, "unavailable" = read failed. Omitted: no event section. */
   linkedEvent?: LinkedEvent | null | "unavailable";
 }
+
+/** Saved values the form started from; a field is sent only when the draft differs from it. */
+type EditBaseline = {
+  date: string; startTime: string; durationMinutes: number; notes: string;
+  venueName: string; venueAddress: string; contactNameMain: string; contactPhoneMain: string; contactEmailMain: string;
+  feeAmountMinor: number | null; feeCurrency: string | null;
+  promoterId: string;
+};
+
+function editBaseline(booking: BookingWithArtist): EditBaseline {
+  return {
+    date: booking.date,
+    startTime: booking.start_time ? booking.start_time.slice(0, 5) : "10:30",
+    durationMinutes: booking.duration_minutes || 0,
+    notes: booking.notes || "",
+    venueName: booking.venue_name ?? "",
+    venueAddress: booking.venue_address ?? "",
+    contactNameMain: booking.contact_name_main ?? "",
+    contactPhoneMain: booking.contact_phone_main ?? "",
+    contactEmailMain: booking.contact_email_main ?? "",
+    feeAmountMinor: booking.fee_amount_minor,
+    feeCurrency: booking.fee_currency,
+    promoterId: booking.promoter_id ?? "",
+  };
+}
+
+// Server trims these fields and stores blank as null; whitespace-only edits are not changes.
+const sameText = (draft: string, saved: string) => draft.trim() === saved.trim();
+
+/** Calendar-date label for a stored YYYY-MM-DD value, independent of the viewer zone. */
+function savedDateLabel(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  return new Date(`${value}T00:00:00Z`).toLocaleDateString("en-GB", {
+    timeZone: "UTC", day: "numeric", month: "short", year: "numeric",
+  });
+}
+
+const UNCONFIRMED_SAVE =
+  "Unable to save booking. The result could not be confirmed. Your changes are still on this page; open this booking in a new tab to check what was saved before saving again.";
+const UNAVAILABLE_SAVE =
+  "This booking was not found in your current workspace, so the changes were not saved. It may have been deleted or be outside your access. Your changes are still on this page; check Bookings before creating it again.";
 
 const TABS = [
   "Performance",
@@ -47,7 +90,7 @@ const TABS = [
   "Artist contacts",
 ] as const;
 
-export function EventBookingClient({ booking, artistBookings, today, promoters, linkedEvent }: EventBookingClientProps) {
+export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition, today, promoters, linkedEvent }: EventBookingClientProps) {
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
   const saveInFlight = useRef(false);
@@ -61,10 +104,27 @@ export function EventBookingClient({ booking, artistBookings, today, promoters, 
   const deleteInFlight = useRef(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const deleteQuestionId = useId();
+  const deleteTriggerRef = useRef<HTMLButtonElement>(null);
+  const deleteCancelRef = useRef<HTMLButtonElement>(null);
+  // Keyboard flow: opening moves focus to Cancel (the safe choice); Cancel returns it to Delete.
+  const deleteFocusAfterRender = useRef<"cancel" | "trigger" | null>(null);
+  useEffect(() => {
+    const target = deleteFocusAfterRender.current;
+    deleteFocusAfterRender.current = null;
+    if (target === "cancel") deleteCancelRef.current?.focus();
+    if (target === "trigger") deleteTriggerRef.current?.focus();
+  }, [showDeleteConfirm]);
   const [pendingStatus, setPendingStatus] = useState<BookingStatus | null>(null);
   const statusInFlight = useRef(false);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [statusNotice, setStatusNotice] = useState("");
+  const [statusChangedTo, setStatusChangedTo] = useState<BookingStatus | null>(null);
+  const baseline = useRef<EditBaseline | null>(null);
+  if (baseline.current === null) baseline.current = editBaseline(booking);
+  // Fields sent by a save whose outcome was not confirmed: their stored value is unknown,
+  // so they are resent with the current draft until a save is confirmed.
+  const uncertainFields = useRef(new Set<string>());
   const [holdExpiresOn, setHoldExpiresOn] = useState(booking.hold_expires_on ?? "");
 
   // Form state - Performance tab
@@ -105,8 +165,7 @@ export function EventBookingClient({ booking, artistBookings, today, promoters, 
   const [contactNameSecondary, setContactNameSecondary] = useState("");
   const [contactPhoneSecondary, setContactPhoneSecondary] = useState("");
   const [contactEmailSecondary, setContactEmailSecondary] = useState("");
-  const savedPromoterId = booking.promoter_id ?? "";
-  const [promoterId, setPromoterId] = useState(savedPromoterId);
+  const [promoterId, setPromoterId] = useState(booking.promoter_id ?? "");
 
   const artist = booking.artist;
   const artistDisplayName = artist.stage_name || artist.name || "Unknown";
@@ -145,18 +204,17 @@ export function EventBookingClient({ booking, artistBookings, today, promoters, 
     return `${endH.toString().padStart(2, "0")}:${endM.toString().padStart(2, "0")}`;
   };
 
-  // Non-blocking notice for the draft date; the current booking and cancelled ones are excluded.
-  const sameDayCount = artistBookings
-    ? findSameDayBookings(artistBookings, { artistId: booking.artist_id, date: bookingDate, excludeId: booking.id }).length
-    : 0;
-  const sameDayNotice = artistBookings === null
+  // Non-blocking notice for the draft date, using only server-projected counts.
+  const sameDayCount = sameDayBookingCounts?.[bookingDate] ?? 0;
+  const draftDateChanged = bookingDate !== booking.date;
+  const sameDayNotice = sameDayBookingCounts === null
     ? "Other bookings for this date could not be checked."
     : sameDayCount > 0 ? sameDayWarning(sameDayCount) : null;
 
   // Status is always read from the server copy of the booking, never from a local draft.
   const statusTargets = today ? allowedBookingTransitions(booking.status, booking.date, today) : [];
   const holdExpired = today ? isHoldExpired(booking, today) : false;
-  const holdPriority = holdRankLabel(artistBookings ? holdRank(artistBookings, booking) : null);
+  const holdPriority = holdRankLabel(holdPosition ?? null);
   const completionHint = booking.status === "confirmed" && !!today && isPastBookingDate(booking.date, today);
   const savedHoldExpiry = booking.hold_expires_on ?? "";
 
@@ -166,6 +224,7 @@ export function EventBookingClient({ booking, artistBookings, today, promoters, 
     setPendingStatus(target);
     setStatusError(null);
     setStatusNotice("");
+    setStatusChangedTo(null);
     try {
       const result = await updateBookingStatus(booking.id, target, booking.status);
       if (!result.success) {
@@ -174,6 +233,7 @@ export function EventBookingClient({ booking, artistBookings, today, promoters, 
       }
       setHoldExpiresOn("");
       setStatusNotice(`Status changed to ${BOOKING_STATUS_LABELS[target].toLowerCase()}.`);
+      setStatusChangedTo(target);
       router.refresh();
     } catch {
       setStatusError("Unable to confirm the status change. Reload the booking before retrying.");
@@ -192,7 +252,9 @@ export function EventBookingClient({ booking, artistBookings, today, promoters, 
       setSaveError("Enter a valid booking date");
       return;
     }
-    const holdExpiryChanged = booking.status === "hold" && holdExpiresOn !== savedHoldExpiry;
+    const uncertain = uncertainFields.current;
+    const holdExpiryChanged = booking.status === "hold" &&
+      (holdExpiresOn !== savedHoldExpiry || uncertain.has("hold_expires_on"));
     if (holdExpiryChanged && holdExpiresOn && !createBookingSchema.shape.date.safeParse(holdExpiresOn).success) {
       setSaveError("Enter a valid hold expiry date");
       return;
@@ -208,30 +270,53 @@ export function EventBookingClient({ booking, artistBookings, today, promoters, 
     const submittedRevision = draftRevision.current;
     setIsSaving(true);
 
+    // Send only what this editor changed since the values it loaded or last saved,
+    // so a concurrent edit to another field is not overwritten with a stale copy.
+    const saved = baseline.current ?? editBaseline(booking);
+    const send = (field: string, changed: boolean) => changed || uncertain.has(field);
+    const feePatch = feeDirty && fee.success && send("fee_amount_minor",
+      fee.data.fee_amount_minor !== saved.feeAmountMinor || fee.data.fee_currency !== saved.feeCurrency)
+      ? fee.data : null;
+    const submitted: EditBaseline = {
+      date: bookingDate, startTime, durationMinutes, notes,
+      venueName, venueAddress, contactNameMain, contactPhoneMain, contactEmailMain,
+      feeAmountMinor: feePatch ? feePatch.fee_amount_minor : saved.feeAmountMinor,
+      feeCurrency: feePatch ? feePatch.fee_currency : saved.feeCurrency,
+      promoterId,
+    };
+
+    const patch = {
+      ...(send("date", bookingDate !== saved.date) ? { date: bookingDate } : {}),
+      ...(feePatch ?? {}),
+      ...(holdExpiryChanged ? { hold_expires_on: holdExpiresOn || null } : {}),
+      ...(send("promoter_id", promoterId !== saved.promoterId) ? { promoter_id: promoterId || null } : {}),
+      ...(send("start_time", startTime !== saved.startTime) ? { start_time: startTime } : {}),
+      ...(send("duration_minutes", durationMinutes !== saved.durationMinutes) ? { duration_minutes: durationMinutes || null } : {}),
+      ...(send("notes", notes !== saved.notes) ? { notes: notes || null } : {}),
+      ...(send("venue_name", !sameText(venueName, saved.venueName)) ? { venue_name: venueName } : {}),
+      ...(send("venue_address", !sameText(venueAddress, saved.venueAddress)) ? { venue_address: venueAddress } : {}),
+      ...(send("contact_name_main", !sameText(contactNameMain, saved.contactNameMain)) ? { contact_name_main: contactNameMain } : {}),
+      ...(send("contact_phone_main", !sameText(contactPhoneMain, saved.contactPhoneMain)) ? { contact_phone_main: contactPhoneMain } : {}),
+      ...(send("contact_email_main", !sameText(contactEmailMain, saved.contactEmailMain)) ? { contact_email_main: contactEmailMain } : {}),
+    };
+
     try {
-      const result = await updateBooking(booking.id, {
-        ...(bookingDate !== booking.date ? { date: bookingDate } : {}),
-        ...(feeDirty && fee.success ? fee.data : {}),
-        ...(holdExpiryChanged ? { hold_expires_on: holdExpiresOn || null } : {}),
-        ...(promoterId !== savedPromoterId ? { promoter_id: promoterId || null } : {}),
-        start_time: startTime,
-        duration_minutes: durationMinutes || null,
-        notes: notes || null,
-        venue_name: venueName,
-        venue_address: venueAddress,
-        contact_name_main: contactNameMain,
-        contact_phone_main: contactPhoneMain,
-        contact_email_main: contactEmailMain,
-      });
+      const result = await updateBooking(booking.id, patch);
       if (!result.success) {
-        setSaveError(result.error || "Unable to save booking. Please try again.");
+        setSaveError(result.error === "Booking not found"
+          ? UNAVAILABLE_SAVE
+          : result.error || "Unable to save booking. Please try again.");
         return;
       }
+      baseline.current = submitted;
+      uncertain.clear();
       setFeeDirty(false);
       setIsSaved(draftRevision.current === submittedRevision);
       router.refresh();
     } catch {
-      setSaveError("Unable to save booking. Please try again.");
+      // The write may have committed: keep these fields in every later save until one is confirmed.
+      for (const field of Object.keys(patch)) uncertain.add(field);
+      setSaveError(UNCONFIRMED_SAVE);
     } finally {
       saveInFlight.current = false;
       setIsSaving(false);
@@ -267,7 +352,6 @@ export function EventBookingClient({ booking, artistBookings, today, promoters, 
 
   return (
     <div className="w-full min-w-0 max-w-5xl mx-auto" onChangeCapture={() => { draftRevision.current += 1; setIsSaved(false); }}>
-      {saveError && <p role="alert" className="mb-4 text-sm text-destructive">{saveError}</p>}
       {/* Card container */}
       <div className="min-w-0 bg-card border border-border rounded-xl shadow-sm">
         {/* Header row */}
@@ -283,9 +367,9 @@ export function EventBookingClient({ booking, artistBookings, today, promoters, 
           <Link
             href="/dashboard/bookings"
             className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-            aria-label="Close"
+            aria-label="Close booking, back to Bookings"
           >
-            <X className="h-5 w-5" />
+            <X aria-hidden="true" className="h-5 w-5" />
           </Link>
         </div>
 
@@ -334,8 +418,26 @@ export function EventBookingClient({ booking, artistBookings, today, promoters, 
             {holdExpired && <Badge variant="destructive">Hold expired</Badge>}
             {holdPriority && <Badge variant="outline">{holdPriority}</Badge>}
           </div>
+          <p id="booking-status-scope" className="text-sm text-muted-foreground">
+            Status changes apply immediately to the saved booking on {savedDateLabel(booking.date)}.
+            Other edits on this page are saved only with Update booking.
+          </p>
+          {draftDateChanged && (
+            <p className="text-sm text-foreground">
+              The booking date below is changed but not saved. Status{holdPriority ? ", hold priority" : ""} and
+              hold expiry still refer to the saved date, {savedDateLabel(booking.date)}.
+            </p>
+          )}
+          {holdExpired && (
+            <p className="text-sm text-muted-foreground">
+              The hold expiry date has passed. The booking stays on hold until you change its status; nothing was cancelled.
+            </p>
+          )}
           {completionHint && (
-            <p className="text-sm text-muted-foreground">This show date has passed. Mark as completed?</p>
+            <p className="text-sm text-muted-foreground">This show date has passed. Mark as completed once the show has taken place.</p>
+          )}
+          {(booking.status === "completed" || statusTargets.includes("completed")) && (
+            <p className="text-sm text-muted-foreground">Completed means the show took place. It does not record a payment.</p>
           )}
           {booking.status === "hold" && (
             <div className="max-w-xs">
@@ -352,7 +454,7 @@ export function EventBookingClient({ booking, artistBookings, today, promoters, 
                 className="h-9 min-w-0 text-sm"
               />
               <p id="booking-hold-expiry-help" className="mt-1.5 text-xs text-muted-foreground">
-                Saved with Update booking. An expired hold is only flagged, never changed automatically.
+                Saved with Update booking. After this date the hold is flagged as expired; it is not cancelled or changed automatically.
               </p>
             </div>
           )}
@@ -379,6 +481,13 @@ export function EventBookingClient({ booking, artistBookings, today, promoters, 
           )}
           {statusError && <p role="alert" className="text-sm text-destructive">{statusError}</p>}
           {statusNotice && <p role="status" className="text-sm text-foreground">{statusNotice}</p>}
+          {statusNotice && statusChangedTo && (
+            <p className="text-sm">
+              <Link href={`/dashboard/bookings?status=${statusChangedTo}`} className="underline underline-offset-4">
+                {`View ${BOOKING_STATUS_LABELS[statusChangedTo].toLowerCase()} bookings`}
+              </Link>
+            </p>
+          )}
         </section>
 
         {linkedEvent !== undefined && (
@@ -420,7 +529,8 @@ export function EventBookingClient({ booking, artistBookings, today, promoters, 
                     />
                     {sameDayNotice && (
                       <p id="booking-same-day" role="status" className="mt-2 text-sm text-muted-foreground">
-                        {sameDayNotice}
+                        {draftDateChanged && <span>{`For the new date ${savedDateLabel(bookingDate)} (not saved yet): `}</span>}
+                        <span>{sameDayNotice}</span>
                       </p>
                     )}
                   </div>
@@ -854,9 +964,9 @@ export function EventBookingClient({ booking, artistBookings, today, promoters, 
               </p>
             )}
             {showDeleteConfirm ? (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm text-muted-foreground">
-                  Are you sure?
+              <div role="group" aria-labelledby={deleteQuestionId} className="flex flex-wrap items-center gap-2">
+                <span id={deleteQuestionId} className="text-sm text-muted-foreground">
+                  Delete this booking?
                 </span>
                 <Button
                   variant="destructive"
@@ -867,9 +977,13 @@ export function EventBookingClient({ booking, artistBookings, today, promoters, 
                   {isDeleting ? "Deleting..." : "Yes, delete"}
                 </Button>
                 <Button
+                  ref={deleteCancelRef}
                   variant="outline"
                   size="sm"
-                  onClick={() => setShowDeleteConfirm(false)}
+                  onClick={() => {
+                    deleteFocusAfterRender.current = "trigger";
+                    setShowDeleteConfirm(false);
+                  }}
                   disabled={isDeleting}
                 >
                   Cancel
@@ -877,18 +991,21 @@ export function EventBookingClient({ booking, artistBookings, today, promoters, 
               </div>
             ) : (
               <Button
+                ref={deleteTriggerRef}
                 variant="outline"
                 onClick={() => {
                   setDeleteError(null);
+                  deleteFocusAfterRender.current = "cancel";
                   setShowDeleteConfirm(true);
                 }}
               >
-                <Trash2 className="h-4 w-4 mr-2" />
+                <Trash2 aria-hidden="true" className="h-4 w-4 mr-2" />
                 Delete
               </Button>
             )}
           </div>
           <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            {saveError && <p role="alert" className="max-w-md text-sm text-destructive">{saveError}</p>}
             <p role="status" aria-live="polite" aria-atomic="true" className="text-sm text-foreground">
               {isSaved ? "Booking saved." : ""}
             </p>

@@ -2,11 +2,11 @@
 
 ## Ownership
 
-Alberto owns architectural choices. Agents may analyze and recommend, but cannot approve their own proposal. An instruction to implement a feature, a deadline, an automated review or a successful prototype does not grant architectural authority. A task that already names an Alberto-approved plan can proceed only within that plan's exact scope.
+Alberto owns architectural choices. Agents may analyze and recommend, but cannot approve their own proposal. An instruction to implement a feature, a deadline, a reported statement, green CI, a merged PR, an automated review or a successful prototype does not grant architectural authority. A task that already names an Alberto-approved plan can proceed only within that plan's exact scope.
 
-## Staging delegation (2026-11-21)
+## Decision authority on staging
 
-Alberto granted Simone full autonomy on `staging` (stated by Simone, 2026-11-21): schema, migrations (additive and destructive), RLS, auth, roles and contracts that stay on `staging` and the staging Supabase project are decided by Simone and need no stop line or request package. Preconditions: PR to `staging`, `Quality` green on the current head, Codex clean, migrations versioned in the repository and described in the PR body (what, why, rollback). Production apply and promotion to `main` remain Alberto's alone; the stop line and package still apply to anything touching `main`, the production database, Vercel/GitHub settings, secrets or billing. The classification table below describes the default for those cases; see `AGENTS.md` for the full rule.
+The broad delegation reported in #25 is historical. See the [decision register](decision-register.md#governance-correction-and-supersession), the [staging point 3 rule](../../AGENTS.md#point-3-functional-visibility-and-security) and the [Git workflow](git-workflow.md). Simone decides functional read/write needs within approved scope. Alberto owns authorization before sensitive expansion, technical enforcement, verification and application. Ordinary migration and production rules are unchanged.
 
 ## Classification is semantic, not a filename rule
 
@@ -21,7 +21,9 @@ A one-line change can alter a trust boundary. Editing an architecture-related fi
 | Add/remove/replace a runtime library, framework, backend, ORM, state-management system, mailer, queue or external service | Architectural decision unless the exact change is already approved |
 | Major runtime/toolchain change, new build strategy, dependency lifecycle allowance, audit waiver or material CI/release change | Architectural decision; never bypass a failing gate to proceed |
 | Routine compatible dependency security patch explicitly assigned, with no new strategy, API or build-policy change | Implementation within that authorization; verify graph, behavior and audits. Escalate any major/API/policy exception |
-| Change database schema, tenancy, ownership, RLS/grants, role semantics, identity/Auth flow, provider behavior or data retention | Architectural/data-policy decision unless already specified in Alberto's plan |
+| Add schema on staging without changing behavior, access, isolation or existing data, within an approved contract | Alberto approves exact bytes and target; Simone may trigger only the verified constrained path. Verify the effective semantics. A new exposed table that requires RLS or grants, or a constraint or trigger that changes writes, is not in this class |
+| Define functional read/write needs by role within approved scope | Simone decides the product need. Before any new or expanded sensitive access, destructive operation or reserved security change is activated, Alberto approves the exact scope. A requirement is not a grant. |
+| Change schema outside that allowance, tenancy, ownership, RLS/grants, roles, identity/Auth, sensitive-data handling, provider behavior or retention; introduce or run a destructive operation | Alberto's exact authorization required; stop and package an unapproved decision |
 | Change a public action/DTO, field meaning, validation acceptance, null/omission semantics, date/money policy or business metric | Contract decision; do not silently choose a new meaning |
 | Introduce a new cross-layer pattern, replace server actions with another transport, move privileged work to the client, or widen client data | Architectural/security decision |
 | Enable a capability that the product currently marks unsupported | Obtain its product/architecture contract first; a visible control is not implementation authority |

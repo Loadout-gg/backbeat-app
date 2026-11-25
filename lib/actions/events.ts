@@ -32,14 +32,14 @@ export type Promoter = {
   created_at: string
 }
 
-// List reads name their columns: never `*`, so public_token and any later column stay on the server.
-const EVENT_LIST_FIELDS = `
-        id, title, date, location, status, artist_id, promoter_id, workspace_id, created_at,
-        artists:artist_id (id, name, stage_name),
-        promoters:promoter_id (id, name, company_name)
-      `
+// List rows carry only what the events list, dashboard and artist profile render.
+// public_token, workspace_id and created_at never leave the server through list reads.
+const EVENT_LIST_COLUMNS = "id,title,date,location,status,artist_id"
+const EVENT_LIST_SELECT = `${EVENT_LIST_COLUMNS},artists:artist_id(id,name,stage_name),promoters:promoter_id(id,name,company_name)`
 
-export type EventWithRelations = Event & {
+export type EventListRow = Pick<Event, "id" | "title" | "date" | "location" | "status" | "artist_id">
+
+export type EventWithRelations = EventListRow & {
   artists: { id: string; name: string; stage_name: string | null } | null
   promoters: { id: string; name: string; company_name: string | null } | null
 }
@@ -60,7 +60,7 @@ export async function listEvents(
   return readCompleteCollection<EventWithRelations>(async (from, to) => {
     let query = supabase
       .from("events")
-      .select(EVENT_LIST_FIELDS, { count: "exact" })
+      .select(EVENT_LIST_SELECT, { count: "exact" })
       .eq("workspace_id", workspaceId)
 
     if (options.artistId !== undefined) {
@@ -88,7 +88,7 @@ export async function listEventsInProgress(): Promise<EventWithRelations[]> {
   return readCompleteCollection<EventWithRelations>(async (from, to) => {
     const { data, error, count } = await supabase
       .from("events")
-      .select(EVENT_LIST_FIELDS, { count: "exact" })
+      .select(EVENT_LIST_SELECT, { count: "exact" })
       .eq("workspace_id", workspaceId)
       .eq("status", "in_progress")
       .order("date", { ascending: true })

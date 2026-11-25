@@ -328,7 +328,7 @@ test('Artists directory finds every workspace artist with truthful controls and 
       const eventsColumn = headers.findIndex(text => /^Events\b/i.test(text.trim()))
       expect(eventsColumn).toBeGreaterThanOrEqual(0)
       await expect(row.locator('td,th').nth(eventsColumn)).toContainText(/unavailable|not available|[—–]|N\/A/i)
-      await expect(page.getByRole('button', { name: /Download CSV/i })).toBeDisabled()
+      await expect(page.getByRole('button', { name: 'Export CSV', exact: true })).toBeEnabled()
       const menu = row.getByRole('button', { name: `Actions for ${longName}`, exact: true })
       await menu.focus()
       await page.keyboard.press('Enter')

@@ -1,5 +1,5 @@
 "use client"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { X, Plus, ChevronRight, FileText, Upload, Trash2, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { createArtist, type CreateArtistInput, type SocialLink } from "@/lib/actions/artists"
 
 const STEPS = [
@@ -96,6 +96,9 @@ export default function NewArtistPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showSuccess, setShowSuccess] = useState(false)
+  // Set once the artist exists; never cleared, so no close path re-arms a second submit.
+  const [savedArtistId, setSavedArtistId] = useState<string | null>(null)
+  const leaving = useRef(false)
   const [newLinkType, setNewLinkType] = useState("")
   const [newLinkUrl, setNewLinkUrl] = useState("")
 
@@ -145,7 +148,7 @@ export default function NewArtistPage() {
   }
 
   const handleSubmit = async () => {
-    if (isLoading || showSuccess) return
+    if (isLoading || savedArtistId !== null) return
     if (!formData.stage_name.trim()) {
       setError("Stage name is required")
       setCurrentStep(1)
@@ -181,6 +184,8 @@ export default function NewArtistPage() {
     try {
       const result = await createArtist(input)
       if (result.success) {
+        // The profile is the next step (it starts a booking with this artist preselected).
+        setSavedArtistId(result.artistId ?? "")
         setShowSuccess(true)
       } else {
         setError(result.error || "Failed to create artist")
@@ -194,9 +199,12 @@ export default function NewArtistPage() {
     }
   }
 
+  // Ok, the X button and Esc all end here: the form stays locked and the user leaves it.
   const handleSuccessClose = () => {
     setShowSuccess(false)
-    router.push("/dashboard/artists")
+    if (leaving.current) return
+    leaving.current = true
+    router.push(savedArtistId ? `/dashboard/artists/${encodeURIComponent(savedArtistId)}` : "/dashboard/artists")
   }
 
   return (
@@ -204,16 +212,16 @@ export default function NewArtistPage() {
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
         <div className="bg-card text-card-foreground rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
           {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b">
+          <div className="flex items-center justify-between gap-3 p-4 border-b sm:p-6">
             <h1 className="text-2xl font-semibold">Add artist</h1>
-            <Button variant="ghost" size="icon" onClick={handleClose}>
-              <X className="h-5 w-5" />
+            <Button variant="ghost" size="icon" onClick={handleClose} aria-label="Close without saving, back to artists">
+              <X aria-hidden="true" className="h-5 w-5" />
             </Button>
           </div>
 
           {/* Stepper */}
-          <div className="bg-muted px-6 py-4">
-            <div className="flex items-center gap-2">
+          <div className="bg-muted px-4 py-4 sm:px-6">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
               {STEPS.map((step, idx) => (
                 <div key={step.number} className="flex items-center">
                   <div
@@ -241,7 +249,7 @@ export default function NewArtistPage() {
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6">
             {error && (
               <div role="alert" className="mb-4 p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md">{error}</div>
             )}
@@ -252,29 +260,35 @@ export default function NewArtistPage() {
                 {/* Artist Info Section */}
                 <section>
                   <h2 className="text-lg font-medium mb-4">Artist info</h2>
-                  <div className="border rounded-lg p-6">
-                    <div className="flex gap-6">
+                  <div className="border rounded-lg p-4 sm:p-6">
+                    <div className="flex flex-col gap-6 sm:flex-row">
                       {/* Image Upload Placeholder */}
                       <div className="flex-shrink-0">
-                        <div className="w-40 h-40 rounded-full bg-border flex items-center justify-center">
-                          <Button variant="secondary" size="sm">
-                            Upload image
-                          </Button>
+                        {/* No image storage exists yet (backlog F7): show the gap, not a dead button. */}
+                        <div className="w-40 h-40 rounded-full bg-border flex items-center justify-center px-4">
+                          <p className="text-center text-xs text-muted-foreground">Image upload is not available yet</p>
                         </div>
                       </div>
 
                       {/* Form Fields */}
                       <div className="flex-1 space-y-4">
                         <div>
-                          <Label htmlFor="stage_name">Stage name</Label>
+                          <Label htmlFor="stage_name">
+                            Stage name
+                            <span aria-hidden="true" className="text-destructive">*</span>
+                          </Label>
                           <Input
                             id="stage_name"
+                            required
+                            aria-required="true"
+                            aria-describedby="stage_name-hint"
                             placeholder="Enter stage name"
                             value={formData.stage_name}
                             onChange={(e) => updateField("stage_name", e.target.value)}
                           />
+                          <p id="stage_name-hint" className="mt-1 text-xs text-muted-foreground">Required. Every other field is optional and can be added later.</p>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                           <div>
                             <Label htmlFor="name">Name</Label>
                             <Input
@@ -311,8 +325,8 @@ export default function NewArtistPage() {
                 {/* Contact Info Section */}
                 <section>
                   <h2 className="text-lg font-medium mb-4">Contact info</h2>
-                  <div className="border rounded-lg p-6">
-                    <div className="grid grid-cols-3 gap-4">
+                  <div className="border rounded-lg p-4 sm:p-6">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                       <div>
                         <Label htmlFor="contact_name">Contact name</Label>
                         <Input
@@ -348,13 +362,13 @@ export default function NewArtistPage() {
                 {/* Pricing Section */}
                 <section>
                   <h2 className="text-lg font-medium mb-4">Pricing</h2>
-                  <div className="border rounded-lg p-6">
-                    <div className="grid grid-cols-3 gap-4">
+                  <div className="border rounded-lg p-4 sm:p-6">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                       <div>
                         <Label htmlFor="fee">Base rate</Label>
                         <div className="flex gap-2">
                           <Select value={formData.currency} onValueChange={(value) => updateField("currency", value)}>
-                            <SelectTrigger className="w-16">
+                            <SelectTrigger id="currency" aria-label="Artist currency" className="w-16">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -378,7 +392,7 @@ export default function NewArtistPage() {
                       <div>
                         <Label htmlFor="travel_fee">Travel fee</Label>
                         <Select value={formData.travel_fee} onValueChange={(value) => updateField("travel_fee", value)}>
-                          <SelectTrigger>
+                          <SelectTrigger id="travel_fee">
                             <SelectValue placeholder="Select an option" />
                           </SelectTrigger>
                           <SelectContent>
@@ -406,12 +420,12 @@ export default function NewArtistPage() {
                 {/* Social Media Section */}
                 <section>
                   <h2 className="text-lg font-medium mb-4">Social media and website</h2>
-                  <div className="border rounded-lg p-6 space-y-4">
-                    <div className="grid grid-cols-3 gap-4 items-end">
+                  <div className="border rounded-lg p-4 sm:p-6 space-y-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 items-end">
                       <div>
-                        <Label>Type of link</Label>
+                        <Label htmlFor="social_link_type">Type of link</Label>
                         <Select value={newLinkType} onValueChange={setNewLinkType}>
-                          <SelectTrigger>
+                          <SelectTrigger id="social_link_type">
                             <SelectValue placeholder="Select an option" />
                           </SelectTrigger>
                           <SelectContent>
@@ -424,8 +438,8 @@ export default function NewArtistPage() {
                         </Select>
                       </div>
                       <div>
-                        <Label>Link</Label>
-                        <Input placeholder="Link" value={newLinkUrl} onChange={(e) => setNewLinkUrl(e.target.value)} />
+                        <Label htmlFor="social_link_url">Link</Label>
+                        <Input id="social_link_url" placeholder="Link" value={newLinkUrl} onChange={(e) => setNewLinkUrl(e.target.value)} />
                       </div>
                       <div />
                     </div>
@@ -440,8 +454,8 @@ export default function NewArtistPage() {
                             <span className="text-sm">
                               {link.type}: {link.url}
                             </span>
-                            <Button variant="ghost" size="icon" onClick={() => removeSocialLink(idx)}>
-                              <Trash2 className="h-4 w-4" />
+                            <Button variant="ghost" size="icon" onClick={() => removeSocialLink(idx)} aria-label={`Remove ${link.type} link`}>
+                              <Trash2 aria-hidden="true" className="h-4 w-4" />
                             </Button>
                           </div>
                         ))}
@@ -458,7 +472,7 @@ export default function NewArtistPage() {
                 {/* Artist Details Section */}
                 <section>
                   <h2 className="text-lg font-medium mb-4">Artist details</h2>
-                  <div className="border rounded-lg p-6 space-y-6">
+                  <div className="border rounded-lg p-4 sm:p-6 space-y-6">
                     <div>
                       <Label htmlFor="overview">About artist</Label>
                       <Textarea
@@ -470,8 +484,8 @@ export default function NewArtistPage() {
                       />
                     </div>
                     <div>
-                      <Label className="mb-3 block">Music genres</Label>
-                      <div className="grid grid-cols-5 gap-3">
+                      <Label id="genres-label" className="mb-3 block">Music genres</Label>
+                      <div role="group" aria-labelledby="genres-label" className="grid grid-cols-5 gap-3">
                         {MUSIC_GENRES.map((genre) => (
                           <div key={genre} className="flex items-center gap-2 border rounded-lg px-3 py-2">
                             <Checkbox
@@ -492,8 +506,8 @@ export default function NewArtistPage() {
                 {/* Equipment Section */}
                 <section>
                   <h2 className="text-lg font-medium mb-4">Equipment</h2>
-                  <div className="border rounded-lg p-6">
-                    <div className="grid grid-cols-2 gap-4">
+                  <div className="border rounded-lg p-4 sm:p-6">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
                         <Label htmlFor="dj_equipment">DJ equipment</Label>
                         <Textarea
@@ -525,19 +539,18 @@ export default function NewArtistPage() {
               <div className="space-y-6">
                 <section>
                   <h2 className="text-lg font-medium mb-4">Documents</h2>
-                  <div className="border rounded-lg p-6">
+                  <div className="border rounded-lg p-4 sm:p-6">
                     {/* Upload Area */}
                     <div className="bg-muted/50 border-2 border-dashed rounded-lg p-12 text-center">
-                      <FileText className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
-                      <p className="text-sm font-medium mb-1">Drag and drop documents here or click to upload</p>
+                      <FileText aria-hidden="true" className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
+                      <p className="text-sm font-medium mb-1">Document upload is not available yet</p>
                       <p className="text-xs text-muted-foreground mb-4">
-                        Supported formats: PDF, DOC, DOCX, JPG, PNG (Max 10MB)
+                        Documents cannot be attached to an artist for now. You can save the artist without them.
                       </p>
                       <Button variant="outline" disabled>
-                        <Upload className="h-4 w-4 mr-2" />
-                        Upload documents
+                        <Upload aria-hidden="true" className="h-4 w-4 mr-2" />
+                        Upload documents (unavailable)
                       </Button>
-                      <p className="text-xs text-muted-foreground mt-2">Coming soon</p>
                     </div>
 
                     {/* Document List (placeholder for future uploads) */}
@@ -549,8 +562,8 @@ export default function NewArtistPage() {
                               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                               <span className="text-sm">{doc.name}</span>
                             </div>
-                            <Button variant="ghost" size="icon">
-                              <Trash2 className="h-4 w-4" />
+                            <Button variant="ghost" size="icon" disabled aria-label={`Remove ${doc.name} (not available yet)`}>
+                              <Trash2 aria-hidden="true" className="h-4 w-4" />
                             </Button>
                           </div>
                         ))}
@@ -606,18 +619,17 @@ export default function NewArtistPage() {
                 {/* Supporting Documentation */}
                 <section>
                   <h2 className="text-lg font-medium mb-4">Supporting documentation</h2>
-                  <div className="border rounded-lg p-6">
+                  <div className="border rounded-lg p-4 sm:p-6">
                     <div className="bg-muted/50 border-2 border-dashed rounded-lg p-12 text-center">
-                      <FileText className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
-                      <p className="text-sm font-medium mb-1">Drag and drop documents here or click to upload</p>
+                      <FileText aria-hidden="true" className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
+                      <p className="text-sm font-medium mb-1">Document upload is not available yet</p>
                       <p className="text-xs text-muted-foreground mb-4">
-                        Supported formats: PDF, DOC, DOCX, JPG, PNG (Max 10MB)
+                        Documents cannot be attached to an artist for now. You can save the artist without them.
                       </p>
                       <Button variant="outline" disabled>
-                        <Upload className="h-4 w-4 mr-2" />
-                        Upload documents
+                        <Upload aria-hidden="true" className="h-4 w-4 mr-2" />
+                        Upload documents (unavailable)
                       </Button>
-                      <p className="text-xs text-muted-foreground mt-2">Coming soon</p>
                     </div>
                   </div>
                 </section>
@@ -626,7 +638,7 @@ export default function NewArtistPage() {
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-3 p-6 border-t bg-muted/50">
+          <div className="flex flex-wrap items-center justify-end gap-3 p-4 border-t bg-muted/50 sm:p-6">
             {currentStep > 1 && (
               <Button variant="outline" onClick={handlePrevious} disabled={isLoading}>
                 Previous
@@ -635,7 +647,7 @@ export default function NewArtistPage() {
             {currentStep < 4 ? (
               <Button onClick={handleNext}>Continue</Button>
             ) : (
-              <Button onClick={handleSubmit} disabled={isLoading || showSuccess}>
+              <Button onClick={handleSubmit} disabled={isLoading || savedArtistId !== null}>
                 {isLoading ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -651,10 +663,11 @@ export default function NewArtistPage() {
       </div>
 
       {/* Success Dialog */}
-      <Dialog open={showSuccess} onOpenChange={setShowSuccess}>
+      <Dialog open={showSuccess} onOpenChange={(open) => { if (!open) handleSuccessClose() }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-xl">Artist successfully added.</DialogTitle>
+            <DialogDescription>Next you will see the artist&apos;s profile, where you can start a booking.</DialogDescription>
           </DialogHeader>
           <div className="flex justify-end pt-4">
             <Button onClick={handleSuccessClose}>Ok</Button>

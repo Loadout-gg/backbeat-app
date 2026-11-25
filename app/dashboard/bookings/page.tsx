@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { unstable_rethrow } from "next/navigation"
-import { getBookings, type Booking } from "@/lib/actions/bookings"
+import { getBookings, type BookingListItem } from "@/lib/actions/bookings"
 import { BookingCard } from "@/components/dashboard/booking-card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -10,7 +10,7 @@ import {
   BOOKING_STATUS_LABELS,
   bookingArtistName,
   bookingStatusBadgeVariant,
-  formatBookingTime,
+  formatBookingTimeRange,
   holdRank,
   holdRankLabel,
   isHoldExpired,
@@ -30,7 +30,7 @@ const FILTERS: { value: BookingStatusFilter; label: string }[] = [
   ...BOOKING_STATUSES.map((status) => ({ value: status, label: BOOKING_STATUS_LABELS[status] })),
 ]
 
-function BookingRow({ booking, all, today }: { booking: Booking; all: readonly Booking[]; today: string }) {
+function BookingRow({ booking, all, today }: { booking: BookingListItem; all: readonly BookingListItem[]; today: string }) {
   const { month, day } = eventDateParts(booking.date)
   // Rank is derived from the complete workspace list, not from the filtered view.
   const priority = holdRankLabel(holdRank(all, booking))
@@ -48,7 +48,7 @@ function BookingRow({ booking, all, today }: { booking: Booking; all: readonly B
         artistName={bookingArtistName(booking.artist)}
         venue={booking.venue_name || ""}
         location={booking.venue_address || ""}
-        time={formatBookingTime(booking.start_time)}
+        time={formatBookingTimeRange(booking.start_time, booking.duration_minutes)}
       />
     </li>
   )
@@ -56,7 +56,7 @@ function BookingRow({ booking, all, today }: { booking: Booking; all: readonly B
 
 export default async function BookingsPage({ searchParams }: BookingsPageProps = {}) {
   const filter = parseBookingStatusFilter((await searchParams)?.status)
-  let bookings: Booking[] = []
+  let bookings: BookingListItem[] = []
   let loadError = false
   try {
     bookings = await getBookings({ failOnError: true })
@@ -98,7 +98,19 @@ export default async function BookingsPage({ searchParams }: BookingsPageProps =
           </>
         )}
         {!loadError && bookings.length === 0 && (
-          <p className="rounded-lg border bg-card p-5 text-sm text-muted-foreground">No bookings in your workspace yet.</p>
+          // No artist count is read here: the way out is valid with or without artists.
+          <div className="space-y-3 rounded-lg border bg-card p-5">
+            <p className="text-sm text-muted-foreground">No bookings in your workspace yet.</p>
+            <p className="text-sm text-muted-foreground">A booking starts from an artist. Add an artist, or open one from Artists and choose New booking.</p>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild size="sm">
+                <Link href="/dashboard/artists/new">Add artist</Link>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <Link href="/dashboard/artists">View artists</Link>
+              </Button>
+            </div>
+          </div>
         )}
         {!loadError && bookings.length > 0 && visible.length === 0 && (
           <p className="rounded-lg border bg-card p-5 text-sm text-muted-foreground">No bookings with this status.</p>

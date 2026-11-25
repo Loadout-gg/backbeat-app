@@ -2,7 +2,7 @@
 
 ## Purpose and authority
 
-This guide gives Simone's agents implementation context without delegating architectural authority. **Alberto decides architecture. Agents implement an authorized task inside an existing contract or an Alberto-approved plan.** An unresolved architectural decision requires a complete decision package, not an improvised implementation.
+**Simone owns product/UX and functional visibility within an approved scope; Alberto owns architecture and reserved security changes.** See the [staging matrix](../../AGENTS.md#staging-decision-authority) and [r03 decision](decisions/GOV-20261123-POINT3-R03.md). A product requirement is not an access grant. Ordinary staging migrations still require Alberto’s approval of the exact bytes and target. Agents implement only within an existing contract or approved plan.
 
 These documents describe source inspected at `41d124e47fcf2463ff30ce7e53e981a4bd862aa9` on 2026-10-26. That is an accepted local remediation baseline, not evidence that a remote branch or production deployment has those bytes. Read the current checkout before each task. Later approved changes can supersede individual contracts; this commit is provenance, not a permanent pin against legitimate development.
 
@@ -20,7 +20,7 @@ The repository-root `AGENTS.md` is the entry point when its exact text has been 
 
 | Concern | Authority | Not an authorization substitute |
 |---|---|---|
-| Architectural choice | Alberto's explicit decision bound to a request revision and scope | Agent recommendation, reviewer GO, framework preference, deadline |
+| Architecture or reserved change | Alberto's explicit decision bound to the request and scope | Reported statement, recommendation, reviewer GO, green CI, merged PR, deadline |
 | Existing implementation | Current source and affected tests, interpreted against approved contracts | A stale milestone paragraph or screenshot |
 | Product/design intent | Current approved product/design records and task requirements | Invented capabilities, demo data, unrelated UI patterns |
 | Effective database/Auth/hosting state | Exact authorized target readback and applicable release evidence | TypeScript types, SQL filenames, localhost, historical setup instructions |
