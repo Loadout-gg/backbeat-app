@@ -429,6 +429,26 @@ it("closes the restored draft without a second save when the reloaded booking al
   expect(mocks.createBookingPayment).toHaveBeenCalledOnce()
   expect(window.sessionStorage.length).toBe(0)
 })
+it("keeps edits made after a lost response as a correction when the recorded payment differs", async () => {
+  mocks.createBookingPayment.mockRejectedValueOnce(new Error("lost response"))
+  await open()
+  await click("Add payment")
+  fireEvent.change(screen.getByLabelText("Payment amount (EUR)"), { target: { value: "150" } })
+  await click("Save new payment")
+  const key = mocks.createBookingPayment.mock.calls[0][2] as string
+  // The first insert committed EUR 150; the user then changed the draft before reloading.
+  fireEvent.change(screen.getByLabelText("Payment amount (EUR)"), { target: { value: "175" } })
+  await reload([{ ...H, id: key, booking_id: "booking-a", kind: "deposit", amount_minor: 15000, currency: "EUR", due_on: null, paid_on: null, note: null }])
+  await financialShown()
+  const form = within(screen.getByRole("group", { name: "Correct payment" }))
+  expect((form.getByLabelText("Payment amount (EUR)") as HTMLInputElement).value).toBe("175")
+  expect(within(screen.getByRole("region", { name: "Payments" })).getByRole("alert").textContent).toMatch(/already saved with other details/)
+  await click("Save correction")
+  const [, input, newKey, replaces] = mocks.createBookingPayment.mock.calls[1]
+  expect(input).toMatchObject({ amount_minor: 17500 })
+  expect(newKey).not.toBe(key)
+  expect(replaces).toBe(key)
+})
 it("ignores a malformed stored draft and drops a cancelled draft from storage", async () => {
   window.sessionStorage.setItem("backbeat:payment-draft:booking-a", JSON.stringify({ operationId: "not-a-uuid", kind: "deposit", amount: "1", dueOn: "", paidOn: "", note: "" }))
   await open()

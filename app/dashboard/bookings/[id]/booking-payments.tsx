@@ -74,6 +74,16 @@ function parseStoredDraft(raw: string | null): Draft | null {
     return null;
   }
 }
+const PAYMENT_SAVED_DIFFERENTLY_MESSAGE =
+  "This payment was already saved with other details. Your changes are kept below as a correction of it: save to replace it, or cancel to keep it as saved.";
+/** Whether a recorded payment holds exactly what the draft would have sent (normalized as the server does). */
+function draftMatches(draft: Draft, payment: BookingPayment): boolean {
+  const amount = parseMoneyAmount(draft.amount, payment.currency, "payment amount", true);
+  const note = draft.note.trim() || null;
+  return amount.success && amount.data === payment.amount_minor && draft.kind === payment.kind
+    && (draft.dueOn || null) === payment.due_on && (draft.paidOn || null) === payment.paid_on
+    && note === payment.note && (draft.replaces?.toLowerCase() ?? null) === (payment.replaces_payment_id ?? null);
+}
 function storeDraft(bookingId: string, draft: Draft | null) {
   try {
     if (draft) window.sessionStorage.setItem(draftStorageKey(bookingId), JSON.stringify(draft));
@@ -108,10 +118,18 @@ export function useBookingPaymentsState(bookingId: string, payments?: readonly B
 
   const inFlight = useRef(false);
   const candidate = localDraft !== undefined ? localDraft : stored;
-  // The lost response did commit: the payment is in the booking, so the draft is done.
-  const committed = !!candidate && busy === null
-    && !!payments?.some((payment) => payment.id === candidate.operationId.toLowerCase());
+  // The lost response did commit: a payment with the draft's key is in the booking.
+  const recorded = candidate && busy === null
+    ? payments?.find((payment) => payment.id === candidate.operationId.toLowerCase()) ?? null : null;
+  // Done only when it holds what the draft holds; edits made after the lost response are kept.
+  const committed = !!candidate && !!recorded && draftMatches(candidate, recorded);
   const [savedKey, setSavedKey] = useState<string | null>(null);
+  if (candidate && recorded && !committed) {
+    // Adjusted during render: keep the edits as a correction of the recorded payment (new key).
+    setLocalDraft({ ...candidate, operationId: crypto.randomUUID(), replaces: recorded.id });
+    setNotice("");
+    setFormError(PAYMENT_SAVED_DIFFERENTLY_MESSAGE);
+  }
   if (committed) {
     // Adjusted during render (no effect): close the draft and report it as saved.
     setLocalDraft(null);
