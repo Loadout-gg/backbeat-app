@@ -141,7 +141,12 @@ export function useBookingPaymentsState(bookingId: string, payments?: readonly B
   const notice = noticeState;
   /** A draft came back after a reload, so the editor can show the Financial tab. */
   const restored = localDraft === undefined && stored !== null;
-  // Storage is the external system: drop the saved draft, unless a newer one replaced it.
+  // Storage is the external system. Keep it equal to the draft in this page, including a draft
+  // rebuilt during render (a reconciled correction gets a new key that must survive a reload).
+  useEffect(() => {
+    if (localDraft && JSON.stringify(localDraft) !== storedRaw) storeDraft(bookingId, localDraft);
+  }, [bookingId, localDraft, storedRaw]);
+  // Drop the saved draft, unless a newer one replaced it.
   useEffect(() => {
     if (savedKey && parseStoredDraft(readStoredRaw(bookingId))?.operationId === savedKey) storeDraft(bookingId, null);
   }, [bookingId, savedKey]);

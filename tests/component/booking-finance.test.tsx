@@ -443,7 +443,17 @@ it("keeps edits made after a lost response as a correction when the recorded pay
   const form = within(screen.getByRole("group", { name: "Correct payment" }))
   expect((form.getByLabelText("Payment amount (EUR)") as HTMLInputElement).value).toBe("175")
   expect(within(screen.getByRole("region", { name: "Payments" })).getByRole("alert").textContent).toMatch(/already saved with other details/)
+  // The reconciled correction and its new key are stored before any submit, so a reload keeps them.
+  const stored = JSON.parse(window.sessionStorage.getItem("backbeat:payment-draft:booking-a")!)
+  expect(stored).toMatchObject({ amount: "175", replaces: key })
+  expect(stored.operationId).not.toBe(key)
+  mocks.createBookingPayment.mockRejectedValueOnce(new Error("lost response"))
   await click("Save correction")
+  await reload([{ ...H, id: key, booking_id: "booking-a", kind: "deposit", amount_minor: 15000, currency: "EUR", due_on: null, paid_on: null, note: null }])
+  await financialShown()
+  await click("Save correction")
+  expect(mocks.createBookingPayment.mock.calls[2]).toEqual(mocks.createBookingPayment.mock.calls[1])
+  expect(mocks.createBookingPayment.mock.calls[2][2]).toBe(stored.operationId)
   const [, input, newKey, replaces] = mocks.createBookingPayment.mock.calls[1]
   expect(input).toMatchObject({ amount_minor: 17500 })
   expect(newKey).not.toBe(key)
