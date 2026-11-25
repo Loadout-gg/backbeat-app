@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 const mocks = vi.hoisted(() => ({
   updateBooking: vi.fn(), updateBookingStatus: vi.fn(), deleteBooking: vi.fn(),
-  createBookingPayment: vi.fn(), updateBookingPayment: vi.fn(),
+  createBookingPayment: vi.fn(), updateBookingPayment: vi.fn(), voidBookingPayment: vi.fn(),
   updateArtistDefaultCommission: vi.fn(), refresh: vi.fn(), push: vi.fn(),
 }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: mocks.refresh, push: mocks.push, back: vi.fn() }) }))
@@ -13,6 +13,7 @@ vi.mock("@/lib/actions/bookings", () => ({
 }))
 vi.mock("@/lib/actions/booking-payments", () => ({
   createBookingPayment: mocks.createBookingPayment, updateBookingPayment: mocks.updateBookingPayment,
+  voidBookingPayment: mocks.voidBookingPayment,
 }))
 vi.mock("@/lib/actions/artists", () => ({ updateArtistDefaultCommission: mocks.updateArtistDefaultCommission }))
 import { EventBookingClient } from "@/app/dashboard/bookings/[id]/event-booking-client"
@@ -29,9 +30,10 @@ const base: BookingWithArtist = {
   duration_minutes: 60, notes: null, status: "confirmed", created_at: "2026-01-02", updated_at: "",
   artist: { id: "artist-a", stage_name: "DJ Moon", name: "Luna", surname: null, location: null, fee: null, currency: "EUR", profile_image_url: null },
 }
-const deposit: BookingPayment = { id: "pay-1", booking_id: "booking-a", kind: "deposit", amount_minor: 30000, currency: "EUR", due_on: "2026-11-01", paid_on: "2026-11-02", note: "bank transfer" }
-const balance: BookingPayment = { id: "pay-2", booking_id: "booking-a", kind: "balance", amount_minor: 70000, currency: "EUR", due_on: "2026-11-20", paid_on: null, note: null }
-const later: BookingPayment = { id: "pay-3", booking_id: "booking-a", kind: "other", amount_minor: 500, currency: "EUR", due_on: "2026-12-30", paid_on: null, note: null }
+const H = { voided_at: null, void_kind: null, void_reason: null, replaces_payment_id: null } as const
+const deposit: BookingPayment = { ...H, id: "pay-1", booking_id: "booking-a", kind: "deposit", amount_minor: 30000, currency: "EUR", due_on: "2026-11-01", paid_on: "2026-11-02", note: "bank transfer" }
+const balance: BookingPayment = { ...H, id: "pay-2", booking_id: "booking-a", kind: "balance", amount_minor: 70000, currency: "EUR", due_on: "2026-11-20", paid_on: null, note: null }
+const later: BookingPayment = { ...H, id: "pay-3", booking_id: "booking-a", kind: "other", amount_minor: 500, currency: "EUR", due_on: "2026-12-30", paid_on: null, note: null }
 
 async function open(overrides: Partial<BookingWithArtist> = {}, payments: readonly BookingPayment[] | null = [], today: string | undefined = TODAY) {
   render(<EventBookingClient booking={{ ...base, ...overrides }} sameDayBookingCounts={{}} today={today} payments={payments} />)
@@ -50,9 +52,10 @@ const click = async (name: string | RegExp, scope = screen) => { await act(async
 
 beforeEach(() => {
   vi.clearAllMocks()
-  for (const action of [mocks.updateBooking, mocks.deleteBooking, mocks.createBookingPayment, mocks.updateBookingPayment, mocks.updateArtistDefaultCommission]) {
+  for (const action of [mocks.updateBooking, mocks.deleteBooking, mocks.createBookingPayment, mocks.updateBookingPayment, mocks.voidBookingPayment, mocks.updateArtistDefaultCommission]) {
     action.mockResolvedValue({ success: true })
   }
+  window.sessionStorage.clear()
 })
 afterEach(cleanup)
 
@@ -224,12 +227,14 @@ it("reuses the new payment identity after a lost response and tab round trip, no
   await click("Save new payment")
   expect(mocks.createBookingPayment.mock.calls[2][2]).not.toBe(first[2])
 })
-it("does not offer hard-delete or a paid correction and retains the original in the totals", async () => {
+it("offers no hard delete and no in-place edit: every payment can only be corrected or voided", async () => {
   await open({}, [deposit, balance])
-  expect(screen.queryAllByRole("button", { name: /^Delete (Deposit|Balance)/ })).toHaveLength(0)
+  expect(screen.queryAllByRole("button", { name: /^(Delete|Edit) (Deposit|Balance)/ })).toHaveLength(0)
   expect(screen.queryByRole("button", { name: "Mark Deposit EUR 300.00 as not paid" })).toBeNull()
-  expect(screen.queryByRole("button", { name: "Edit Deposit EUR 300.00" })).toBeNull()
-  expect(screen.getByRole("button", { name: "Edit Balance EUR 700.00" })).toBeTruthy()
+  for (const name of ["Deposit EUR 300.00", "Balance EUR 700.00"]) {
+    expect(screen.getByRole("button", { name: `Correct ${name}` })).toBeTruthy()
+    expect(screen.getByRole("button", { name: `Void ${name}` })).toBeTruthy()
+  }
   expect(totals()).toMatchObject({ "Paid": "EUR 300.00" })
 })
 it("keeps an unsaved payment draft, its error and the open editor across booking tabs", async () => {
@@ -250,15 +255,16 @@ it("keeps an unsaved payment draft, its error and the open editor across booking
     .toBe("Enter a payment amount with at most two decimals and no grouping separators")
   expect(mocks.createBookingPayment).not.toHaveBeenCalled()
 })
-it("keeps an edit draft across booking tabs and still saves it as an update", async () => {
+it("keeps a correction draft across booking tabs and saves it as a new payment replacing the original", async () => {
   await open({}, [balance])
-  await click("Edit Balance EUR 700.00")
+  await click("Correct Balance EUR 700.00")
   fireEvent.change(screen.getByLabelText("Payment amount (EUR)"), { target: { value: "350" } })
   await goToTab("Travel")
   await goToTab("Financial")
-  expect((within(screen.getByRole("group", { name: "Edit payment" })).getByLabelText("Payment amount (EUR)") as HTMLInputElement).value).toBe("350")
-  await click("Save payment")
-  expect(mocks.updateBookingPayment).toHaveBeenCalledExactlyOnceWith("pay-2", expect.objectContaining({ amount_minor: 35000 }))
+  expect((within(screen.getByRole("group", { name: "Correct payment" })).getByLabelText("Payment amount (EUR)") as HTMLInputElement).value).toBe("350")
+  await click("Save correction")
+  expect(mocks.createBookingPayment).toHaveBeenCalledExactlyOnceWith("booking-a", expect.objectContaining({ amount_minor: 35000, currency: "EUR" }), expect.stringMatching(/^[0-9a-f-]{36}$/), "pay-2")
+  expect(mocks.updateBookingPayment).not.toHaveBeenCalled()
 })
 it("locks the payment editor while a save is pending, so its completion cannot close another editor", async () => {
   let finish: (value: { success: boolean; error?: string }) => void = () => {}
@@ -267,16 +273,15 @@ it("locks the payment editor while a save is pending, so its completion cannot c
   await click("Add payment")
   fireEvent.change(screen.getByLabelText("Payment amount (EUR)"), { target: { value: "10" } })
   await click("Save new payment")
-  // Cancel and Edit cannot replace or close the editor that submitted.
-  for (const name of ["Cancel", "Edit Balance EUR 700.00"]) {
-    expect(screen.getByRole("button", { name }).getAttribute("aria-disabled")).toBe("true")
-    await click(name)
-  }
+  // Cancel cannot close the editor that submitted; no correction or void can start meanwhile.
+  expect(screen.getByRole("button", { name: "Cancel" }).getAttribute("aria-disabled")).toBe("true")
+  await click("Cancel")
+  expect(screen.queryByRole("button", { name: "Correct Balance EUR 700.00" })).toBeNull()
+  expect(screen.queryByRole("button", { name: "Void Balance EUR 700.00" })).toBeNull()
   const form = within(screen.getByRole("group", { name: "New payment" }))
   expect((form.getByLabelText("Payment amount (EUR)") as HTMLInputElement).value).toBe("10")
   expect((form.getByLabelText("Payment amount (EUR)") as HTMLInputElement).disabled).toBe(true)
-  expect(screen.queryByRole("group", { name: "Edit payment" })).toBeNull()
-  expect(screen.queryByText("Delete this payment?")).toBeNull()
+  expect(screen.queryByRole("group", { name: "Correct payment" })).toBeNull()
   // A tab round trip during the request neither unlocks the editor nor allows a second submit.
   await goToTab("Performance")
   await goToTab("Financial")
@@ -307,32 +312,131 @@ it("reports a save that completes while another tab is open when the user return
   expect(within(screen.getByRole("region", { name: "Payments" })).getByRole("status").textContent).toBe("Payment added.")
   expect(screen.getByRole("button", { name: "Add payment" }).getAttribute("aria-disabled")).toBe("false")
 })
-it("edits an unpaid payment without sending a currency or a paid-date clear", async () => {
-  const panel = await open({}, [{ ...deposit, paid_on: null }])
-  await click("Edit Deposit EUR 300.00")
-  const form = within(panel.getByRole("group", { name: "Edit payment" }))
+it("corrects a paid payment as a new payment prefilled from the original, in the fee currency", async () => {
+  const panel = await open({}, [deposit])
+  await click("Correct Deposit EUR 300.00")
+  const form = within(panel.getByRole("group", { name: "Correct payment" }))
   expect((form.getByLabelText("Payment amount (EUR)") as HTMLInputElement).value).toBe("300.00")
-  expect((form.getByLabelText("Paid date (leave empty if not paid)") as HTMLInputElement).value).toBe("")
+  expect((form.getByLabelText("Paid date (leave empty if not paid)") as HTMLInputElement).value).toBe("2026-11-02")
   fireEvent.change(form.getByLabelText("Payment amount (EUR)"), { target: { value: "350" } })
-  fireEvent.change(form.getByLabelText("Paid date (leave empty if not paid)"), { target: { value: "" } })
-  await click("Save payment")
-  expect(mocks.updateBookingPayment).toHaveBeenCalledExactlyOnceWith("pay-1", {
-    kind: "deposit", amount_minor: 35000, due_on: "2026-11-01", note: "bank transfer",
-  })
-  expect(mocks.createBookingPayment).not.toHaveBeenCalled()
+  await click("Save correction")
+  expect(mocks.createBookingPayment).toHaveBeenCalledExactlyOnceWith("booking-a", {
+    kind: "deposit", amount_minor: 35000, due_on: "2026-11-01", paid_on: "2026-11-02", note: "bank transfer", currency: "EUR",
+  }, expect.stringMatching(/^[0-9a-f-]{36}$/), "pay-1")
+  expect(mocks.updateBookingPayment).not.toHaveBeenCalled()
+  expect(within(screen.getByRole("region", { name: "Payments" })).getByRole("status").textContent).toBe("Payment corrected.")
 })
-it("offers no paid shortcut for the payment open in the editor, so a stale draft cannot undo it", async () => {
+it("offers no paid shortcut for the payment being corrected, so a stale draft cannot conflict with it", async () => {
   await open({}, [balance, later])
-  await click("Edit Balance EUR 700.00")
+  await click("Correct Balance EUR 700.00")
   expect(screen.queryByRole("button", { name: "Mark Balance EUR 700.00 as paid today" })).toBeNull()
-  expect(screen.getByText("Open in the editor below")).toBeTruthy()
-  // Other payments keep their shortcut; the edited one gets it back when the editor closes.
+  expect(screen.getByText("Being corrected below")).toBeTruthy()
   expect(screen.getByRole("button", { name: "Mark Other EUR 5.00 as paid today" })).toBeTruthy()
-  fireEvent.change(screen.getByLabelText("Paid date (leave empty if not paid)"), { target: { value: "2026-11-22" } })
-  await click("Save payment")
-  expect(mocks.updateBookingPayment).toHaveBeenCalledExactlyOnceWith("pay-2", expect.objectContaining({ paid_on: "2026-11-22" }))
+  await click("Cancel")
   expect(screen.getByRole("button", { name: "Mark Balance EUR 700.00 as paid today" })).toBeTruthy()
-  expect(screen.queryByText("Open in the editor below")).toBeNull()
+  expect(screen.queryByText("Being corrected below")).toBeNull()
+})
+it("voids a payment with a required reason and keeps it listed", async () => {
+  await open({}, [balance])
+  await click("Void Balance EUR 700.00")
+  const group = within(screen.getByRole("group", { name: "Void Balance EUR 700.00" }))
+  await act(async () => { fireEvent.click(group.getByRole("button", { name: "Void payment" })) })
+  expect(mocks.voidBookingPayment).not.toHaveBeenCalled()
+  expect(within(screen.getByRole("region", { name: "Payments" })).getByRole("alert").textContent).toBe("Enter why this payment is voided")
+  fireEvent.change(group.getByLabelText("Why is it voided? (e.g. event cancelled)"), { target: { value: " Event cancelled " } })
+  await act(async () => { fireEvent.click(group.getByRole("button", { name: "Void payment" })) })
+  expect(mocks.voidBookingPayment).toHaveBeenCalledExactlyOnceWith("pay-2", "Event cancelled")
+  expect(screen.queryByRole("group", { name: "Void Balance EUR 700.00" })).toBeNull()
+  expect(within(screen.getByRole("region", { name: "Payments" })).getByRole("status").textContent).toBe("Payment voided.")
+})
+it("shows voided and corrected payments as history, without actions, and leaves them out of the totals", async () => {
+  const voided = { ...deposit, void_kind: "void", void_reason: "Event cancelled", voided_at: "2026-11-24T10:00:00Z" } as const
+  const corrected = { ...balance, void_kind: "corrected", voided_at: "2026-11-24T11:00:00Z" } as const
+  const replacement = { ...H, id: "pay-4", booking_id: "booking-a", kind: "balance", amount_minor: 65000, currency: "EUR", due_on: null, paid_on: "2026-11-24", note: null, replaces_payment_id: "pay-2" } as const
+  await open({}, [voided, corrected, replacement])
+  expect(screen.getByText("Voided: Event cancelled (2026-11-24). Kept as history; not counted.")).toBeTruthy()
+  expect(screen.getByText("Replaced by a correction on 2026-11-24. Kept as history; not counted.")).toBeTruthy()
+  expect(screen.getByText("Correction of Balance EUR 700.00.")).toBeTruthy()
+  for (const name of ["Deposit EUR 300.00", "Balance EUR 700.00"]) {
+    expect(screen.queryByRole("button", { name: `Correct ${name}` })).toBeNull()
+    expect(screen.queryByRole("button", { name: `Void ${name}` })).toBeNull()
+  }
+  expect(screen.getByRole("button", { name: "Correct Balance EUR 650.00" })).toBeTruthy()
+  expect(totals()).toMatchObject({ "Paid": "EUR 650.00", "Outstanding": "EUR 350.00" })
+})
+
+// --- Task 1: save -> response lost -> page reload -> retry -> exactly one payment ---
+/** A server double that, like booking_payments, keeps one row per id (the idempotency key). */
+function paymentStore() {
+  const rows = new Map<string, unknown>()
+  const insert = (bookingId: string, input: object, operationId: string) => {
+    if (!rows.has(operationId)) rows.set(operationId, { bookingId, ...input })
+  }
+  return { rows, insert }
+}
+const reload = async (payments: readonly BookingPayment[] = []) => {
+  cleanup()
+  await act(async () => { render(<EventBookingClient booking={base} sameDayBookingCounts={{}} today={TODAY} payments={payments} />) })
+}
+const financialShown = () => waitFor(() => expect(screen.getByRole("tab", { name: "Financial", selected: true })).toBeTruthy())
+it("retries with the same key after a lost response and a page reload, so exactly one payment is recorded", async () => {
+  const store = paymentStore()
+  // First attempt commits, then its response is lost.
+  mocks.createBookingPayment.mockImplementationOnce(async (bookingId: string, input: object, key: string) => {
+    store.insert(bookingId, input, key)
+    throw new Error("lost response")
+  })
+  mocks.createBookingPayment.mockImplementation(async (bookingId: string, input: object, key: string) => {
+    store.insert(bookingId, input, key)
+    return { success: true }
+  })
+  await open()
+  await click("Add payment")
+  fireEvent.change(screen.getByLabelText("Payment amount (EUR)"), { target: { value: "150" } })
+  fireEvent.change(screen.getByLabelText("Payment note (optional)"), { target: { value: "first half" } })
+  await click("Save new payment")
+  expect(within(screen.getByRole("region", { name: "Payments" })).getByRole("alert").textContent).toMatch(/Unable to confirm the change/)
+  const key = mocks.createBookingPayment.mock.calls[0][2]
+  // Reload before the committed row is visible: the draft and its key come back, on the Financial tab.
+  await reload([])
+  await financialShown()
+  const form = within(screen.getByRole("group", { name: "New payment" }))
+  expect((form.getByLabelText("Payment amount (EUR)") as HTMLInputElement).value).toBe("150")
+  expect((form.getByLabelText("Payment note (optional)") as HTMLInputElement).value).toBe("first half")
+  await click("Save new payment")
+  expect(mocks.createBookingPayment).toHaveBeenCalledTimes(2)
+  expect(mocks.createBookingPayment.mock.calls[1]).toEqual(mocks.createBookingPayment.mock.calls[0])
+  expect(mocks.createBookingPayment.mock.calls[1][2]).toBe(key)
+  expect(store.rows.size).toBe(1)
+  // Confirmed: the draft is gone, also after another reload; a new draft gets a new key.
+  expect(window.sessionStorage.length).toBe(0)
+  await reload([])
+  await goToTab("Financial")
+  expect(screen.queryByRole("group", { name: "New payment" })).toBeNull()
+  expect(screen.getByRole("button", { name: "Add payment" })).toBeTruthy()
+})
+it("closes the restored draft without a second save when the reloaded booking already shows the payment", async () => {
+  mocks.createBookingPayment.mockRejectedValueOnce(new Error("lost response"))
+  await open()
+  await click("Add payment")
+  fireEvent.change(screen.getByLabelText("Payment amount (EUR)"), { target: { value: "150" } })
+  await click("Save new payment")
+  const key = mocks.createBookingPayment.mock.calls[0][2] as string
+  await reload([{ ...H, id: key, booking_id: "booking-a", kind: "deposit", amount_minor: 15000, currency: "EUR", due_on: null, paid_on: null, note: null }])
+  await financialShown()
+  await waitFor(() => expect(screen.queryByRole("group", { name: "New payment" })).toBeNull())
+  expect(within(screen.getByRole("region", { name: "Payments" })).getByRole("status").textContent).toBe("Payment added.")
+  expect(mocks.createBookingPayment).toHaveBeenCalledOnce()
+  expect(window.sessionStorage.length).toBe(0)
+})
+it("ignores a malformed stored draft and drops a cancelled draft from storage", async () => {
+  window.sessionStorage.setItem("backbeat:payment-draft:booking-a", JSON.stringify({ operationId: "not-a-uuid", kind: "deposit", amount: "1", dueOn: "", paidOn: "", note: "" }))
+  await open()
+  expect(screen.queryByRole("group", { name: "New payment" })).toBeNull()
+  await click("Add payment")
+  expect(window.sessionStorage.getItem("backbeat:payment-draft:booking-a")).toContain("operationId")
+  await click("Cancel")
+  expect(window.sessionStorage.getItem("backbeat:payment-draft:booking-a")).toBeNull()
 })
 // --- fee currency lock and booking delete ---
 it("locks the fee currency while payments exist and still saves a new fee amount", async () => {

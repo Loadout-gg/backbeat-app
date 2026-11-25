@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn(async () => ({ from: mocks.from, auth: { getUser: mocks.getUser } })) }))
 vi.mock("@/lib/actions/workspace", () => ({ getCurrentWorkspaceId: mocks.workspace }))
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }))
-import { createBookingPayment, deleteBookingPayment, getBookingPayments, updateBookingPayment } from "@/lib/actions/booking-payments"
+import { createBookingPayment, deleteBookingPayment, getBookingPayments, updateBookingPayment, voidBookingPayment } from "@/lib/actions/booking-payments"
 import { createBooking, deleteBooking, updateBooking } from "@/lib/actions/bookings"
 import { updateArtistDefaultCommission } from "@/lib/actions/artists"
 
@@ -21,6 +21,7 @@ const ARTIST = "33333333-3333-4333-8333-333333333333"
 const WORKSPACE = "selected-workspace"
 const payment = { kind: "deposit", amount_minor: 30000, currency: "EUR" } as const
 const row = { id: PAYMENT, booking_id: BOOKING, kind: "deposit", amount_minor: 30000, currency: "EUR", due_on: null, paid_on: null, note: null }
+const ORIGINAL = "44444444-4444-4444-8444-444444444444"
 
 const queue = (table: string, ...results: Result[]) => mocks.queues.set(table, [...(mocks.queues.get(table) ?? []), ...results])
 const table = (name: string) => mocks.tables.get(name)!
@@ -54,7 +55,7 @@ it("reads the payments of one booking in the selected workspace with explicit fi
   queue("booking_payments", { data: [{ ...row, workspace_id: "leak", created_at: "x" }], error: null, count: 1 })
   expect(await getBookingPayments(BOOKING)).toEqual([{ ...row, workspace_id: "leak", created_at: "x" }])
   const query = table("booking_payments")
-  expect(query.select).toHaveBeenCalledWith("id, booking_id, kind, amount_minor, currency, due_on, paid_on, note", { count: "exact" })
+  expect(query.select).toHaveBeenCalledWith("id, booking_id, kind, amount_minor, currency, due_on, paid_on, note, voided_at, void_kind, void_reason, replaces_payment_id", { count: "exact" })
   expect(query.eq.mock.calls).toEqual([["workspace_id", WORKSPACE], ["booking_id", BOOKING]])
   expect(query.order.mock.calls.map(call => call[0])).toEqual(["due_on", "created_at", "id"])
 })
@@ -144,11 +145,11 @@ it("rejects a malformed booking id and a signed-out caller", async () => {
 })
 
 // --- payments: update / delete ---
-it("updates only allowlisted payment fields, scoped to the workspace, with an affected-row witness", async () => {
+it("marks a payment paid, scoped to the workspace, with an affected-row witness", async () => {
   queue("booking_payments", { data: { id: PAYMENT, booking_id: BOOKING }, error: null })
-  expect(await updateBookingPayment(PAYMENT, { paid_on: "2026-11-23", note: "" })).toEqual({ success: true })
+  expect(await updateBookingPayment(PAYMENT, { paid_on: "2026-11-23" })).toEqual({ success: true })
   const query = table("booking_payments")
-  expect(query.update).toHaveBeenCalledExactlyOnceWith({ paid_on: "2026-11-23", note: null })
+  expect(query.update).toHaveBeenCalledExactlyOnceWith({ paid_on: "2026-11-23" })
   expect(query.eq.mock.calls).toEqual([["id", PAYMENT], ["workspace_id", WORKSPACE]])
   expect(mocks.revalidatePath).toHaveBeenCalledWith(`/dashboard/bookings/${BOOKING}`)
 })
@@ -158,7 +159,7 @@ it("rejects clearing the paid date without backend access", async () => {
 })
 it("reports a missing or out-of-workspace payment on update instead of false success", async () => {
   queue("booking_payments", { data: null, error: null })
-  expect(await updateBookingPayment(PAYMENT, { amount_minor: 100 })).toEqual({ success: false, error: "Payment not found" })
+  expect(await updateBookingPayment(PAYMENT, { paid_on: "2026-11-23" })).toEqual({ success: false, error: "Payment not found" })
   expect(mocks.revalidatePath).not.toHaveBeenCalled()
 })
 it.each([
@@ -166,8 +167,15 @@ it.each([
   ["BB006", "Recorded payment history cannot be changed here."],
 ])("returns fixed copy when an update fails with %s", async (code, error) => {
   queue("booking_payments", { data: null, error: { code, message: "secret provider detail" } })
-  expect(await updateBookingPayment(PAYMENT, { amount_minor: 100 })).toEqual({ success: false, error })
+  expect(await updateBookingPayment(PAYMENT, { paid_on: "2026-11-23" })).toEqual({ success: false, error })
   expect(mocks.revalidatePath).not.toHaveBeenCalled()
+})
+it.each([
+  [{ amount_minor: 100 }], [{ note: "" }], [{ kind: "balance" }], [{ due_on: null }], [{ paid_on: "2026-11-23", note: "x" }],
+])("refuses the in-place edit %j before backend access: a recorded payment is corrected instead", async (patch) => {
+  expect(await updateBookingPayment(PAYMENT, patch as Parameters<typeof updateBookingPayment>[1])).toEqual({ success: false,
+    error: "A recorded payment is not edited in place. Use Correct to replace it; the original stays in the history." })
+  untouched()
 })
 it.each([
   [{}], [{ currency: "USD" }], [{ booking_id: BOOKING }], [{ workspace_id: "other" }], [{ amount_minor: 0 }], [{ paid_on: "2026-02-30" }],
@@ -339,4 +347,67 @@ it("artist default commission: witness, fixed copy, validation before backend ac
   }
   expect((await updateArtistDefaultCommission("nope", null)).error).toBe("Invalid artist ID")
   expect(mocks.from).not.toHaveBeenCalled()
+})
+
+// --- payments: void and correction (migration 010) ---
+it("voids a payment with its trimmed reason, scoped to the workspace, with an affected-row witness", async () => {
+  queue("booking_payments", { data: { id: PAYMENT, booking_id: BOOKING }, error: null })
+  expect(await voidBookingPayment(PAYMENT, " Event cancelled ")).toEqual({ success: true })
+  const query = table("booking_payments")
+  expect(query.update).toHaveBeenCalledExactlyOnceWith({ void_kind: "void", void_reason: "Event cancelled" })
+  expect(query.eq.mock.calls).toEqual([["id", PAYMENT], ["workspace_id", WORKSPACE]])
+  expect(query.delete).not.toHaveBeenCalled()
+  expect(mocks.revalidatePath).toHaveBeenCalledWith(`/dashboard/bookings/${BOOKING}`)
+})
+it.each([["nope", "x", "Invalid payment ID"], [PAYMENT, "  ", "Enter why this payment is voided"], [PAYMENT, "x".repeat(501), "Void reason must be at most 500 characters"]])(
+  "rejects void(%s, %j) before backend access", async (id, reason, error) => {
+    expect(await voidBookingPayment(id, reason)).toEqual({ success: false, error })
+    untouched()
+  })
+it.each([
+  ["BB006", "This payment was already voided or corrected. Reload the booking to see its history."],
+  ["BB007", "This payment was already voided or corrected. Reload the booking to see its history."],
+  ["XX000", "Unable to save the payment. Please try again."],
+])("maps void failure %s to fixed copy", async (code, error) => {
+  queue("booking_payments", { data: null, error: { code, message: "secret provider detail" } })
+  expect(await voidBookingPayment(PAYMENT, "Event cancelled")).toEqual({ success: false, error })
+  queue("booking_payments", { data: null, error: null })
+  expect(await voidBookingPayment(PAYMENT, "Event cancelled")).toEqual({ success: false, error: "Payment not found" })
+  expect(mocks.revalidatePath).not.toHaveBeenCalled()
+})
+it("records a correction as a new payment that names the original, in one insert", async () => {
+  queue("bookings", { data: { id: BOOKING } })
+  queue("booking_payments", { data: { id: PAYMENT }, error: null })
+  expect(await createBookingPayment(BOOKING, { ...payment, amount_minor: 35000 }, PAYMENT, ORIGINAL.toUpperCase())).toEqual({ success: true })
+  expect(table("booking_payments").insert).toHaveBeenCalledExactlyOnceWith({
+    kind: "deposit", amount_minor: 35000, currency: "EUR", due_on: null, paid_on: null, note: null,
+    replaces_payment_id: ORIGINAL, id: PAYMENT, workspace_id: WORKSPACE, booking_id: BOOKING,
+  })
+  expect(table("booking_payments").update).not.toHaveBeenCalled()
+})
+it("adopts a replayed correction (BB007 once the original is corrected) only when the row under its key is identical", async () => {
+  queue("bookings", { data: { id: BOOKING } })
+  queue("booking_payments", { error: { code: "BB007" } }, { data: { ...row, replaces_payment_id: ORIGINAL } })
+  expect(await createBookingPayment(BOOKING, payment, PAYMENT, ORIGINAL)).toEqual({ success: true })
+  expect(table("booking_payments").select).toHaveBeenLastCalledWith("kind, amount_minor, currency, due_on, paid_on, note, replaces_payment_id")
+  queue("bookings", { data: { id: BOOKING } })
+  queue("booking_payments", { error: { code: "BB007" } }, { data: null })
+  expect(await createBookingPayment(BOOKING, payment, PAYMENT, ORIGINAL)).toEqual({ success: false,
+    error: "This payment was already voided or corrected. Reload the booking to see its history." })
+  queue("bookings", { data: { id: BOOKING } })
+  queue("booking_payments", { error: { code: "BB007" } }, { data: { ...row, replaces_payment_id: PAYMENT } })
+  expect(await createBookingPayment(BOOKING, payment, PAYMENT, ORIGINAL)).toEqual({ success: false,
+    error: "Unable to confirm this payment. Check the booking before starting another payment." })
+})
+it("does not treat BB007 on a plain payment as a replay", async () => {
+  queue("bookings", { data: { id: BOOKING } })
+  queue("booking_payments", { data: null, error: { code: "BB007", message: "secret" } })
+  expect(await createBookingPayment(BOOKING, payment, PAYMENT)).toEqual({ success: false,
+    error: "This payment was already voided or corrected. Reload the booking to see its history." })
+  expect(table("booking_payments").select).toHaveBeenCalledOnce()
+})
+it("rejects a malformed or self-referencing correction before backend access", async () => {
+  expect(await createBookingPayment(BOOKING, payment, PAYMENT, "nope")).toEqual({ success: false, error: "Invalid payment ID" })
+  expect(await createBookingPayment(BOOKING, payment, PAYMENT, PAYMENT.toUpperCase())).toEqual({ success: false, error: "Invalid payment ID" })
+  untouched()
 })

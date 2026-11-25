@@ -1,15 +1,15 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RetryButton } from "@/components/retry-button";
-import { createBookingPayment, updateBookingPayment } from "@/lib/actions/booking-payments";
+import { createBookingPayment, updateBookingPayment, voidBookingPayment } from "@/lib/actions/booking-payments";
 import { formatBookingFeeInput, type BookingFeeCurrency } from "@/lib/booking-fee";
 import {
-  COMMISSION_MODE_LABELS, MAX_PAYMENT_NOTE_LENGTH, PAYMENT_CURRENCY_PENDING_MESSAGE, PAYMENT_KINDS, PAYMENT_KIND_LABELS, PAYMENT_NEEDS_FEE_MESSAGE,
+  COMMISSION_MODE_LABELS, MAX_PAYMENT_NOTE_LENGTH, MAX_PAYMENT_VOID_REASON_LENGTH, PAYMENT_CURRENCY_PENDING_MESSAGE, PAYMENT_KINDS, PAYMENT_KIND_LABELS, PAYMENT_NEEDS_FEE_MESSAGE,
   bookingFinanceTotals, formatCommissionValue, formatMinorAmount, parseMoneyAmount,
   type BookingCommission, type BookingPayment, type PaymentKind,
 } from "@/lib/booking-finance";
@@ -33,9 +33,56 @@ interface BookingPaymentsProps {
   currencyChangePending?: boolean;
 }
 
-type Draft = { kind: PaymentKind; amount: string; dueOn: string; paidOn: string; note: string }
-  & ({ id: string; operationId?: never } | { id: null; operationId: string });
-const EMPTY_DRAFT = { id: null, kind: "deposit", amount: "", dueOn: "", paidOn: "", note: "" } as const;
+/**
+ * A new payment, or a correction that replaces `replaces`. `operationId` is the id the payment
+ * will have and the server's idempotency key; it is created once per draft and never changes.
+ */
+type Draft = { kind: PaymentKind; amount: string; dueOn: string; paidOn: string; note: string; operationId: string; replaces: string | null };
+const EMPTY_DRAFT = { kind: "deposit", amount: "", dueOn: "", paidOn: "", note: "", replaces: null } as const;
+type VoidDraft = { paymentId: string; reason: string };
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+// A retry after a lost response and a page reload must not record a second payment.
+// The unsaved draft (with its operationId) is kept in this tab's sessionStorage per booking,
+// only until the server confirms it, the payment shows up in the booking, or it is cancelled.
+const draftStorageKey = (bookingId: string) => `backbeat:payment-draft:${bookingId}`;
+const storageListeners = new Set<() => void>();
+function subscribeStoredDrafts(listener: () => void) {
+  storageListeners.add(listener);
+  return () => { storageListeners.delete(listener); };
+}
+function readStoredRaw(bookingId: string): string | null {
+  try {
+    return window.sessionStorage.getItem(draftStorageKey(bookingId));
+  } catch {
+    return null;
+  }
+}
+function parseStoredDraft(raw: string | null): Draft | null {
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as Partial<Draft> | null;
+    const text = (field: unknown) => typeof field === "string" ? field : null;
+    if (!value || !UUID.test(text(value.operationId) ?? "") || !PAYMENT_KINDS.includes(value.kind as PaymentKind)) return null;
+    const replaces = value.replaces == null ? null : text(value.replaces);
+    if (replaces !== null && !UUID.test(replaces)) return null;
+    const fields = [value.amount, value.dueOn, value.paidOn, value.note].map(text);
+    if (fields.some((field) => field === null)) return null;
+    const [amount, dueOn, paidOn, note] = fields as string[];
+    return { kind: value.kind as PaymentKind, amount, dueOn, paidOn, note, operationId: value.operationId!, replaces };
+  } catch {
+    return null;
+  }
+}
+function storeDraft(bookingId: string, draft: Draft | null) {
+  try {
+    if (draft) window.sessionStorage.setItem(draftStorageKey(bookingId), JSON.stringify(draft));
+    else window.sessionStorage.removeItem(draftStorageKey(bookingId));
+  } catch {
+    // Storage unavailable (private mode, blocked): the draft still works until a reload.
+  }
+  for (const listener of storageListeners) listener();
+}
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const fieldClass = "h-9 min-w-0 text-sm";
 const selectClass = "h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50";
@@ -46,15 +93,41 @@ const labelClass = "mb-1.5 block text-xs font-medium text-foreground";
  * hook and hands the result down: the Financial tab panel unmounts when another tab is
  * selected, and neither an unsaved payment draft nor a pending request may be lost with it.
  */
-export function useBookingPaymentsState() {
+export function useBookingPaymentsState(bookingId: string, payments?: readonly BookingPayment[] | null) {
   const router = useRouter();
-  const [draft, setDraft] = useState<Draft | null>(null);
+  // undefined: nothing chosen in this page yet, so the draft stored before a reload applies.
+  // The server snapshot is null, so hydration matches and the stored draft appears right after.
+  const [localDraft, setLocalDraft] = useState<Draft | null | undefined>(undefined);
+  const storedRaw = useSyncExternalStore(subscribeStoredDrafts, () => readStoredRaw(bookingId), () => null);
+  const stored = useMemo(() => parseStoredDraft(storedRaw), [storedRaw]);
+  const [voidDraft, setVoidDraft] = useState<VoidDraft | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
-  const [notice, setNotice] = useState("");
+  const [noticeState, setNotice] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
   const inFlight = useRef(false);
+  const candidate = localDraft !== undefined ? localDraft : stored;
+  // The lost response did commit: the payment is in the booking, so the draft is done.
+  const committed = !!candidate && busy === null
+    && !!payments?.some((payment) => payment.id === candidate.operationId.toLowerCase());
+  const [savedKey, setSavedKey] = useState<string | null>(null);
+  if (committed) {
+    // Adjusted during render (no effect): close the draft and report it as saved.
+    setLocalDraft(null);
+    setSavedKey(candidate.operationId);
+    setFormError(null);
+    setNotice(candidate.replaces ? "Payment corrected." : "Payment added.");
+  }
+  const draft = committed ? null : candidate;
+  const notice = noticeState;
+  /** A draft came back after a reload, so the editor can show the Financial tab. */
+  const restored = localDraft === undefined && stored !== null;
+  // Storage is the external system: drop the saved draft, unless a newer one replaced it.
+  useEffect(() => {
+    if (savedKey && parseStoredDraft(readStoredRaw(bookingId))?.operationId === savedKey) storeDraft(bookingId, null);
+  }, [bookingId, savedKey]);
+  const setDraft = (next: Draft | null) => { setLocalDraft(next); storeDraft(bookingId, next); };
 
   // One mutation at a time; a thrown action is reported as unconfirmed, never as success.
   // While it runs the editor cannot be opened, replaced or closed (see `locked` below), so
@@ -88,19 +161,22 @@ export function useBookingPaymentsState() {
   /** Runs an editor change only when no request is pending. */
   const unlessBusy = (change: () => void) => { if (!inFlight.current) change(); };
 
-  return { draft, setDraft, formError, setFormError, rowError, setRowError, notice, busy, run, unlessBusy };
+  return {
+    draft, setDraft, voidDraft, setVoidDraft, formError, setFormError,
+    rowError, setRowError, notice, busy, run, unlessBusy, restored,
+  };
 }
 export type BookingPaymentsState = ReturnType<typeof useBookingPaymentsState>;
 
 export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, payments, today, state, currencyChangePending = false }: BookingPaymentsProps) {
-  const { draft, setDraft, formError, setFormError, rowError, setRowError, notice, busy, run, unlessBusy } = state;
+  const { draft, setDraft, voidDraft, setVoidDraft, formError, setFormError, rowError, setRowError, notice, busy, run, unlessBusy } = state;
   const locked = busy !== null;
 
   const totals = payments ? bookingFinanceTotals({ feeMinor, currency: feeCurrency, commission, payments }) : null;
 
   const submitDraft = async () => {
     if (!draft || !feeCurrency) return;
-    if (!draft.id && currencyChangePending) { setFormError(PAYMENT_CURRENCY_PENDING_MESSAGE); return; }
+    if (currencyChangePending) { setFormError(PAYMENT_CURRENCY_PENDING_MESSAGE); return; }
     const amount = parseMoneyAmount(draft.amount, feeCurrency, "payment amount", true);
     if (!amount.success) { setFormError(amount.error); return; }
     if (draft.dueOn && !DATE.test(draft.dueOn)) { setFormError("Enter a valid due date"); return; }
@@ -110,23 +186,33 @@ export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, 
       return;
     }
     const fields = {
-      kind: draft.kind, amount_minor: amount.data,
-      due_on: draft.dueOn || null, note: draft.note,
+      kind: draft.kind, amount_minor: amount.data, due_on: draft.dueOn || null,
+      paid_on: draft.paidOn || null, note: draft.note, currency: feeCurrency,
     };
-    const saved = draft.id !== null
-      ? await run("form", () => updateBookingPayment(draft.id, { ...fields, ...(draft.paidOn ? { paid_on: draft.paidOn } : {}) }), "Payment saved.", setFormError)
-      : await run("form", () => createBookingPayment(bookingId, { ...fields, paid_on: draft.paidOn || null, currency: feeCurrency }, draft.operationId), "Payment added.", setFormError, true);
+    // The same operationId on every attempt, before and after a reload: one payment at most.
+    const saved = draft.replaces
+      ? await run("form", () => createBookingPayment(bookingId, fields, draft.operationId, draft.replaces!), "Payment corrected.", setFormError, true)
+      : await run("form", () => createBookingPayment(bookingId, fields, draft.operationId), "Payment added.", setFormError, true);
     if (saved) setDraft(null);
   };
 
-  const startEdit = (payment: BookingPayment) => unlessBusy(() => {
-    if (payment.paid_on !== null) return;
+  const startCorrection = (payment: BookingPayment) => unlessBusy(() => {
     setFormError(null);
+    setVoidDraft(null);
     setDraft({
-      id: payment.id, kind: payment.kind, amount: formatBookingFeeInput(payment.amount_minor, payment.currency),
+      operationId: crypto.randomUUID(), replaces: payment.id, kind: payment.kind,
+      amount: formatBookingFeeInput(payment.amount_minor, payment.currency),
       dueOn: payment.due_on ?? "", paidOn: payment.paid_on ?? "", note: payment.note ?? "",
     });
   });
+
+  const submitVoid = async () => {
+    if (!voidDraft) return;
+    const reason = voidDraft.reason.trim();
+    if (!reason) { setRowError("Enter why this payment is voided"); return; }
+    const done = await run(voidDraft.paymentId, () => voidBookingPayment(voidDraft.paymentId, reason), "Payment voided.", setRowError);
+    if (done) setVoidDraft(null);
+  };
 
   const commissionSummary = commission
     ? `${formatCommissionValue(commission.type, commission.value, feeCurrency)}, ${commission.mode === "on_top" ? "on top of the fee" : "included in the fee"}`
@@ -176,6 +262,7 @@ export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, 
         <h2 id="booking-payments-heading" className="text-base font-medium text-foreground">Payments</h2>
         <p className="text-sm text-muted-foreground">
           Recorded by the agency, in the booking fee currency. A payment is paid when it has a paid date. This does not collect money, issue an invoice or change the booking status.
+          Payments are never deleted: Void one that is no longer due (for example, the event was cancelled) or Correct one whose details changed; the original stays in the history.
         </p>
         {payments !== null && payments.length === 0 && (
           <p className="text-sm text-muted-foreground">No payments recorded.</p>
@@ -183,14 +270,18 @@ export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, 
         {payments !== null && payments.length > 0 && (
           <ul aria-label="Recorded payments" className="divide-y divide-border rounded-lg border border-border">
             {payments.map((payment) => {
-              const overdue = !!today && !payment.paid_on && !!payment.due_on && payment.due_on < today;
+              const closed = payment.void_kind != null;
+              const overdue = !closed && !!today && !payment.paid_on && !!payment.due_on && payment.due_on < today;
               const name = `${PAYMENT_KIND_LABELS[payment.kind]} ${formatMinorAmount(payment.amount_minor, payment.currency)}`;
+              const replaced = payments.find((other) => other.id === payment.replaces_payment_id);
               return (
                 <li key={payment.id} className="flex min-w-0 flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0 space-y-1 break-words">
-                    <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-foreground">
-                      <span>{name}</span>
-                      {payment.paid_on
+                  <div className={`min-w-0 space-y-1 break-words ${closed ? "text-muted-foreground" : ""}`}>
+                    <p className={`flex flex-wrap items-center gap-2 text-sm font-medium ${closed ? "text-muted-foreground" : "text-foreground"}`}>
+                      <span className={closed ? "line-through" : undefined}>{name}</span>
+                      {payment.void_kind === "void" ? <Badge variant="outline">Voided</Badge>
+                        : payment.void_kind === "corrected" ? <Badge variant="outline">Corrected</Badge>
+                        : payment.paid_on
                         ? <Badge variant="default">Paid</Badge>
                         : overdue ? <Badge variant="destructive">Overdue</Badge> : <Badge variant="secondary">Not paid</Badge>}
                     </p>
@@ -198,24 +289,47 @@ export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, 
                       {payment.due_on ? `Due ${payment.due_on}` : "No due date"}
                       {payment.paid_on ? ` · Paid on ${payment.paid_on}` : ""}
                     </p>
-                    {payment.note && <p className="text-sm text-foreground">{payment.note}</p>}
+                    {payment.note && <p className={`text-sm ${closed ? "" : "text-foreground"}`}>{payment.note}</p>}
+                    {payment.void_kind === "void" && <p className="text-xs">Voided: {payment.void_reason}{payment.voided_at ? ` (${payment.voided_at.slice(0, 10)})` : ""}. Kept as history; not counted.</p>}
+                    {payment.void_kind === "corrected" && <p className="text-xs">Replaced by a correction{payment.voided_at ? ` on ${payment.voided_at.slice(0, 10)}` : ""}. Kept as history; not counted.</p>}
+                    {payment.replaces_payment_id && <p className="text-xs text-muted-foreground">Correction of {replaced ? `${PAYMENT_KIND_LABELS[replaced.kind]} ${formatMinorAmount(replaced.amount_minor, replaced.currency)}` : "an earlier payment"}.</p>}
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {!payment.paid_on && (
-                      <>
-                        {/* Not offered for the payment open in the editor: saving that draft would
-                            overwrite the paid date the shortcut had just changed. */}
-                        {draft?.id === payment.id && <span className="self-center text-sm text-muted-foreground">Open in the editor below</span>}
-                        {today && draft?.id !== payment.id && (
-                          <Button type="button" size="sm" variant="outline" aria-disabled={busy !== null} aria-label={`Mark ${name} as paid today`}
-                            onClick={() => run(payment.id, () => updateBookingPayment(payment.id, { paid_on: today }), "Payment marked as paid.", setRowError)}>
-                            Mark as paid today
-                          </Button>
-                        )}
-                        <Button type="button" size="sm" variant="outline" aria-disabled={locked} aria-label={`Edit ${name}`} onClick={() => startEdit(payment)}>Edit</Button>
-                      </>
-                    )}
-                  </div>
+                  {!closed && (
+                    <div className="flex flex-wrap gap-2">
+                      {/* Not offered for the payment being corrected: the correction replaces it. */}
+                      {draft?.replaces === payment.id && <span className="self-center text-sm text-muted-foreground">Being corrected below</span>}
+                      {today && !payment.paid_on && draft?.replaces !== payment.id && (
+                        <Button type="button" size="sm" variant="outline" aria-disabled={busy !== null} aria-label={`Mark ${name} as paid today`}
+                          onClick={() => run(payment.id, () => updateBookingPayment(payment.id, { paid_on: today }), "Payment marked as paid.", setRowError)}>
+                          Mark as paid today
+                        </Button>
+                      )}
+                      {draft === null && (
+                        <>
+                          <Button type="button" size="sm" variant="outline" aria-disabled={locked} aria-label={`Correct ${name}`} onClick={() => startCorrection(payment)}>Correct</Button>
+                          {voidDraft?.paymentId !== payment.id && (
+                            <Button type="button" size="sm" variant="outline" aria-disabled={locked} aria-label={`Void ${name}`}
+                              onClick={() => unlessBusy(() => { setRowError(null); setVoidDraft({ paymentId: payment.id, reason: "" }); })}>
+                              Void
+                            </Button>
+                          )}
+                        </>
+                      )}
+                      {voidDraft?.paymentId === payment.id && (
+                        <div role="group" aria-label={`Void ${name}`} className="flex w-full min-w-0 flex-col gap-2 sm:w-72">
+                          <label htmlFor={`void-reason-${payment.id}`} className={labelClass}>Why is it voided? (e.g. event cancelled)</label>
+                          <Input id={`void-reason-${payment.id}`} disabled={locked} type="text" value={voidDraft.reason} maxLength={MAX_PAYMENT_VOID_REASON_LENGTH} className={fieldClass}
+                            onChange={(event) => setVoidDraft({ paymentId: payment.id, reason: event.target.value })} />
+                          <div className="flex flex-wrap gap-2">
+                            <Button type="button" size="sm" variant="destructive" aria-disabled={locked} onClick={submitVoid}>
+                              {busy === payment.id ? "Voiding..." : "Void payment"}
+                            </Button>
+                            <Button type="button" size="sm" variant="outline" aria-disabled={locked} onClick={() => unlessBusy(() => { setVoidDraft(null); setRowError(null); })}>Keep payment</Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </li>
               );
             })}
@@ -232,12 +346,13 @@ export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, 
         )}
         {payments !== null && feeCurrency && !currencyChangePending && draft === null && (
           <Button type="button" variant="outline" aria-disabled={locked}
-            onClick={() => unlessBusy(() => { setFormError(null); setDraft({ ...EMPTY_DRAFT, operationId: crypto.randomUUID() }); })}>
+            onClick={() => unlessBusy(() => { setFormError(null); setVoidDraft(null); setDraft({ ...EMPTY_DRAFT, operationId: crypto.randomUUID() }); })}>
             Add payment
           </Button>
         )}
         {draft !== null && feeCurrency && (
-          <div role="group" aria-label={draft.id ? "Edit payment" : "New payment"} className="space-y-4 rounded-lg border border-border p-4">
+          <div role="group" aria-label={draft.replaces ? "Correct payment" : "New payment"} className="space-y-4 rounded-lg border border-border p-4">
+            {draft.replaces && <p className="text-sm text-muted-foreground">Saving records this as a new payment and keeps the original as corrected history.</p>}
             <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="min-w-0">
                 <label htmlFor="payment-kind" className={labelClass}>Payment type</label>
@@ -271,7 +386,7 @@ export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, 
             {formError && <p id="payment-form-error" role="alert" className="text-sm text-destructive">{formError}</p>}
             <div className="flex flex-wrap gap-2">
               <Button type="button" onClick={submitDraft} aria-disabled={busy !== null} className="aria-disabled:cursor-wait aria-disabled:opacity-50">
-                {busy === "form" ? "Saving..." : draft.id ? "Save payment" : "Save new payment"}
+                {busy === "form" ? "Saving..." : draft.replaces ? "Save correction" : "Save new payment"}
               </Button>
               <Button type="button" variant="outline" aria-disabled={locked} onClick={() => unlessBusy(() => { setDraft(null); setFormError(null); })}>Cancel</Button>
             </div>

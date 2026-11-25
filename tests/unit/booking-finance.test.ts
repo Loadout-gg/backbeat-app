@@ -179,12 +179,22 @@ describe("validation", () => {
   ])("rejects the payment field %j", (patch) => {
     expect(createPaymentSchema.safeParse({ ...payment, ...patch }).success).toBe(false)
   })
-  it("payment update: partial allowlist without currency, booking or workspace", () => {
+  it("payment update: only the paid date (migration 010); any other field is a correction", () => {
     expect(updatePaymentSchema.parse({ paid_on: "2026-11-23" })).toEqual({ paid_on: "2026-11-23" })
-    expect(updatePaymentSchema.parse({ paid_on: null, note: "" })).toEqual({ paid_on: null, note: null })
-    for (const patch of [{}, { currency: "USD" }, { booking_id: "b" }, { workspace_id: "w" }, { amount_minor: 0 }, { kind: "x" }]) {
+    expect(updatePaymentSchema.parse({ paid_on: null })).toEqual({ paid_on: null })
+    for (const patch of [{}, { currency: "USD" }, { booking_id: "b" }, { workspace_id: "w" }, { amount_minor: 100 }, { kind: "deposit" },
+      { note: "" }, { due_on: null }, { paid_on: null, note: "" }, { void_kind: "void" }, { replaces_payment_id: "x" }]) {
       expect(updatePaymentSchema.safeParse(patch).success).toBe(false)
     }
+  })
+  it("totals leave out voided and corrected payments, which stay in the history", () => {
+    const totals = bookingFinanceTotals({ feeMinor: 100000, currency: "EUR", commission: null, payments: [
+      { amount_minor: 30000, currency: "EUR", paid_on: "2026-11-01", void_kind: "void" },
+      { amount_minor: 70000, currency: "EUR", paid_on: "2026-11-01", void_kind: "corrected" },
+      { amount_minor: 65000, currency: "EUR", paid_on: "2026-11-02", void_kind: null },
+      { amount_minor: 100, currency: "USD", paid_on: null, void_kind: "void" },
+    ] })
+    expect(totals).toMatchObject({ paidTotalMinor: 65000, outstandingMinor: 35000, ignoredPayments: 0 })
   })
   it("booking commission: all three together, or all null, or omitted", () => {
     const ok = [

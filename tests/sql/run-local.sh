@@ -1,5 +1,5 @@
 #!/bin/sh
-# Runs tests/sql/booking-lifecycle.sql and booking-finance.sql, each on its own THROWAWAY
+# Runs tests/sql/booking-lifecycle.sql, booking-finance.sql and booking-payment-history.sql, each on its own THROWAWAY
 # local PostgreSQL 17 cluster.
 # No Docker, no Supabase stack, no network: each cluster listens on a private unix socket
 # only and is deleted on exit. The auth schema is a stub (see local-stub.sql), so a PASS
@@ -18,7 +18,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 # The finance test reads ops files through psql backticks, relative to this directory.
 cd "$here"
-for suite in booking-lifecycle booking-finance; do
+for suite in booking-lifecycle booking-finance booking-payment-history; do
   dir="$work/$suite"
   mkdir "$dir"
   "$bin/initdb" -D "$dir/data" -U postgres -A trust -E UTF8 --no-locale >/dev/null

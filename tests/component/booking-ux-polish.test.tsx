@@ -155,7 +155,7 @@ const artistBookings = [
 const editorParams = { params: Promise.resolve({ id: editorBooking.id }) }
 
 it("passes only the selected booking, its payments and exact date counts, rank and calendar context to the editor client", async () => {
-  const payments: BookingPayment[] = [{
+  const payments: BookingPayment[] = [{ voided_at: null, void_kind: null, void_reason: null, replaces_payment_id: null,
     id: "fixture-payment", booking_id: editorBooking.id, kind: "deposit", amount_minor: 1500,
     currency: "EUR", due_on: null, paid_on: null, note: null,
   }]

@@ -25,6 +25,12 @@ export const DEFAULT_COMMISSION_MODE: CommissionMode = "on_top"
 export const BOOKING_HAS_PAYMENTS_MESSAGE =
   "This booking has recorded payments and cannot be deleted. You can cancel the booking without removing its payments."
 export const PAYMENT_HISTORY_RESERVED_MESSAGE = "Recorded payment history cannot be changed here."
+/** A recorded payment is never edited in place or deleted (migration 010). */
+export const PAYMENT_CORRECT_INSTEAD_MESSAGE =
+  "A recorded payment is not edited in place. Use Correct to replace it; the original stays in the history."
+export const PAYMENT_ALREADY_CLOSED_MESSAGE =
+  "This payment was already voided or corrected. Reload the booking to see its history."
+export const MAX_PAYMENT_VOID_REASON_LENGTH = 500
 export const FEE_CURRENCY_LOCKED_MESSAGE =
   "The fee currency cannot be changed while payments are recorded for this booking. The fee amount can still be changed."
 export const PAYMENT_NEEDS_FEE_MESSAGE = "Set and save a booking fee before recording payments."
@@ -52,7 +58,16 @@ export type BookingPayment = {
   due_on: string | null
   paid_on: string | null
   note: string | null
+  /** Migration 010. Set by the database when the payment is voided or corrected. */
+  voided_at: string | null
+  /** "void": no longer due. "corrected": replaced by the payment whose replaces_payment_id names it. */
+  void_kind: PaymentVoidKind | null
+  void_reason: string | null
+  /** The payment this one corrects. */
+  replaces_payment_id: string | null
 }
+export const PAYMENT_VOID_KINDS = ["void", "corrected"] as const
+export type PaymentVoidKind = (typeof PAYMENT_VOID_KINDS)[number]
 
 /**
  * Commission amount in minor units of the fee currency.
@@ -73,7 +88,7 @@ export type BookingFinanceTotals = {
   commissionMinor: number
   /** fee + commission when the commission is on top, otherwise the fee. */
   promoterTotalMinor: number
-  /** Sum of the payments that have a paid date. */
+  /** Sum of the payments that have a paid date and are not voided or corrected. */
   paidTotalMinor: number
   /** promoter total − paid total. Negative when more was paid than is due. */
   outstandingMinor: number
@@ -87,14 +102,16 @@ type TotalsInput = {
   feeMinor: number | null
   currency: BookingFeeCurrency | null
   commission: BookingCommission | null
-  payments: readonly Pick<BookingPayment, "amount_minor" | "currency" | "paid_on">[]
+  payments: readonly (Pick<BookingPayment, "amount_minor" | "currency" | "paid_on"> & Partial<Pick<BookingPayment, "void_kind">>)[]
 }
 
 /** Null when the booking has no fee: there is nothing to derive totals from. */
 export function bookingFinanceTotals({ feeMinor, currency, commission, payments }: TotalsInput): BookingFinanceTotals | null {
   if (feeMinor === null || currency === null) return null
   const commissionMinor = commissionAmountMinor(feeMinor, commission)
-  const sameCurrency = payments.filter((payment) => payment.currency === currency)
+  // Voided and corrected payments stay in the history but never count.
+  const current = payments.filter((payment) => payment.void_kind == null)
+  const sameCurrency = current.filter((payment) => payment.currency === currency)
   const paidTotalMinor = sameCurrency.reduce((sum, payment) => payment.paid_on ? sum + payment.amount_minor : sum, 0)
   const promoterTotalMinor = commission?.mode === "on_top" ? feeMinor + commissionMinor : feeMinor
   return {
@@ -105,7 +122,7 @@ export function bookingFinanceTotals({ feeMinor, currency, commission, payments 
     paidTotalMinor,
     outstandingMinor: promoterTotalMinor - paidTotalMinor,
     artistNetMinor: commission?.mode === "included" ? feeMinor - commissionMinor : feeMinor,
-    ignoredPayments: payments.length - sameCurrency.length,
+    ignoredPayments: current.length - sameCurrency.length,
   }
 }
 
@@ -316,8 +333,15 @@ export const createPaymentSchema = z.object({
   ...paymentFields,
   currency: z.enum(BOOKING_FEE_CURRENCIES, "Choose a supported currency"),
 }).strict()
-/** Update allowlist: omitted = unchanged, null clears a date or the note. No currency, no booking. */
-export const updatePaymentSchema = z.object(paymentFields).partial().strict()
-  .refine((value) => Object.values(value).some((field) => field !== undefined), "Nothing to update")
+/**
+ * Update allowlist (migration 010): only a first paid date. Every other change is a correction
+ * (a new payment that replaces the original) or a void; null never clears a paid date.
+ */
+export const updatePaymentSchema = z.object({ paid_on: optionalDate("Enter a valid paid date") }).strict()
+  .refine((value) => value.paid_on !== undefined, "Nothing to update")
+/** Void reason, e.g. "Event cancelled": required, trimmed, at most 500 characters. */
+export const voidPaymentReasonSchema = z.string().trim()
+  .min(1, "Enter why this payment is voided")
+  .max(MAX_PAYMENT_VOID_REASON_LENGTH, `Void reason must be at most ${MAX_PAYMENT_VOID_REASON_LENGTH} characters`)
 export type CreatePaymentInput = z.input<typeof createPaymentSchema>
 export type UpdatePaymentInput = z.input<typeof updatePaymentSchema>

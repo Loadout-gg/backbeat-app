@@ -189,7 +189,14 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
   const [taxNote, setTaxNote] = useState(savedTaxNote);
   const hasPayments = !!payments && payments.length > 0;
   // Owned here, not by the panel: the Financial tab content unmounts on a tab change.
-  const paymentsState = useBookingPaymentsState();
+  const paymentsState = useBookingPaymentsState(booking.id, payments);
+  // A payment draft restored after a reload is shown once, so it can be retried with its original
+  // key (state adjusted during render, not in an effect: https://react.dev/learn/you-might-not-need-an-effect).
+  const [restoredDraftShown, setRestoredDraftShown] = useState(false);
+  if (paymentsState.restored && !restoredDraftShown) {
+    setRestoredDraftShown(true);
+    setActiveTab("Financial");
+  }
 
   const [startTime, setStartTime] = useState(
     booking.start_time ? booking.start_time.slice(0, 5) : "10:30"
