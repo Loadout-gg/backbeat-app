@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => {
-  const state = { result: { data: null as unknown, error: null as { message: string } | null } }
+  const state = { result: { data: null as unknown, error: null as { message: string; code?: string } | null } }
   const query: Record<string, ReturnType<typeof vi.fn>> & { then?: unknown } = {}
   return { state, query, from: vi.fn(), createClient: vi.fn(), workspace: vi.fn(), revalidatePath: vi.fn() }
 })
@@ -84,6 +84,16 @@ it.each([
 it.each([[[]], [null], [[{ id: ARTIST }]], [[{ id: ID }, { id: ID }]]])("does not report success when the update returns %j", async (data) => {
   mocks.state.result = { data, error: null }
   expect(await updateEvent(ID, valid)).toEqual({ success: false, error: "Event not found." })
+  expect(mocks.revalidatePath).not.toHaveBeenCalled()
+})
+
+it("answers a reactivation of the event of a cancelled booking (BB010) with fixed copy", async () => {
+  mocks.state.result = { data: null, error: { code: "BB010", message: "private database detail" } }
+  const result = await updateEvent(ID, { ...valid, status: "confirmed" })
+  expect(result).toEqual({
+    success: false, error: "This event was cancelled with its booking and cannot be reopened. Create a new booking to rebook.",
+  })
+  expect(JSON.stringify(result)).not.toContain("private database detail")
   expect(mocks.revalidatePath).not.toHaveBeenCalled()
 })
 

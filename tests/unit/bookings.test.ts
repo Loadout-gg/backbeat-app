@@ -235,6 +235,7 @@ it("refuses completion before the booking date with its own message", async () =
 it.each([
   ["BB002", "This status change is not allowed."],
   ["BB003", "A completed booking cannot be moved to a future date."],
+  ["BB009", "This booking has an event and was cancelled, so it cannot be reopened. Create a new booking to rebook."],
   ["XX000", "Unable to update the booking status. Please try again."],
 ])("maps database rejection %s to fixed copy on status change", async (code, message) => {
   const log = vi.spyOn(console, "error").mockImplementation(() => {})
@@ -242,6 +243,11 @@ it.each([
     query.maybeSingle.mockResolvedValueOnce({ data: null, error: { code, message: "PRIVATE_DATABASE_DETAIL" } })
     expect(await updateBookingStatus(id, "confirmed", "in_progress")).toEqual({ success: false, error: message })
   } finally { log.mockRestore() }
+})
+it("revalidates the events pages when a booking is cancelled (its event follows)", async () => {
+  query.maybeSingle.mockResolvedValueOnce({ data: { id }, error: null })
+  expect(await updateBookingStatus(id, "cancelled", "confirmed")).toEqual({ success: true })
+  expect(revalidatePath).toHaveBeenCalledWith("/dashboard/events", "layout")
 })
 it("fails closed when the conflict read itself fails", async () => {
   const log = vi.spyOn(console, "error").mockImplementation(() => {})

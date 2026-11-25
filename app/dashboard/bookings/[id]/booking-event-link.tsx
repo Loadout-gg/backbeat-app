@@ -19,8 +19,8 @@ const linkClass = "font-medium text-foreground underline underline-offset-4 [ove
 
 /**
  * "Create event" for a confirmed or completed booking, and the link to the event once it
- * exists. One event per booking: the database refuses a second one, and a refused retry
- * shows fixed copy with a link to the existing event. Creating the event never changes the
+ * exists. One event per booking: the database refuses a second one, and a retry (double
+ * click, lost response) opens the event already linked. Creating the event never changes the
  * booking status.
  */
 export function BookingEventLink({ bookingId, status, linkedEvent }: BookingEventLinkProps) {
@@ -28,11 +28,10 @@ export function BookingEventLink({ bookingId, status, linkedEvent }: BookingEven
   const inFlight = useRef(false)
   const [isCreating, setIsCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [existingEventId, setExistingEventId] = useState<string | null>(null)
-  const [createdEventId, setCreatedEventId] = useState<string | null>(null)
+  const [result, setResult] = useState<{ id: string; existing: boolean } | null>(null)
 
   const stored = linkedEvent !== null && linkedEvent !== "unavailable" ? linkedEvent : null
-  const eventId = stored?.id ?? createdEventId
+  const eventId = stored?.id ?? result?.id
   const convertible = canConvertBookingToEvent(status)
 
   const handleCreate = async () => {
@@ -40,15 +39,13 @@ export function BookingEventLink({ bookingId, status, linkedEvent }: BookingEven
     inFlight.current = true
     setIsCreating(true)
     setError(null)
-    setExistingEventId(null)
     try {
-      const result = await createEventFromBooking(bookingId)
-      if (result.success) {
-        setCreatedEventId(result.eventId)
+      const outcome = await createEventFromBooking(bookingId)
+      if (outcome.success) {
+        setResult({ id: outcome.eventId, existing: outcome.existing })
         router.refresh()
       } else {
-        setError(result.error)
-        setExistingEventId(result.existingEventId ?? null)
+        setError(outcome.error)
       }
     } catch {
       setError(BOOKING_EVENT_COPY.unconfirmed)
@@ -63,7 +60,7 @@ export function BookingEventLink({ bookingId, status, linkedEvent }: BookingEven
       <h2 id="booking-event-heading" className="text-base font-medium text-foreground">Event</h2>
       {eventId ? (
         <p role="status" className="text-sm text-foreground">
-          {stored ? "Event created from this booking: " : "Event created. "}
+          {stored ? "Event created from this booking: " : result?.existing ? "This booking already has an event. " : "Event created. "}
           <Link href={`/dashboard/events/${eventId}`} className={linkClass}>
             {stored ? stored.title : "Open event"}
           </Link>
@@ -96,12 +93,6 @@ export function BookingEventLink({ bookingId, status, linkedEvent }: BookingEven
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}
-          {existingEventId && (
-            <>
-              {" "}
-              <Link href={`/dashboard/events/${existingEventId}`} className={linkClass}>Open the existing event</Link>
-            </>
-          )}
         </p>
       )}
     </section>

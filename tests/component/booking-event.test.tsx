@@ -68,7 +68,7 @@ afterEach(cleanup)
 // --- "Create event" control -------------------------------------------------------------
 
 it.each(["confirmed", "completed"] as const)("offers Create event for a %s booking, creates it once and links to the new event", async (status) => {
-  mocks.createEventFromBooking.mockResolvedValue({ success: true, eventId: EVENT })
+  mocks.createEventFromBooking.mockResolvedValue({ success: true, eventId: EVENT, existing: false })
   render(link({ status }))
   const button = screen.getByRole("button", { name: "Create event" }) as HTMLButtonElement
   expect(button.disabled).toBe(false)
@@ -99,20 +99,32 @@ it("shows the existing event instead of the button when the booking is already c
   expect(eventSection().getByRole("link", { name: "DJ Moon @ Club Synthetic" }).getAttribute("href")).toBe(`/dashboard/events/${EVENT}`)
 })
 
-it("a refused retry shows the fixed copy with a link to the existing event", async () => {
-  mocks.createEventFromBooking.mockResolvedValue({ success: false, error: "An event already exists for this booking.", existingEventId: EVENT })
+it("a retry (double click, lost response) opens the event already linked, never an error", async () => {
+  mocks.createEventFromBooking.mockResolvedValue({ success: true, eventId: EVENT, existing: true })
   render(link())
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Create event" })) })
-  const alert = eventSection().getByRole("alert")
-  expect(alert.textContent).toBe("An event already exists for this booking. Open the existing event")
-  expect(within(alert).getByRole("link", { name: "Open the existing event" }).getAttribute("href")).toBe(`/dashboard/events/${EVENT}`)
-  expect(eventSection().queryByRole("status")).toBeNull()
-  expect(mocks.router.refresh).not.toHaveBeenCalled()
+  expect(eventSection().queryByRole("alert")).toBeNull()
+  expect(eventSection().getByRole("status").textContent).toBe("This booking already has an event. Open event")
+  expect(eventSection().getByRole("link", { name: "Open event" }).getAttribute("href")).toBe(`/dashboard/events/${EVENT}`)
+  expect(screen.queryByText(/already exists/)).toBeNull()
+  expect(mocks.router.refresh).toHaveBeenCalledTimes(1)
+})
+
+it("a double click sends one request", async () => {
+  let resolve!: (value: unknown) => void
+  mocks.createEventFromBooking.mockReturnValue(new Promise(r => { resolve = r }))
+  render(link())
+  const button = screen.getByRole("button", { name: "Create event" })
+  fireEvent.click(button)
+  fireEvent.click(button)
+  expect(mocks.createEventFromBooking).toHaveBeenCalledTimes(1)
+  await act(async () => { resolve({ success: true, eventId: EVENT, existing: false }) })
+  expect(eventSection().getByRole("link", { name: "Open event" })).toBeTruthy()
 })
 
 it("shows a server refusal without a link, and allows a retry", async () => {
   mocks.createEventFromBooking.mockResolvedValueOnce({ success: false, error: "Unable to create the event. Please try again." })
-  mocks.createEventFromBooking.mockResolvedValueOnce({ success: true, eventId: EVENT })
+  mocks.createEventFromBooking.mockResolvedValueOnce({ success: true, eventId: EVENT, existing: false })
   render(link())
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Create event" })) })
   expect(eventSection().getByRole("alert").textContent).toBe("Unable to create the event. Please try again.")
@@ -189,7 +201,8 @@ it("editor saves the promoter only when it changed, and leaves the typed main co
   expect(mocks.updateBooking.mock.calls[0][1]).not.toHaveProperty("promoter_id")
   fireEvent.change(select, { target: { value: P2 } })
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Update booking" })) })
-  expect(mocks.updateBooking.mock.calls[1][1]).toMatchObject({ promoter_id: P2, contact_name_main: "Typed Contact" })
+  // Changed-only save (#40): the unchanged main contact is not resent, the new promoter is.
+  expect(mocks.updateBooking.mock.calls[1][1]).toStrictEqual({ promoter_id: P2 })
   expect((screen.getByLabelText("Contact name (main)") as HTMLInputElement).value).toBe("Typed Contact")
 })
 

@@ -9,7 +9,7 @@ import type { BookingFeeCurrency } from "@/lib/booking-fee";
 import { bookingTransitionBlock, canTransitionBooking, type BookingStatus, type BookingTransitionBlock } from "@/lib/booking-status";
 import { configuredCalendarDay } from "@/lib/calendar-day";
 import { createBookingSchema, updateBookingSchema, bookingStatusSchema, bookingIdSchema } from "@/lib/booking-validation";
-import { BOOKING_EVENT_COPY, isBookingPromoterViolation } from "@/lib/booking-event";
+import { BOOKING_EVENT_COPY, CONVERTED_BOOKING_CANCELLED_SQLSTATE, isBookingPromoterViolation } from "@/lib/booking-event";
 
 export interface Booking {
   fee_amount_minor: number | null;
@@ -240,6 +240,9 @@ export async function updateBookingStatus(
 
   if (error) {
     console.error("Error updating booking status:", error);
+    if (error.code === CONVERTED_BOOKING_CANCELLED_SQLSTATE) {
+      return { success: false, error: BOOKING_EVENT_COPY.convertedStaysCancelled };
+    }
     return {
       success: false,
       error: lifecycleErrorMessage(error) ?? "Unable to update the booking status. Please try again.",
@@ -268,6 +271,8 @@ export async function updateBookingStatus(
   revalidatePath("/dashboard/bookings");
   revalidatePath("/dashboard/artists");
   revalidatePath(`/dashboard/bookings/${bookingId}`);
+  // Cancelling a converted booking also cancels its event (migration 008 trigger).
+  if (status === "cancelled") revalidatePath("/dashboard/events", "layout");
 
   return { success: true };
 }

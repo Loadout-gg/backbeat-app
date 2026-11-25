@@ -10,11 +10,22 @@ import { tableReads, tableReadsFromSource, type TableRead } from "./select-proje
 const WIDE_READ_ALLOWLIST = [{ file: join("lib", "actions", "bookings.ts"), fn: "getBooking" }]
 const PRIVATE_COLUMN = /\bnotes\b|contact_|fee|driver_|workspace_id|expected_audience|event_type/
 
+// Server-only source read (#35): conversion copies the fee into the new event inside the
+// action and returns only { success, eventId | error }. Pinned to its exact columns, so any
+// added column, a second read or a move to another function fails this guard.
+const SERVER_ONLY_SOURCE_READS = [{
+  file: join("lib", "actions", "booking-events.ts"),
+  fn: "createEventFromBooking",
+  columns: "id,status,date,start_time,venue_name,artist_id,promoter_id,fee_amount_minor,fee_currency,artist:artists(stage_name,name)",
+}]
+
 const isAllowlisted = ({ file, fn }: TableRead) =>
   WIDE_READ_ALLOWLIST.some(entry => entry.file === file && entry.fn === fn)
+const isPinnedServerRead = ({ file, fn, columns }: TableRead) =>
+  SERVER_ONLY_SOURCE_READS.some(entry => entry.file === file && entry.fn === fn && entry.columns === columns)
 
 function projectionViolations(reads: TableRead[]): string[] {
-  return reads.filter(read => !isAllowlisted(read)).flatMap(({ file, fn, columns }) => {
+  return reads.filter(read => !isAllowlisted(read) && !isPinnedServerRead(read)).flatMap(({ file, fn, columns }) => {
     const where = `${file}${fn ? ` ${fn}()` : ""}`
     if (columns === "") return [`${where}: bare select() reads every bookings column`]
     if (columns.includes("*")) return [`${where}: select("${columns}") reads every bookings column`]
@@ -33,6 +44,11 @@ describe("bookings read projection", () => {
 
   it("allows exactly one wide read: the single-booking detail read", () => {
     expect(reads.filter(isAllowlisted)).toHaveLength(1)
+  })
+
+  it("pins the one server-only source read to its exact columns", () => {
+    expect(reads.filter(isPinnedServerRead)).toHaveLength(SERVER_ONLY_SOURCE_READS.length)
+    expect(reads.filter(read => read.fn === "createEventFromBooking")).toHaveLength(1)
   })
 
   it("never selects every column or a private column in any other bookings read", () => {

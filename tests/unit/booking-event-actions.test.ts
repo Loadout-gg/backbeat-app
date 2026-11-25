@@ -58,7 +58,7 @@ beforeEach(() => {
 
 it("creates one confirmed event from the stored booking with a single insert and never writes the booking", async () => {
   queue(ok(booking), ok(null), ok(created))
-  expect(await createEventFromBooking(BOOKING)).toEqual({ success: true, eventId: EVENT })
+  expect(await createEventFromBooking(BOOKING)).toEqual({ success: true, eventId: EVENT, existing: false })
 
   const [read, existing, insert] = mocks.calls
   expect(mocks.calls.map(call => call.table)).toEqual(["bookings", "events", "events"])
@@ -98,39 +98,58 @@ it.each([
   ["completed booking", { status: "completed" }, { status: "confirmed" }],
 ] as const)("copies the booking snapshot: %s", async (_label, overrides, expected) => {
   queue(ok({ ...booking, ...overrides }), ok(null), ok(created))
-  expect(await createEventFromBooking(BOOKING)).toEqual({ success: true, eventId: EVENT })
+  expect(await createEventFromBooking(BOOKING)).toEqual({ success: true, eventId: EVENT, existing: false })
   expect(step(mocks.calls[2], "insert")[0][0]).toMatchObject(expected)
 })
 
 it.each(BOOKING_STATUSES.filter(status => status !== "confirmed" && status !== "completed"))(
-  "refuses a %s booking with fixed copy and inserts nothing", async (status) => {
-    queue(ok({ ...booking, status }))
+  "refuses a %s booking without an event with fixed copy and inserts nothing", async (status) => {
+    queue(ok({ ...booking, status }), ok(null))
     expect(await createEventFromBooking(BOOKING)).toEqual({ success: false, error: "An event can be created only from a confirmed or completed booking." })
-    expect(mocks.calls.map(call => call.table)).toEqual(["bookings"])
+    expect(mocks.calls.map(call => call.table)).toEqual(["bookings", "events"])
     expect(mocks.revalidatePath).not.toHaveBeenCalled()
   })
 
-it("fails cleanly on a retry: fixed copy, the existing event id, no insert", async () => {
+it("reopens the linked event on a retry (double click, lost response): no insert", async () => {
   queue(ok(booking), ok({ id: OTHER_EVENT, title: "DJ Alice @ Club Synthetic" }))
-  expect(await createEventFromBooking(BOOKING)).toEqual({
-    success: false, error: "An event already exists for this booking.", existingEventId: OTHER_EVENT,
-  })
+  expect(await createEventFromBooking(BOOKING)).toEqual({ success: true, eventId: OTHER_EVENT, existing: true })
   expect(mocks.calls).toHaveLength(2)
   expect(mocks.calls.some(call => step(call, "insert").length > 0)).toBe(false)
   expect(mocks.revalidatePath).not.toHaveBeenCalled()
 })
 
-it("resolves a lost race (unique violation) to the existing event without the provider message", async () => {
+it("resolves a lost race (unique violation) to the verified existing event without the provider message", async () => {
   queue(ok(booking), ok(null), fail("23505"), ok({ id: OTHER_EVENT, title: "x" }))
   const result = await createEventFromBooking(BOOKING)
-  expect(result).toEqual({ success: false, error: "An event already exists for this booking.", existingEventId: OTHER_EVENT })
+  expect(result).toEqual({ success: true, eventId: OTHER_EVENT, existing: true })
   expect(JSON.stringify(result)).not.toContain("private database detail")
   expect(step(mocks.calls[3], "eq")).toEqual([["workspace_id", WORKSPACE], ["booking_id", BOOKING]])
 })
 
-it("still answers with fixed copy when the winner of the race cannot be read", async () => {
-  queue(ok(booking), ok(null), fail("23505"), fail("XX000"))
-  expect(await createEventFromBooking(BOOKING)).toEqual({ success: false, error: "An event already exists for this booking." })
+it.each([
+  ["cannot be read", fail("XX000")],
+  ["is not returned", ok(null)],
+  ["has an invalid id", ok({ id: "not-a-uuid", title: "x" })],
+] as const)("never claims an existing event when the winner of the race %s: unconfirmed copy", async (_label, winner) => {
+  queue(ok(booking), ok(null), fail("23505"), winner)
+  const result = await createEventFromBooking(BOOKING)
+  expect(result).toEqual({ success: false, error: BOOKING_EVENT_COPY.unconfirmed })
+  expect(JSON.stringify(result)).not.toMatch(/already/i)
+})
+
+it.each(["cancelled", "in_progress", "hold", "option"] as const)(
+  "reopens the event of a converted booking that is now %s instead of refusing it", async (status) => {
+    // Cancelled after conversion: the event was cancelled with it and is still linked.
+    queue(ok({ ...booking, status }), ok({ id: OTHER_EVENT, title: "DJ Alice @ Club Synthetic" }))
+    expect(await createEventFromBooking(BOOKING)).toEqual({ success: true, eventId: OTHER_EVENT, existing: true })
+    expect(mocks.calls.some(call => step(call, "insert").length > 0)).toBe(false)
+  })
+
+it("never claims an existing event when the link read fails before the insert", async () => {
+  queue(ok({ ...booking, status: "cancelled" }), fail("XX000"))
+  const result = await createEventFromBooking(BOOKING)
+  expect(result).toEqual({ success: false, error: "Unable to create the event. Please try again." })
+  expect(mocks.calls.some(call => step(call, "insert").length > 0)).toBe(false)
 })
 
 it("reports a booking, artist or promoter deleted meanwhile (foreign key) with fixed copy", async () => {
@@ -138,9 +157,9 @@ it("reports a booking, artist or promoter deleted meanwhile (foreign key) with f
   expect(await createEventFromBooking(BOOKING)).toEqual({ success: false, error: BOOKING_EVENT_COPY.changed })
 })
 
-it("maps the database status gate (BB006) to the same fixed copy as the application gate", async () => {
+it("maps the database status gate (BB008) to the same fixed copy as the application gate", async () => {
   // The booking left confirmed/completed between the read and the insert.
-  queue(ok(booking), ok(null), fail("BB006"))
+  queue(ok(booking), ok(null), fail("BB008"))
   const result = await createEventFromBooking(BOOKING)
   expect(result).toEqual({ success: false, error: "An event can be created only from a confirmed or completed booking." })
   expect(JSON.stringify(result)).not.toContain("private database detail")

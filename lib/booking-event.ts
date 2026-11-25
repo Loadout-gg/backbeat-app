@@ -18,17 +18,24 @@ export function canConvertBookingToEvent(status: string): boolean {
 }
 
 /** SQLSTATE raised by backbeat_enforce_event_booking (migration 008): linked booking not confirmed/completed. */
-export const EVENT_BOOKING_STATUS_SQLSTATE = "BB006"
+export const EVENT_BOOKING_STATUS_SQLSTATE = "BB008"
+/** SQLSTATE raised by backbeat_cancel_booking_event (migration 008): a converted booking leaves cancelled. */
+export const CONVERTED_BOOKING_CANCELLED_SQLSTATE = "BB009"
+/** SQLSTATE raised by backbeat_keep_cancelled_event (migration 008): the event of a cancelled booking is reactivated or unlinked. */
+export const CANCELLED_BOOKING_EVENT_SQLSTATE = "BB010"
 
 /** Fixed user-facing copy: provider and database messages are never returned. */
 export const BOOKING_EVENT_COPY = {
   notFound: "Booking not found",
   notConvertible: "An event can be created only from a confirmed or completed booking.",
-  alreadyConverted: "An event already exists for this booking.",
   changed: "The booking changed while the event was being created. Reload and try again.",
   failed: "Unable to create the event. Please try again.",
   unconfirmed: "Unable to confirm whether the event was created. Reload the booking before retrying.",
   promoterGone: "The selected promoter no longer exists. Choose another promoter.",
+  /** BB009: cancelling a converted booking is final; its event stays cancelled. */
+  convertedStaysCancelled: "This booking has an event and was cancelled, so it cannot be reopened. Create a new booking to rebook.",
+  /** BB010: the event follows its cancelled booking. */
+  eventStaysCancelled: "This event was cancelled with its booking and cannot be reopened. Create a new booking to rebook.",
 } as const
 
 /** "<stage name, else name> @ <venue>"; without a venue the title is the artist name alone. */

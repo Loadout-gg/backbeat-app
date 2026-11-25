@@ -14,7 +14,8 @@ vi.mock("@/lib/actions/bookings", () => ({
   updateBooking: mocks.updateBooking, deleteBooking: mocks.deleteBooking,
 }))
 vi.mock("@/lib/actions/artists", () => ({ getArtist: mocks.getArtist, getArtists: vi.fn(async () => []) }))
-vi.mock("@/lib/actions/events", () => ({ listEvents: mocks.listEvents }))
+vi.mock("@/lib/actions/events", () => ({ listEvents: mocks.listEvents, listPromoters: vi.fn(async () => []) }))
+vi.mock("@/lib/actions/booking-events", () => ({ getBookingEventLink: vi.fn(async () => null), createEventFromBooking: vi.fn() }))
 vi.mock("next/navigation", async (importOriginal) => ({
   ...await importOriginal<typeof import("next/navigation")>(),
   useRouter: () => ({ push: mocks.push, refresh: mocks.refresh, back: vi.fn() }),
@@ -162,6 +163,8 @@ it("passes only the selected booking and exact date counts, rank and calendar co
     sameDayBookingCounts: { "2026-11-20": 1, "2026-11-21": 2 },
     holdPosition: null,
     today: "2026-11-14",
+    promoters: [],
+    linkedEvent: null,
   })
 })
 
@@ -191,7 +194,7 @@ it("says the same-day check could not run when the artist read failed, without b
   mocks.getBooking.mockResolvedValueOnce(editorBooking)
   mocks.getBookings.mockRejectedValueOnce(new Error("private detail"))
   const page = await EventBookingPage(editorParams)
-  expect(page.props).toStrictEqual({ booking: editorBooking, sameDayBookingCounts: null, holdPosition: null, today: "2026-11-14" })
+  expect(page.props).toStrictEqual({ booking: editorBooking, sameDayBookingCounts: null, holdPosition: null, today: "2026-11-14", promoters: [], linkedEvent: null })
   render(page)
   expect(mocks.getBookings).toHaveBeenCalledWith({ artistId, failOnError: true })
   expect(screen.getByText("Other bookings for this date could not be checked.")).toBeTruthy()

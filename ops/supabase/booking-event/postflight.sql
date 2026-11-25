@@ -65,6 +65,25 @@ WITH checks(ord, item, ok, detail) AS (
            AND NOT has_function_privilege('anon', oid, 'EXECUTE')), count(*)::text || '/1'
   FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname = 'backbeat_enforce_event_booking'
   UNION ALL
+  SELECT 17, 'bookings: trigger bookings_cancel_event enabled, AFTER UPDATE OF status',
+         count(*) = 1 AND bool_and(tgenabled = 'O'
+           AND pg_get_triggerdef(oid) LIKE '%AFTER UPDATE OF status ON public.bookings FOR EACH ROW%'),
+         coalesce(string_agg(pg_get_triggerdef(oid), ' '), 'absent')
+  FROM pg_trigger WHERE tgrelid = to_regclass('public.bookings') AND tgname = 'bookings_cancel_event' AND NOT tgisinternal
+  UNION ALL
+  SELECT 18, 'events: trigger events_keep_cancelled enabled, BEFORE UPDATE OF status, booking_id',
+         count(*) = 1 AND bool_and(tgenabled = 'O'
+           AND pg_get_triggerdef(oid) LIKE '%BEFORE UPDATE OF status, booking_id ON public.events FOR EACH ROW%'),
+         coalesce(string_agg(pg_get_triggerdef(oid), ' '), 'absent')
+  FROM pg_trigger WHERE tgrelid = to_regclass('public.events') AND tgname = 'events_keep_cancelled' AND NOT tgisinternal
+  UNION ALL
+  SELECT 19, 'cancellation functions: SECURITY INVOKER, empty search_path, not executable by anon/authenticated',
+         count(*) = 2 AND bool_and(NOT prosecdef AND proconfig = ARRAY['search_path=""']
+           AND NOT has_function_privilege('authenticated', oid, 'EXECUTE')
+           AND NOT has_function_privilege('anon', oid, 'EXECUTE')), count(*)::text || '/2'
+  FROM pg_proc WHERE pronamespace = 'public'::regnamespace
+    AND proname IN ('backbeat_cancel_booking_event', 'backbeat_keep_cancelled_event')
+  UNION ALL
   SELECT 11, 'RLS still enabled on events, bookings, promoters', count(*) = 3, count(*)::text || '/3'
   FROM pg_class WHERE relrowsecurity
     AND oid IN (to_regclass('public.events'), to_regclass('public.bookings'), to_regclass('public.promoters'))

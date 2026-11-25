@@ -8,9 +8,13 @@ import { getCurrentWorkspaceId } from "./workspace"
 
 export type BookingEventLink = { id: string; title: string }
 
+/**
+ * existing: true = the booking already had this event (retry, double click, lost response):
+ * the caller opens it. Only a verified link is ever returned as existing.
+ */
 export type BookingEventResult =
-  | { success: true; eventId: string }
-  | { success: false; error: string; existingEventId?: string }
+  | { success: true; eventId: string; existing: boolean }
+  | { success: false; error: string }
 
 // Explicit projections only: never `*`, never public_token.
 const BOOKING_SOURCE_FIELDS =
@@ -56,7 +60,7 @@ export async function getBookingEventLink(bookingId: string): Promise<BookingEve
 /**
  * Creates the event of a confirmed or completed booking: one INSERT, the booking is not
  * changed. events.booking_id is UNIQUE, so a retry or a concurrent request cannot create a
- * second event; it gets fixed copy and the id of the existing event.
+ * second event; it gets the existing event back (existing: true) once that link is verified.
  */
 export async function createEventFromBooking(bookingId: string): Promise<BookingEventResult> {
   if (!z.guid().safeParse(bookingId).success) return { success: false, error: BOOKING_EVENT_COPY.notFound }
@@ -76,16 +80,16 @@ export async function createEventFromBooking(bookingId: string): Promise<Booking
   }
   const booking = bookingRow as unknown as BookingSource | null
   if (!booking || booking.id !== bookingId) return { success: false, error: BOOKING_EVENT_COPY.notFound }
-  if (!canConvertBookingToEvent(booking.status)) return { success: false, error: BOOKING_EVENT_COPY.notConvertible }
 
   const existing = await readLinkedEvent(supabase, workspaceId, bookingId)
   if (existing.error) {
     console.error("Error checking the event of a booking:", existing.error)
     return { success: false, error: BOOKING_EVENT_COPY.failed }
   }
-  if (existing.link) {
-    return { success: false, error: BOOKING_EVENT_COPY.alreadyConverted, existingEventId: existing.link.id }
-  }
+  // A second attempt reopens the event already linked, whatever the booking status now is
+  // (a converted booking may since have been cancelled, together with its event).
+  if (existing.link) return { success: true, eventId: existing.link.id, existing: true }
+  if (!canConvertBookingToEvent(booking.status)) return { success: false, error: BOOKING_EVENT_COPY.notConvertible }
 
   const venue = booking.venue_name?.trim() || null
   const hasFee = booking.fee_amount_minor !== null && booking.fee_currency !== null
@@ -111,13 +115,13 @@ export async function createEventFromBooking(bookingId: string): Promise<Booking
   if (insertError) {
     console.error("Error creating the event of a booking:", insertError)
     if (insertError.code === "23505") {
-      // Lost a race against another request for the same booking: point at its event.
+      // Lost a race against another request for the same booking: open its event, but only
+      // once the link is read back; otherwise the outcome is unconfirmed, never "already exists".
       const winner = await readLinkedEvent(supabase, workspaceId, bookingId)
-      return {
-        success: false,
-        error: BOOKING_EVENT_COPY.alreadyConverted,
-        ...(winner.link ? { existingEventId: winner.link.id } : {}),
-      }
+      if (winner.error) console.error("Error reading the event of a booking after a race:", winner.error)
+      return winner.link
+        ? { success: true, eventId: winner.link.id, existing: true }
+        : { success: false, error: BOOKING_EVENT_COPY.unconfirmed }
     }
     // The database gate: the booking left confirmed/completed after the read above.
     if (insertError.code === EVENT_BOOKING_STATUS_SQLSTATE) return { success: false, error: BOOKING_EVENT_COPY.notConvertible }
@@ -139,5 +143,5 @@ export async function createEventFromBooking(bookingId: string): Promise<Booking
   revalidatePath(`/dashboard/bookings/${bookingId}`)
   revalidatePath("/dashboard")
   revalidatePath("/dashboard/artists")
-  return { success: true, eventId: createdId }
+  return { success: true, eventId: createdId, existing: false }
 }

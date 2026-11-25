@@ -2,7 +2,8 @@
 -- Additive: booking -> event link (events.booking_id, one event per booking), event start
 -- time and fee snapshot, events status CHECK, UNIQUE (workspace_id, id) on events, and an
 -- optional promoter link on bookings, plus a trigger that lets an event be linked only to a
--- confirmed or completed booking, for every writer including raw REST.
+-- confirmed or completed booking, for every writer including raw REST, and triggers that
+-- cancel the event of a cancelled booking and keep it cancelled.
 -- No row is rewritten, nothing is backfilled.
 -- Idempotent: safe to re-run. Requires 005. Prefix with an explicit target:
 --   SET backbeat.booking_event_target = 'development';                 -- synthetic local
@@ -168,7 +169,7 @@ CREATE INDEX IF NOT EXISTS bookings_workspace_promoter_idx
 -- neither unlinks nor blocks its event, and the FK's own SET NULL (booking_id) passes.
 -- The booking row is locked FOR SHARE, so its status cannot change before this write commits.
 -- A booking the writer cannot see or that does not exist is left to RLS and to
--- events_booking_id_fkey (42501 / 23503). SQLSTATE BB006 (006 uses BB001-BB003, 007 BB004-BB005).
+-- events_booking_id_fkey (42501 / 23503). SQLSTATE BB008 (006 uses BB001-BB003, 007 BB004-BB005, 010 of #33 BB006-BB007).
 CREATE OR REPLACE FUNCTION public.backbeat_enforce_event_booking()
 RETURNS trigger LANGUAGE plpgsql SET search_path = ''
 AS $function$
@@ -185,7 +186,7 @@ BEGIN
     WHERE b.id = NEW.booking_id AND b.workspace_id = NEW.workspace_id
     FOR SHARE;
   IF FOUND AND linked_status NOT IN ('confirmed', 'completed') THEN
-    RAISE EXCEPTION 'EVENT_BOOKING_MUST_BE_CONFIRMED_OR_COMPLETED' USING ERRCODE = 'BB006';
+    RAISE EXCEPTION 'EVENT_BOOKING_MUST_BE_CONFIRMED_OR_COMPLETED' USING ERRCODE = 'BB008';
   END IF;
   RETURN NEW;
 END
@@ -195,6 +196,67 @@ REVOKE ALL ON FUNCTION public.backbeat_enforce_event_booking() FROM PUBLIC, anon
 DROP TRIGGER IF EXISTS events_enforce_booking ON public.events;
 CREATE TRIGGER events_enforce_booking BEFORE INSERT OR UPDATE OF booking_id, workspace_id ON public.events
   FOR EACH ROW EXECUTE FUNCTION public.backbeat_enforce_event_booking();
+
+-- Cancellation (Simone, 2026-11-25). A booking cancelled before conversion never gets an
+-- event: the gate above refuses the link. A booking cancelled after conversion cancels its
+-- event in the same transaction; the event keeps its booking link and every other column,
+-- and is never deleted. A converted booking cannot leave `cancelled` (a rebooking is a new
+-- booking with a new event), and the event of a cancelled booking cannot leave `cancelled`
+-- or drop its link. SECURITY INVOKER: the writer's RLS applies; the existing FOR ALL
+-- active-member policies on bookings and events give the same writers both tables.
+-- SQLSTATE BB009 (converted booking leaves cancelled), BB010 (event of a cancelled booking
+-- reactivated or unlinked).
+CREATE OR REPLACE FUNCTION public.backbeat_cancel_booking_event()
+RETURNS trigger LANGUAGE plpgsql SET search_path = ''
+AS $function$
+BEGIN
+  IF NEW.status IS NOT DISTINCT FROM OLD.status THEN
+    RETURN NULL;
+  END IF;
+  IF OLD.status = 'cancelled' THEN
+    IF EXISTS (SELECT 1 FROM public.events AS e
+        WHERE e.booking_id = NEW.id AND e.workspace_id = NEW.workspace_id) THEN
+      RAISE EXCEPTION 'CONVERTED_BOOKING_STAYS_CANCELLED' USING ERRCODE = 'BB009';
+    END IF;
+  ELSIF NEW.status = 'cancelled' THEN
+    UPDATE public.events AS e SET status = 'cancelled'
+      WHERE e.booking_id = NEW.id AND e.workspace_id = NEW.workspace_id
+        AND e.status IS DISTINCT FROM 'cancelled';
+  END IF;
+  RETURN NULL;
+END
+$function$;
+REVOKE ALL ON FUNCTION public.backbeat_cancel_booking_event() FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS bookings_cancel_event ON public.bookings;
+CREATE TRIGGER bookings_cancel_event AFTER UPDATE OF status ON public.bookings
+  FOR EACH ROW EXECUTE FUNCTION public.backbeat_cancel_booking_event();
+
+-- The booking link is read from OLD: when the booking itself is deleted, the FK's
+-- SET NULL (booking_id) finds no booking row and passes.
+CREATE OR REPLACE FUNCTION public.backbeat_keep_cancelled_event()
+RETURNS trigger LANGUAGE plpgsql SET search_path = ''
+AS $function$
+BEGIN
+  IF OLD.booking_id IS NULL OR OLD.status IS DISTINCT FROM 'cancelled' THEN
+    RETURN NEW;
+  END IF;
+  IF NEW.status IS NOT DISTINCT FROM 'cancelled'
+     AND NEW.booking_id IS NOT DISTINCT FROM OLD.booking_id THEN
+    RETURN NEW;
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.bookings AS b
+      WHERE b.id = OLD.booking_id AND b.workspace_id = OLD.workspace_id AND b.status = 'cancelled') THEN
+    RAISE EXCEPTION 'EVENT_OF_CANCELLED_BOOKING_STAYS_CANCELLED' USING ERRCODE = 'BB010';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+REVOKE ALL ON FUNCTION public.backbeat_keep_cancelled_event() FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS events_keep_cancelled ON public.events;
+CREATE TRIGGER events_keep_cancelled BEFORE UPDATE OF status, booking_id ON public.events
+  FOR EACH ROW EXECUTE FUNCTION public.backbeat_keep_cancelled_event();
 
 -- Decision 6: RLS, grants and policies on events, bookings and promoters are unchanged
 -- (one FOR ALL active-member policy each). The new columns inherit them.

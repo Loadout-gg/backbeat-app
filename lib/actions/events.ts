@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server"
 import { getCurrentWorkspaceId } from "./workspace"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
+import { BOOKING_EVENT_COPY, CANCELLED_BOOKING_EVENT_SQLSTATE } from "@/lib/booking-event"
 import { bookingFeeShape, type BookingFeeCurrency } from "@/lib/booking-fee"
 
 // Types derived from Supabase schema
@@ -254,7 +255,10 @@ export async function updateEvent(
     .select("id")
 
   // The provider message is never shown to the user.
-  if (error) return { success: false, error: EVENT_SAVE_FAILED }
+  if (error) {
+    if (error.code === CANCELLED_BOOKING_EVENT_SQLSTATE) return { success: false, error: BOOKING_EVENT_COPY.eventStaysCancelled }
+    return { success: false, error: EVENT_SAVE_FAILED }
+  }
   // No provider error is not proof of a write: require exactly the targeted row back.
   if (!Array.isArray(data) || data.length !== 1 || data[0].id !== id) return { success: false, error: EVENT_NOT_FOUND }
 
