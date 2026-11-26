@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { bookingFeeShape, validateBookingFeePair } from "./booking-fee"
+import { BOOKING_FEE_CURRENCIES, bookingFeeShape, validateBookingFeePair } from "./booking-fee"
 import { BOOKING_STATUSES } from "./booking-status"
 import { MAX_TAX_NOTE_LENGTH, bookingCommissionShape, validateBookingCommission } from "./booking-finance"
 
@@ -25,6 +25,8 @@ const optionalBookingText = (max: number, label: string) => z.string().trim()
 export const updateBookingSchema = z.object({
   ...bookingFeeShape,
   ...bookingCommissionShape,
+  // Not a column: the fee currency a fixed commission was entered in, when the fee is not sent.
+  expected_fee_currency: z.enum(BOOKING_FEE_CURRENCIES).optional(),
   tax_note: optionalBookingText(MAX_TAX_NOTE_LENGTH, "Tax note"),
   venue_name: optionalBookingText(200, "Venue name"),
   venue_address: optionalBookingText(1000, "Venue address"),

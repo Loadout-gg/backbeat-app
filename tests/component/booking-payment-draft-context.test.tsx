@@ -470,7 +470,7 @@ it("keeps an acknowledged fixed commission while applying the deferred fee rebas
   expect(fee()).toBe("1000.00");
   await click("Update booking");
   expect(mocks.updateBooking).toHaveBeenCalledExactlyOnceWith(booking.id, {
-    commission_type: "fixed", commission_value: 5825, commission_mode: "on_top",
+    commission_type: "fixed", commission_value: 5825, commission_mode: "on_top", expected_fee_currency: "EUR",
   });
   await act(async () => acknowledge({ success: true }));
   expect(screen.getByText("Booking saved.")).toBeTruthy();
@@ -488,6 +488,25 @@ it("keeps an acknowledged fixed commission while applying the deferred fee rebas
   expect(fee()).toBe("1040");
   expect((screen.getByLabelText("Commission amount (JPY)") as HTMLInputElement).value).toBe("75");
   expect(mode()).toBe("included");
+});
+
+it("never reinterprets a fixed commission draft in a fee currency changed under it", async () => {
+  const priced: BookingWithArtist = { ...booking, commission_type: "fixed", commission_value: 5550, commission_mode: "included" };
+  const view = render(editor(priced)); await financial();
+  fireEvent.change(screen.getByLabelText("Commission amount (EUR)"), { target: { value: "58.25" } });
+  view.rerender(editor({ ...priced, fee_currency: "JPY", fee_amount_minor: 1040 }));
+  expect(screen.getByLabelText("Commission amount (EUR)")).toBeTruthy();
+  await click("Update booking");
+  expect(mocks.updateBooking).not.toHaveBeenCalled();
+  expect(screen.getByText("The booking fee currency changed since this commission was entered. Check the commission amount and save again.")).toBeTruthy();
+  // The draft adopts the saved currency; the member re-checks the amount before it is sent.
+  expect((screen.getByLabelText("Booking fee amount") as HTMLInputElement).value).toBe("1040");
+  fireEvent.change(screen.getByLabelText("Commission amount (JPY)"), { target: { value: "58" } });
+  mocks.updateBooking.mockResolvedValueOnce({ success: true });
+  await click("Update booking");
+  expect(mocks.updateBooking).toHaveBeenCalledExactlyOnceWith(booking.id, {
+    commission_type: "fixed", commission_value: 58, commission_mode: "included", expected_fee_currency: "JPY",
+  });
 });
 
 it.each([

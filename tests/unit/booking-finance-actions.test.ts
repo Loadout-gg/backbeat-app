@@ -251,7 +251,35 @@ it.each([
   [{ code: "23514", message: 'violates check constraint "bookings_tax_note_check"' }, "Unable to save booking. Please try again."],
 ])("maps the database backstop %j to fixed copy", async (error, copy) => {
   queue("bookings", { data: null, error })
-  expect(await updateBooking(BOOKING, { commission_type: "fixed", commission_value: 500, commission_mode: "included" })).toEqual({ success: false, error: copy })
+  expect(await updateBooking(BOOKING, { commission_type: "fixed", commission_value: 500, commission_mode: "included", expected_fee_currency: "EUR" })).toEqual({ success: false, error: copy })
+})
+const CURRENCY_CHANGED = "The booking fee currency changed since this commission was entered. Check the commission amount and save again."
+it("binds a fixed commission sent without the fee to the currency it was entered in, never written as a column", async () => {
+  queue("bookings", { data: { id: BOOKING }, error: null })
+  expect(await updateBooking(BOOKING, { commission_type: "fixed", commission_value: 5825, commission_mode: "on_top", expected_fee_currency: "EUR" })).toEqual({ success: true })
+  const query = table("bookings")
+  expect(query.update.mock.calls[0][0]).toEqual({ commission_type: "fixed", commission_value: 5825, commission_mode: "on_top", updated_at: expect.any(String) })
+  expect(query.eq.mock.calls).toEqual([["id", BOOKING], ["workspace_id", WORKSPACE], ["fee_currency", "EUR"]])
+})
+it("refuses a fixed commission whose fee currency changed concurrently, without reinterpreting it", async () => {
+  queue("bookings", { data: null, error: null }, { data: { id: BOOKING }, error: null })
+  expect(await updateBooking(BOOKING, { commission_type: "fixed", commission_value: 5825, commission_mode: "on_top", expected_fee_currency: "EUR" }))
+    .toEqual({ success: false, error: CURRENCY_CHANGED })
+  expect(mocks.revalidatePath).not.toHaveBeenCalled()
+  // A booking that is gone or out of scope stays "not found".
+  queue("bookings", { data: null, error: null }, { data: null, error: null })
+  expect(await updateBooking(BOOKING, { commission_type: "fixed", commission_value: 5825, commission_mode: "on_top", expected_fee_currency: "EUR" }))
+    .toEqual({ success: false, error: "Booking not found" })
+})
+it("refuses a fixed commission without the fee or its expected currency, before any write", async () => {
+  expect(await updateBooking(BOOKING, { commission_type: "fixed", commission_value: 500, commission_mode: "included" }))
+    .toEqual({ success: false, error: CURRENCY_CHANGED })
+  expect(table("bookings").update).not.toHaveBeenCalled()
+  // With the fee in the same patch the currency is explicit and no binding is added.
+  queue("bookings", { data: { id: BOOKING }, error: null }, { data: { id: BOOKING }, error: null })
+  expect(await updateBooking(BOOKING, { fee_amount_minor: 100000, fee_currency: "EUR", commission_type: "fixed", commission_value: 500, commission_mode: "included", expected_fee_currency: "USD" }))
+    .toEqual({ success: true })
+  expect(table("bookings").eq.mock.calls).not.toContainEqual(["fee_currency", "USD"])
 })
 it("persists a validated commission triple and clears it with nulls", async () => {
   queue("bookings", { data: { id: BOOKING }, error: null }, { data: { id: BOOKING }, error: null })

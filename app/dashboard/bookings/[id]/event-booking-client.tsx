@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { BOOKING_FEE_CURRENCIES, parseBookingFee, formatBookingFeeInput, type BookingFeeError } from "@/lib/booking-fee";
+import { BOOKING_FEE_CURRENCIES, parseBookingFee, formatBookingFeeInput, type BookingFeeCurrency, type BookingFeeError } from "@/lib/booking-fee";
 import { createBookingSchema } from "@/lib/booking-validation";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -22,7 +22,7 @@ import {
 import { allowedBookingTransitions, type BookingStatus } from "@/lib/booking-status";
 import { formatArtistBaseRate } from "@/lib/artist-base-rate";
 import {
-  BOOKING_HAS_PAYMENTS_MESSAGE, COMMISSION_MODES, COMMISSION_MODE_LABELS, COMMISSION_WITHIN_FEE_MESSAGE, DEFAULT_COMMISSION_MODE,
+  BOOKING_HAS_PAYMENTS_MESSAGE, COMMISSION_CURRENCY_CHANGED_MESSAGE, COMMISSION_MODES, COMMISSION_MODE_LABELS, COMMISSION_WITHIN_FEE_MESSAGE, DEFAULT_COMMISSION_MODE,
   MAX_TAX_NOTE_LENGTH, artistDefaultCommission, bookingCommission, defaultCommissionPrefill, formatArtistDefaultCommission,
   formatBasisPoints, parseCommissionPercent, parseMoneyAmount,
   type BookingPayment, type CommissionMode, type CommissionType,
@@ -350,7 +350,7 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
     }
     // Commission: sent only when edited. A fixed amount is read in the fee currency of this draft.
     setCommissionError(null);
-    let commissionPatch: { commission_type: CommissionType | null; commission_value: number | null; commission_mode: CommissionMode | null } | null = null;
+    let commissionPatch: { commission_type: CommissionType | null; commission_value: number | null; commission_mode: CommissionMode | null; expected_fee_currency?: BookingFeeCurrency } | null = null;
     if (commissionDirty || uncertain.has("commission_type")) {
       const failCommission = (message: string) => { setCommissionError(message); setActiveTab("Financial"); };
       if (commissionType === "") {
@@ -360,13 +360,22 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
         if (!percent.success) return failCommission(percent.error);
         commissionPatch = { commission_type: "percent", commission_value: percent.data, commission_mode: commissionMode };
       } else {
+        if (!feeDirty && feeCurrency !== (booking.fee_currency ?? "")) {
+          // The saved fee currency changed under an unchanged fee draft: adopt it and let the
+          // member re-check the amount, instead of reinterpreting it in the new currency.
+          setFeeSync({ ...feeSync, rebasePending: false, commissionHydrationPending: false });
+          setFeeAmount(formatBookingFeeInput(booking.fee_amount_minor, booking.fee_currency));
+          setFeeCurrency(booking.fee_currency ?? "");
+          setFeeBaseline({ fee_amount_minor: booking.fee_amount_minor, fee_currency: booking.fee_currency });
+          return failCommission(COMMISSION_CURRENCY_CHANGED_MESSAGE);
+        }
         const currency = BOOKING_FEE_CURRENCIES.find((code) => code === feeCurrency);
         if (!currency) return failCommission("Choose a booking fee currency before entering a fixed commission");
         const amount = parseMoneyAmount(commissionValue, currency, "commission amount");
         if (!amount.success) return failCommission(amount.error);
         const draftFee = fee.success ? fee.data.fee_amount_minor : null;
         if (commissionMode === "included" && draftFee !== null && amount.data > draftFee) return failCommission(COMMISSION_WITHIN_FEE_MESSAGE);
-        commissionPatch = { commission_type: "fixed", commission_value: amount.data, commission_mode: commissionMode };
+        commissionPatch = { commission_type: "fixed", commission_value: amount.data, commission_mode: commissionMode, expected_fee_currency: currency };
       }
     }
     if (taxNote.trim().length > MAX_TAX_NOTE_LENGTH) {
@@ -413,6 +422,8 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
         setSaveError(result.error === "Booking not found"
           ? UNAVAILABLE_SAVE
           : result.error || "Unable to save booking. Please try again.");
+        // Load the saved currency so the next save adopts it before re-checking the amount.
+        if (result.error === COMMISSION_CURRENCY_CHANGED_MESSAGE) router.refresh();
         return;
       }
       baseline.current = submitted;

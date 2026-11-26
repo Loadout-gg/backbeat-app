@@ -10,7 +10,7 @@ import { bookingTransitionBlock, canTransitionBooking, type BookingStatus, type 
 import { configuredCalendarDay } from "@/lib/calendar-day";
 import { createBookingSchema, updateBookingSchema, bookingStatusSchema, bookingIdSchema } from "@/lib/booking-validation";
 import {
-  BOOKING_HAS_PAYMENTS_MESSAGE, COMMISSION_WITHIN_FEE_MESSAGE, FEE_CURRENCY_LOCKED_MESSAGE,
+  BOOKING_HAS_PAYMENTS_MESSAGE, COMMISSION_CURRENCY_CHANGED_MESSAGE, COMMISSION_WITHIN_FEE_MESSAGE, FEE_CURRENCY_LOCKED_MESSAGE,
   artistDefaultCommission, defaultCommissionPrefill,
   type CommissionMode, type CommissionType,
 } from "@/lib/booking-finance";
@@ -392,6 +392,7 @@ export async function updateBooking(
     commission_type?: string | null;
     commission_value?: number | null;
     commission_mode?: string | null;
+    expected_fee_currency?: string;
     tax_note?: string | null;
     date?: string;
     start_time?: string;
@@ -433,8 +434,17 @@ export async function updateBooking(
   };
 
   // The schema is the write allowlist and carries normalized M2 values.
-  for (const [field, value] of Object.entries(validation.data)) {
+  const { expected_fee_currency: expectedFeeCurrency, ...columns } = validation.data;
+  for (const [field, value] of Object.entries(columns)) {
     if (value !== undefined) dbPatch[field] = value;
+  }
+  // A fixed commission is minor units of the fee currency it was entered in. Without the fee
+  // in the same patch, the write applies only while that currency is still the saved one.
+  const commissionCurrency = validation.data.commission_type === "fixed" && validation.data.fee_currency === undefined
+    ? expectedFeeCurrency
+    : undefined;
+  if (validation.data.commission_type === "fixed" && validation.data.fee_currency === undefined && !commissionCurrency) {
+    return { success: false, error: COMMISSION_CURRENCY_CHANGED_MESSAGE };
   }
 
   // Decision 6, application side: with payments recorded the fee amount may change but the
@@ -467,11 +477,14 @@ export async function updateBooking(
     }
   }
 
-  const { data: changedBooking, error } = await supabase
+  const updateQuery = supabase
     .from("bookings")
     .update(dbPatch)
     .eq("id", bookingId)
-    .eq("workspace_id", workspaceId)
+    .eq("workspace_id", workspaceId);
+  const { data: changedBooking, error } = await (commissionCurrency
+    ? updateQuery.eq("fee_currency", commissionCurrency)
+    : updateQuery)
     .select("id")
     .maybeSingle();
 
@@ -485,6 +498,20 @@ export async function updateBooking(
       success: false,
       error: lifecycleErrorMessage(error) ?? financeErrorMessage(error) ?? holdExpiry ?? "Unable to save booking. Please try again.",
     };
+  }
+  if (!changedBooking && commissionCurrency) {
+    // Distinguish a changed fee currency from a booking that is gone or out of scope.
+    const { data: stillVisible, error: readError } = await supabase
+      .from("bookings")
+      .select("id")
+      .eq("id", bookingId)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle();
+    if (readError) {
+      console.error("Error reading the booking after a commission currency mismatch:", readError);
+      return { success: false, error: "Unable to save booking. Please try again." };
+    }
+    if (stillVisible) return { success: false, error: COMMISSION_CURRENCY_CHANGED_MESSAGE };
   }
   if (!changedBooking) return { success: false, error: BOOKING_NOT_FOUND };
 

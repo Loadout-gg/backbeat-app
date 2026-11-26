@@ -211,6 +211,9 @@ type CommissionPatch = {
 const COMMISSION_SET_MESSAGE = "Enter commission type, value and mode together, or clear all three"
 export const COMMISSION_PERCENT_MESSAGE = "A percentage commission must be between 0 and 100"
 export const COMMISSION_WITHIN_FEE_MESSAGE = "A fixed commission included in the fee cannot be greater than the fee"
+/** A fixed commission is an amount in the fee currency; it is never reinterpreted in another one. */
+export const COMMISSION_CURRENCY_CHANGED_MESSAGE =
+  "The booking fee currency changed since this commission was entered. Check the commission amount and save again."
 
 export function validateBookingCommission(value: CommissionPatch, context: z.RefinementCtx) {
   const fields = [value.commission_type, value.commission_value, value.commission_mode]
