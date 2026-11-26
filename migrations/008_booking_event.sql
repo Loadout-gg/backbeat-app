@@ -241,10 +241,13 @@ DROP TRIGGER IF EXISTS bookings_cancel_event ON public.bookings;
 CREATE TRIGGER bookings_cancel_event AFTER UPDATE OF status ON public.bookings
   FOR EACH ROW EXECUTE FUNCTION public.backbeat_cancel_booking_event();
 
--- The booking link is read from OLD.
+-- The booking link is read from OLD. The booking row is locked FOR SHARE whatever its
+-- status, so a concurrent cancellation of the booking waits for this write to commit and
+-- then cancels the reopened event, and a cancellation that committed first is seen here.
 CREATE OR REPLACE FUNCTION public.backbeat_keep_cancelled_event()
 RETURNS trigger LANGUAGE plpgsql SET search_path = ''
 AS $function$
+DECLARE linked_status text;
 BEGIN
   IF OLD.booking_id IS NULL OR OLD.status IS DISTINCT FROM 'cancelled' THEN
     RETURN NEW;
@@ -253,8 +256,10 @@ BEGIN
      AND NEW.booking_id IS NOT DISTINCT FROM OLD.booking_id THEN
     RETURN NEW;
   END IF;
-  IF EXISTS (SELECT 1 FROM public.bookings AS b
-      WHERE b.id = OLD.booking_id AND b.workspace_id = OLD.workspace_id AND b.status = 'cancelled') THEN
+  SELECT b.status INTO linked_status FROM public.bookings AS b
+    WHERE b.id = OLD.booking_id AND b.workspace_id = OLD.workspace_id
+    FOR SHARE;
+  IF linked_status = 'cancelled' THEN
     RAISE EXCEPTION 'EVENT_OF_CANCELLED_BOOKING_STAYS_CANCELLED' USING ERRCODE = 'BB010';
   END IF;
   RETURN NEW;

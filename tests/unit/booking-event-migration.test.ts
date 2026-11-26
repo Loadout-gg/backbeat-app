@@ -142,7 +142,9 @@ it("STATIC: cancelling a converted booking cancels its event, which keeps its li
   expect(cancel).not.toMatch(/DELETE|booking_id =\s*NULL|SET booking_id/)
   expect(cancel).toContain("USING ERRCODE = 'BB009'")
   const keep = functionBody(sql, "backbeat_keep_cancelled_event").replace(/\s+/g, " ")
-  expect(keep).toContain("b.id = OLD.booking_id AND b.workspace_id = OLD.workspace_id AND b.status = 'cancelled'")
+  // Locked whatever its status: a concurrent booking cancellation waits for the reopen to commit.
+  expect(keep).toContain("FROM public.bookings AS b WHERE b.id = OLD.booking_id AND b.workspace_id = OLD.workspace_id FOR SHARE;")
+  expect(keep).toContain("IF linked_status = 'cancelled' THEN")
   expect(keep).toContain("USING ERRCODE = 'BB010'")
   expect(applyTime(sql)).not.toMatch(/SECURITY DEFINER/)
   // SQLSTATEs of 006, 007 and #33's 010 are not reused.

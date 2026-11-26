@@ -364,6 +364,61 @@ BEGIN
 END
 $$;
 
+-- Two sessions (Codex finding on 9eca010): reopening the manually cancelled event of a
+-- confirmed booking and cancelling that booking are serialized, so the booking can never end
+-- cancelled with its event open. Second session through dblink on the same throwaway cluster.
+CREATE EXTENSION IF NOT EXISTS dblink SCHEMA bb_test;
+INSERT INTO public.bookings (id, workspace_id, artist_id, date, start_time) VALUES
+  ('a0000000-0000-4000-8000-0000000b00c1', 'a0000000-0000-4000-8000-0000000000aa', 'a0000000-0000-4000-8000-00000000a472', '2030-08-01', '21:00'),
+  ('a0000000-0000-4000-8000-0000000b00c2', 'a0000000-0000-4000-8000-0000000000aa', 'a0000000-0000-4000-8000-00000000a472', '2030-08-02', '21:00');
+UPDATE public.bookings SET status = 'confirmed' WHERE id IN ('a0000000-0000-4000-8000-0000000b00c1', 'a0000000-0000-4000-8000-0000000b00c2');
+INSERT INTO public.events (id, workspace_id, title, date, status, booking_id) VALUES
+  ('a0000000-0000-4000-8000-0000000e00c1', 'a0000000-0000-4000-8000-0000000000aa', 'race 1', '2030-08-01', 'confirmed', 'a0000000-0000-4000-8000-0000000b00c1'),
+  ('a0000000-0000-4000-8000-0000000e00c2', 'a0000000-0000-4000-8000-0000000000aa', 'race 2', '2030-08-02', 'confirmed', 'a0000000-0000-4000-8000-0000000b00c2');
+UPDATE public.events SET status = 'cancelled' WHERE title IN ('race 1', 'race 2');
+SELECT bb_test.dblink_connect('race', format('host=%s port=%s dbname=%s user=%s',
+  split_part(current_setting('unix_socket_directories'), ',', 1), current_setting('port'), current_database(), current_user));
+-- Reopen first, uncommitted: the cancellation waits for it (here: lock timeout), then cancels the reopened event.
+SELECT bb_test.dblink_exec('race', 'BEGIN');
+SELECT bb_test.dblink_exec('race', 'UPDATE public.events SET status = ''confirmed'' WHERE id = ''a0000000-0000-4000-8000-0000000e00c1''');
+DO $$
+DECLARE outcome text;
+BEGIN
+  BEGIN
+    SET LOCAL lock_timeout = '300ms';
+    UPDATE public.bookings SET status = 'cancelled' WHERE id = 'a0000000-0000-4000-8000-0000000b00c1';
+    outcome := 'not blocked';
+  EXCEPTION WHEN OTHERS THEN outcome := SQLSTATE;
+  END;
+  PERFORM bb_test.eq('two sessions: cancelling the booking waits for an uncommitted reopen of its event', outcome, '55P03');
+END
+$$;
+SELECT bb_test.dblink_exec('race', 'COMMIT');
+UPDATE public.bookings SET status = 'cancelled' WHERE id = 'a0000000-0000-4000-8000-0000000b00c1';
+SELECT bb_test.eq('two sessions: after the reopen commits, the cancellation cancels the event',
+  (SELECT b.status || ':' || e.status FROM public.bookings AS b JOIN public.events AS e ON e.booking_id = b.id
+   WHERE b.id = 'a0000000-0000-4000-8000-0000000b00c1'), 'cancelled:cancelled');
+-- Cancel first, uncommitted: the reopen waits for it, then is refused with BB010.
+BEGIN;
+UPDATE public.bookings SET status = 'cancelled' WHERE id = 'a0000000-0000-4000-8000-0000000b00c2';
+SELECT bb_test.dblink_exec('race', 'SET lock_timeout = ''300ms''');
+SELECT bb_test.eq('two sessions: reopening the event waits for an uncommitted cancellation of its booking',
+  (bb_test.dblink_exec('race', 'UPDATE public.events SET status = ''confirmed'' WHERE id = ''a0000000-0000-4000-8000-0000000e00c2''', false)
+   || ':' || (bb_test.dblink_error_message('race') LIKE '%lock timeout%')::text), 'ERROR:true');
+COMMIT;
+SELECT bb_test.dblink_exec('race', 'RESET lock_timeout');
+DO $$
+DECLARE outcome text;
+BEGIN
+  outcome := bb_test.dblink_exec('race', 'UPDATE public.events SET status = ''confirmed'' WHERE id = ''a0000000-0000-4000-8000-0000000e00c2''', false);
+  outcome := outcome || ':' || bb_test.dblink_error_message('race');
+  PERFORM bb_test.eq('two sessions: after the cancellation commits, the reopen is refused (BB010)',
+    (outcome LIKE 'ERROR:%EVENT_OF_CANCELLED_BOOKING_STAYS_CANCELLED%')::text || ':'
+    || (SELECT status FROM public.events WHERE id = 'a0000000-0000-4000-8000-0000000e00c2'), 'true:cancelled');
+END
+$$;
+SELECT bb_test.dblink_disconnect('race');
+
 -- Deleting a whole workspace still cascades through linked events and bookings: the
 -- deletion block applies to a booking deleted on its own or through its artist.
 INSERT INTO public.events (workspace_id, title, date, status, booking_id) VALUES
