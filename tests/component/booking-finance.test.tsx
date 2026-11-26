@@ -8,6 +8,12 @@ const mocks = vi.hoisted(() => ({
   updateArtistDefaultCommission: vi.fn(), refresh: vi.fn(), push: vi.fn(),
 }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: mocks.refresh, push: mocks.push, back: vi.fn() }) }))
+vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({ auth: {
+  onAuthStateChange: (listener: (event: string, session: { user: { id: string } }) => void) => {
+    listener("INITIAL_SESSION", { user: { id: "member-a" } })
+    return { data: { subscription: { unsubscribe: vi.fn() } } }
+  },
+} }) }))
 vi.mock("@/lib/actions/bookings", () => ({
   updateBooking: mocks.updateBooking, updateBookingStatus: mocks.updateBookingStatus, deleteBooking: mocks.deleteBooking,
 }))
@@ -36,7 +42,7 @@ const balance: BookingPayment = { ...H, id: "pay-2", booking_id: "booking-a", ki
 const later: BookingPayment = { ...H, id: "pay-3", booking_id: "booking-a", kind: "other", amount_minor: 500, currency: "EUR", due_on: "2026-12-30", paid_on: null, note: null }
 
 async function open(overrides: Partial<BookingWithArtist> = {}, payments: readonly BookingPayment[] | null = [], today: string | undefined = TODAY) {
-  render(<EventBookingClient booking={{ ...base, ...overrides }} sameDayBookingCounts={{}} today={today} payments={payments} />)
+  render(<EventBookingClient booking={{ ...base, ...overrides }} draftOwnerId="member-a" sameDayBookingCounts={{}} today={today} payments={payments} />)
   const tab = screen.getByRole("tab", { name: "Financial" })
   tab.focus()
   fireEvent.keyDown(screen.getByRole("tab", { name: "Performance" }), { key: "ArrowRight" })
@@ -128,7 +134,7 @@ it("marks a payment as paid today with the server date and refreshes", async () 
   expect(mocks.updateBooking).not.toHaveBeenCalled()
 })
 it("offers no one-click paid date and no overdue flag when the server date is unknown", async () => {
-  render(<EventBookingClient booking={base} payments={[balance]} />)
+  render(<EventBookingClient booking={base} draftOwnerId="member-a" payments={[balance]} />)
   fireEvent.keyDown(screen.getByRole("tab", { name: "Performance" }), { key: "ArrowRight" })
   await waitFor(() => expect(screen.getByRole("tabpanel", { name: "Financial" })).toBeTruthy())
   expect(screen.queryByRole("button", { name: /as paid today/ })).toBeNull()
@@ -376,7 +382,7 @@ function paymentStore() {
 }
 const reload = async (payments: readonly BookingPayment[] = []) => {
   cleanup()
-  await act(async () => { render(<EventBookingClient booking={base} sameDayBookingCounts={{}} today={TODAY} payments={payments} />) })
+  await act(async () => { render(<EventBookingClient booking={base} draftOwnerId="member-a" sameDayBookingCounts={{}} today={TODAY} payments={payments} />) })
 }
 const financialShown = () => waitFor(() => expect(screen.getByRole("tab", { name: "Financial", selected: true })).toBeTruthy())
 it("retries with the same key after a lost response and a page reload, so exactly one payment is recorded", async () => {

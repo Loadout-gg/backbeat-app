@@ -9,8 +9,9 @@ import type { BookingPayment } from "@/lib/booking-finance"
 const mocks = vi.hoisted(() => ({
   getBookings: vi.fn(), getBooking: vi.fn(), createBooking: vi.fn(), updateBooking: vi.fn(), deleteBooking: vi.fn(),
   getArtist: vi.fn(), listEvents: vi.fn(), push: vi.fn(), refresh: vi.fn(),
-  getBookingPayments: vi.fn(),
+  getBookingPayments: vi.fn(), getUser: vi.fn(),
 }))
+vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { getUser: mocks.getUser } }) }))
 vi.mock("@/lib/actions/bookings", () => ({
   getBookings: mocks.getBookings, getBooking: mocks.getBooking, createBooking: mocks.createBooking,
   updateBooking: mocks.updateBooking, deleteBooking: mocks.deleteBooking,
@@ -48,6 +49,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] })
   vi.setSystemTime(new Date("2026-11-14T12:00:00Z"))
   mocks.getBookingPayments.mockResolvedValue([])
+  mocks.getUser.mockResolvedValue({ data: { user: { id: "server-member", email: "private@example.test" } }, error: null })
 })
 afterEach(() => {
   cleanup()
@@ -167,14 +169,24 @@ it("passes only the selected booking, its payments and exact date counts, rank a
   expect(mocks.getBooking).toHaveBeenCalledWith(editorBooking.id)
   expect(mocks.getBookings).toHaveBeenCalledExactlyOnceWith({ artistId, failOnError: true })
   expect(mocks.getBookingPayments).toHaveBeenCalledExactlyOnceWith(editorBooking.id)
-  const { booking, ...notice } = page.props
+  const { booking, draftOwnerId, ...notice } = page.props
   expect(booking).toBe(editorBooking)
+  expect(draftOwnerId).toBe("server-member")
+  expect(mocks.getUser).toHaveBeenCalledExactlyOnceWith()
   expect(notice).toStrictEqual({
     sameDayBookingCounts: { "2026-11-20": 1, "2026-11-21": 2 },
     holdPosition: null,
     today: "2026-11-14",
     payments,
   })
+})
+
+it("supplies no payment-draft owner when server authentication fails", async () => {
+  mocks.getBooking.mockResolvedValueOnce(editorBooking)
+  mocks.getBookings.mockResolvedValueOnce(artistBookings)
+  mocks.getUser.mockResolvedValueOnce({ data: { user: { id: "untrusted" } }, error: new Error("auth failed") })
+  const page = await EventBookingPage(editorParams)
+  expect(page.props.draftOwnerId).toBeNull()
 })
 
 it("warns in the editor about other same-day bookings, excluding itself and cancelled ones, and follows date edits", async () => {
@@ -203,7 +215,9 @@ it("says the same-day check could not run when the artist read failed, without b
   mocks.getBooking.mockResolvedValueOnce(editorBooking)
   mocks.getBookings.mockRejectedValueOnce(new Error("private detail"))
   const page = await EventBookingPage(editorParams)
-  expect(page.props).toStrictEqual({ booking: editorBooking, sameDayBookingCounts: null, holdPosition: null, today: "2026-11-14", payments: [] })
+  const { draftOwnerId, ...previousProps } = page.props
+  expect(draftOwnerId).toBe("server-member")
+  expect(previousProps).toStrictEqual({ booking: editorBooking, sameDayBookingCounts: null, holdPosition: null, today: "2026-11-14", payments: [] })
   render(page)
   expect(mocks.getBookings).toHaveBeenCalledWith({ artistId, failOnError: true })
   expect(screen.getByText("Other bookings for this date could not be checked.")).toBeTruthy()
@@ -230,7 +244,9 @@ it("keeps date counts after a payment read failure and passes unavailable, not e
   mocks.getBookings.mockResolvedValueOnce(artistBookings)
   mocks.getBookingPayments.mockRejectedValueOnce(new Error("private payment read detail"))
   const page = await EventBookingPage(editorParams)
-  expect(page.props).toStrictEqual({
+  const { draftOwnerId, ...previousProps } = page.props
+  expect(draftOwnerId).toBe("server-member")
+  expect(previousProps).toStrictEqual({
     booking: editorBooking, sameDayBookingCounts: { "2026-11-20": 1, "2026-11-21": 2 },
     holdPosition: null, today: "2026-11-14", payments: null,
   })

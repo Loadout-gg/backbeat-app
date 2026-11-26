@@ -31,6 +31,8 @@ import { BookingPayments, useBookingPaymentsState } from "./booking-payments";
 
 interface EventBookingClientProps {
   booking: BookingWithArtist;
+  /** Verified request user for browser payment drafts. Missing identity disables draft recovery. */
+  draftOwnerId?: string | null;
   /** Counts of other non-cancelled bookings by date; null when the scoped read failed. */
   sameDayBookingCounts?: Readonly<Partial<Record<string, number>>> | null;
   /** Server-calculated priority for the persisted hold, without peer booking records. */
@@ -45,7 +47,6 @@ interface EventBookingClientProps {
 type EditBaseline = {
   date: string; startTime: string; durationMinutes: number; notes: string;
   venueName: string; venueAddress: string; contactNameMain: string; contactPhoneMain: string; contactEmailMain: string;
-  feeAmountMinor: number | null; feeCurrency: string | null;
   taxNote: string;
 };
 
@@ -60,8 +61,6 @@ function editBaseline(booking: BookingWithArtist): EditBaseline {
     contactNameMain: booking.contact_name_main ?? "",
     contactPhoneMain: booking.contact_phone_main ?? "",
     contactEmailMain: booking.contact_email_main ?? "",
-    feeAmountMinor: booking.fee_amount_minor,
-    feeCurrency: booking.fee_currency,
     taxNote: booking.tax_note ?? "",
   };
 }
@@ -91,7 +90,7 @@ const TABS = [
   "Artist contacts",
 ] as const;
 
-export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition, today, payments = [] }: EventBookingClientProps) {
+export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts, holdPosition, today, payments = [] }: EventBookingClientProps) {
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
   const saveInFlight = useRef(false);
@@ -133,6 +132,8 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
   const [feeAmount, setFeeAmount] = useState(() => formatBookingFeeInput(booking.fee_amount_minor, booking.fee_currency));
   const [feeCurrency, setFeeCurrency] = useState<string>(booking.fee_currency ?? "");
   const [feeDirty, setFeeDirty] = useState(false);
+  const [feeBaseline, setFeeBaseline] = useState(() => ({ fee_amount_minor: booking.fee_amount_minor, fee_currency: booking.fee_currency }));
+  const [feeSync, setFeeSync] = useState({ savedCurrency: booking.fee_currency, rebasePending: false, commissionHydrationPending: false });
   // Financial tab drafts: commission and tax note are saved with "Update booking", like the fee.
   const savedCommission = bookingCommission(booking);
   const [commissionType, setCommissionType] = useState<CommissionType | "">(savedCommission?.type ?? "");
@@ -142,6 +143,22 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
   const [commissionMode, setCommissionMode] = useState<CommissionMode>(savedCommission?.mode ?? DEFAULT_COMMISSION_MODE);
   const [commissionDirty, setCommissionDirty] = useState(false);
   const [commissionError, setCommissionError] = useState<string | null>(null);
+  if (feeSync.savedCurrency !== booking.fee_currency) {
+    setFeeSync({ savedCurrency: booking.fee_currency, rebasePending: true, commissionHydrationPending: true });
+  } else if (feeSync.rebasePending && !feeDirty && !(commissionDirty && commissionType === "fixed")) {
+    // Keep the rebase pending while edits are dirty. Rebase the clean pair together;
+    // neither the fee nor an untouched fixed commission is relabelled in a new currency.
+    setFeeSync({ ...feeSync, rebasePending: false, commissionHydrationPending: false });
+    setFeeAmount(formatBookingFeeInput(booking.fee_amount_minor, booking.fee_currency));
+    setFeeCurrency(booking.fee_currency ?? "");
+    setFeeBaseline({ fee_amount_minor: booking.fee_amount_minor, fee_currency: booking.fee_currency });
+    if (feeSync.commissionHydrationPending && !commissionDirty && (commissionType === "fixed" || savedCommission?.type === "fixed")) {
+      setCommissionType(savedCommission?.type ?? "");
+      setCommissionValue(!savedCommission ? "" : savedCommission.type === "percent" ? formatBasisPoints(savedCommission.value)
+        : formatBookingFeeInput(savedCommission.value, booking.fee_currency));
+      setCommissionMode(savedCommission?.mode ?? DEFAULT_COMMISSION_MODE);
+    }
+  }
   // A fixed artist default is in its own currency and a booking is created without a fee, so it
   // is prefilled here: when a booking that currently has no saved fee and no saved commission
   // gets a fee in that currency. While a fee is saved the default is not offered, so removing
@@ -189,7 +206,7 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
   const [taxNote, setTaxNote] = useState(savedTaxNote);
   const hasPayments = !!payments && payments.length > 0;
   // Owned here, not by the panel: the Financial tab content unmounts on a tab change.
-  const paymentsState = useBookingPaymentsState(booking.id, payments);
+  const paymentsState = useBookingPaymentsState(draftOwnerId, booking.workspace_id, booking.id, payments);
   // A payment draft restored after a reload is shown once, so it can be retried with its original
   // key (state adjusted during render, not in an effect: https://react.dev/learn/you-might-not-need-an-effect).
   const [restoredDraftShown, setRestoredDraftShown] = useState(false);
@@ -365,13 +382,11 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
     const saved = baseline.current ?? editBaseline(booking);
     const send = (field: string, changed: boolean) => changed || uncertain.has(field);
     const feePatch = feeDirty && fee.success && send("fee_amount_minor",
-      fee.data.fee_amount_minor !== saved.feeAmountMinor || fee.data.fee_currency !== saved.feeCurrency)
+      fee.data.fee_amount_minor !== feeBaseline.fee_amount_minor || fee.data.fee_currency !== feeBaseline.fee_currency)
       ? fee.data : null;
     const submitted: EditBaseline = {
       date: bookingDate, startTime, durationMinutes, notes,
       venueName, venueAddress, contactNameMain, contactPhoneMain, contactEmailMain,
-      feeAmountMinor: feePatch ? feePatch.fee_amount_minor : saved.feeAmountMinor,
-      feeCurrency: feePatch ? feePatch.fee_currency : saved.feeCurrency,
       taxNote,
     };
 
@@ -400,6 +415,14 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
         return;
       }
       baseline.current = submitted;
+      if (feePatch) setFeeBaseline(feePatch);
+      if (feePatch || commissionPatch) {
+        // A fee acknowledgement supersedes the deferred rebase. A commission-only
+        // acknowledgement skips only stale commission hydration, not the fee rebase.
+        setFeeSync((current) => current.rebasePending
+          ? { ...current, rebasePending: !feePatch, commissionHydrationPending: false }
+          : current);
+      }
       uncertain.clear();
       setFeeDirty(false);
       setCommissionDirty(false);
