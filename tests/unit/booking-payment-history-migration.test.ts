@@ -33,7 +33,11 @@ it("STATIC: 010 is additive and changes no grant, role, policy or RLS; it refuse
   expect(sql).toContain("ADD COLUMN replaces_payment_id uuid,")
   expect(sql).not.toMatch(/ADD COLUMN [^,]*\b(?:DEFAULT|NOT NULL)\b/)
   expect(code(migration)).toContain("has_table_privilege('authenticated', 'public.booking_payments', 'DELETE, TRUNCATE')")
-  for (const requirement of ["PAYMENT_HISTORY_010_REQUIRES_007", "PAYMENT_HISTORY_010_ACL_MISMATCH", "PAYMENT_HISTORY_010_ALREADY_PRESENT"]) {
+  expect(code(migration)).toContain(
+    "conname = 'booking_payments_booking_fkey' AND contype = 'f' AND confdeltype = 'r'\n        AND confrelid = 'public.bookings'::pg_catalog.regclass) THEN\n    RAISE EXCEPTION 'PAYMENT_HISTORY_010_BOOKING_FK_NOT_RESTRICT';",
+  )
+  expect(code(migration).indexOf("PAYMENT_HISTORY_010_BOOKING_FK_NOT_RESTRICT")).toBeLessThan(code(migration).indexOf("$guard$;"))
+  for (const requirement of ["PAYMENT_HISTORY_010_REQUIRES_007", "PAYMENT_HISTORY_010_BOOKING_FK_NOT_RESTRICT", "PAYMENT_HISTORY_010_ACL_MISMATCH", "PAYMENT_HISTORY_010_ALREADY_PRESENT"]) {
     expect(migration).toContain(requirement)
   }
   expect(migration.match(/SECURITY INVOKER SET search_path = ''/g)).toHaveLength(3)

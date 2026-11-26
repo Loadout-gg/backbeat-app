@@ -516,12 +516,28 @@ it("keeps the fee currency editable without payments", async () => {
   const panel = await open()
   expect((panel.getByLabelText("Booking fee currency") as HTMLSelectElement).disabled).toBe(false)
 })
-it("explains that a booking with payments cannot be deleted, with the fixed copy only", async () => {
-  mocks.deleteBooking.mockResolvedValue({ success: false, error: "This booking has recorded payments and cannot be deleted. You can cancel the booking without removing its payments." })
-  await open({}, [deposit])
+const HAS_PAYMENTS = "This booking has recorded payments and cannot be deleted. You can cancel the booking without removing its payments."
+it("disables Delete with the fixed copy when any payment row exists, including voided or corrected history", async () => {
+  const voided: BookingPayment = { ...balance, id: "pay-v", voided_at: "2026-11-24T10:00:00Z", void_kind: "void", void_reason: "Event cancelled" }
+  const corrected: BookingPayment = { ...later, id: "pay-c", voided_at: "2026-11-24T10:00:00Z", void_kind: "corrected" }
+  for (const rows of [[deposit], [voided], [corrected]]) {
+    await open({}, rows)
+    const trigger = screen.getByRole("button", { name: /^Delete$/ }) as HTMLButtonElement
+    expect(trigger.disabled).toBe(true)
+    const note = document.getElementById(trigger.getAttribute("aria-describedby") ?? "")
+    expect(note?.textContent).toBe(HAS_PAYMENTS)
+    fireEvent.click(trigger)
+    expect(screen.queryByRole("button", { name: "Yes, delete" })).toBeNull()
+    expect(mocks.deleteBooking).not.toHaveBeenCalled()
+    cleanup()
+  }
+})
+it("keeps Delete available when the payments read failed or none exist; the database stays the authority", async () => {
+  mocks.deleteBooking.mockResolvedValue({ success: false, error: HAS_PAYMENTS })
+  await open({}, null)
   await click("Delete")
   await click("Yes, delete")
-  expect(screen.getByText("This booking has recorded payments and cannot be deleted. You can cancel the booking without removing its payments.")).toBeTruthy()
+  expect(screen.getByText(HAS_PAYMENTS).getAttribute("role")).toBe("alert")
   expect(mocks.push).not.toHaveBeenCalled()
   cleanup()
   mocks.deleteBooking.mockResolvedValue({ success: false, error: "some other provider text" })

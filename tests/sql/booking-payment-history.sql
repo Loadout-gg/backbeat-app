@@ -63,6 +63,22 @@ SELECT bb_test.eq('guard: delete grant refused',
   (SELECT count(*)::text FROM information_schema.columns WHERE table_schema = 'public'
    AND table_name = 'booking_payments' AND column_name = 'void_kind'), '0');
 
+-- Guard: a booking FK that is not ON DELETE RESTRICT is refused (payments block a hard delete).
+ALTER TABLE public.booking_payments DROP CONSTRAINT booking_payments_booking_fkey,
+  ADD CONSTRAINT booking_payments_booking_fkey FOREIGN KEY (workspace_id, booking_id)
+    REFERENCES public.bookings(workspace_id, id) ON DELETE CASCADE;
+\set ON_ERROR_STOP off
+\o /dev/null
+\ir ../../migrations/010_booking_payment_history.sql
+\o
+\set ON_ERROR_STOP on
+ALTER TABLE public.booking_payments DROP CONSTRAINT booking_payments_booking_fkey,
+  ADD CONSTRAINT booking_payments_booking_fkey FOREIGN KEY (workspace_id, booking_id)
+    REFERENCES public.bookings(workspace_id, id) ON DELETE RESTRICT;
+SELECT bb_test.eq('guard: non-RESTRICT booking FK refused',
+  (SELECT count(*)::text FROM information_schema.columns WHERE table_schema = 'public'
+   AND table_name = 'booking_payments' AND column_name = 'void_kind'), '0');
+
 \ir ../../migrations/010_booking_payment_history.sql
 SELECT bb_test.eq('apply: existing payment untouched',
   (SELECT count(*)::text FROM public.booking_payments AS p JOIN bb_test.before AS o USING (id)

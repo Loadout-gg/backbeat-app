@@ -44,6 +44,14 @@ BEGIN
         AND conname = 'booking_payments_workspace_id_id_key' AND contype = 'u') THEN
     RAISE EXCEPTION 'PAYMENT_HISTORY_010_REQUIRES_007';
   END IF;
+  -- A booking with any payment row (incl. voided or corrected) can only be cancelled, never
+  -- hard-deleted: the 007 composite FK must still be ON DELETE RESTRICT.
+  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint
+      WHERE conrelid = 'public.booking_payments'::pg_catalog.regclass
+        AND conname = 'booking_payments_booking_fkey' AND contype = 'f' AND confdeltype = 'r'
+        AND confrelid = 'public.bookings'::pg_catalog.regclass) THEN
+    RAISE EXCEPTION 'PAYMENT_HISTORY_010_BOOKING_FK_NOT_RESTRICT';
+  END IF;
   -- No hard delete from the app: refuse a shape where an ordinary session could delete.
   IF pg_catalog.has_table_privilege('authenticated', 'public.booking_payments', 'DELETE, TRUNCATE')
     OR pg_catalog.has_table_privilege('anon', 'public.booking_payments', 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE') THEN

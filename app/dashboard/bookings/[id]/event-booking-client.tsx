@@ -105,6 +105,7 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const deleteQuestionId = useId();
+  const deleteBlockedId = useId();
   const deleteTriggerRef = useRef<HTMLButtonElement>(null);
   const deleteCancelRef = useRef<HTMLButtonElement>(null);
   // Keyboard flow: opening moves focus to Cancel (the safe choice); Cancel returns it to Delete.
@@ -440,7 +441,7 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
   };
 
   const handleDelete = async () => {
-    if (deleteInFlight.current) return;
+    if (deleteInFlight.current || hasPayments) return;
     deleteInFlight.current = true;
     setIsDeleting(true);
     setDeleteError(null);
@@ -1168,12 +1169,24 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
         {/* Bottom actions */}
         <div className="flex flex-col gap-4 rounded-b-xl bg-card px-4 py-4 sm:px-6 lg:sticky lg:bottom-0 lg:z-10 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between border-t border-border">
           <div className="relative">
-            {deleteError && (
+            {deleteError && !hasPayments && (
               <p role="alert" className="mb-2 text-sm text-destructive">
                 {deleteError}
               </p>
             )}
-            {showDeleteConfirm ? (
+            {hasPayments ? (
+              // Owner decision: any payment row (incl. voided or corrected) means cancel, never
+              // delete. The database RESTRICT FK stays the authority; this only avoids a dead end.
+              <div className="flex flex-col gap-2">
+                <Button variant="outline" disabled aria-describedby={deleteBlockedId}>
+                  <Trash2 aria-hidden="true" className="h-4 w-4 mr-2" />
+                  Delete
+                </Button>
+                <p id={deleteBlockedId} className="max-w-md text-sm text-muted-foreground">
+                  {BOOKING_HAS_PAYMENTS_MESSAGE}
+                </p>
+              </div>
+            ) : showDeleteConfirm ? (
               <div role="group" aria-labelledby={deleteQuestionId} className="flex flex-wrap items-center gap-2">
                 <span id={deleteQuestionId} className="text-sm text-muted-foreground">
                   Delete this booking?
