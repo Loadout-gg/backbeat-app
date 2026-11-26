@@ -52,7 +52,7 @@ CREATE TABLE bb_test.bookings_before AS SELECT id, to_jsonb(b) AS row FROM publi
 SELECT bb_test.eq('preflight: ready, nothing applied',
   (SELECT string_agg(detail, ' | ' ORDER BY item) FROM (:preflight) AS p
    WHERE item IN ('ready for 008', '008 objects present', 'runtime_environment marker class')),
-  '0/19 | READY_FOR_008 | development');
+  '0/21 | READY_FOR_008 | development');
 SELECT bb_test.eq('preflight: no status violation listed',
   (SELECT count(*)::text FROM (:preflight) AS p WHERE section = 'status_violation'), '0');
 
@@ -124,7 +124,7 @@ SELECT bb_test.eq('schema: exactly one status CHECK on events',
   (SELECT string_agg(conname, ',') FROM pg_constraint WHERE conrelid = 'public.events'::regclass
    AND contype = 'c' AND pg_get_constraintdef(oid) LIKE '%status%'), 'events_status_check');
 SELECT bb_test.eq('schema: 008 objects all present',
-  (SELECT detail FROM (:preflight) AS p WHERE item = '008 objects present'), '19/19');
+  (SELECT detail FROM (:preflight) AS p WHERE item = '008 objects present'), '21/21');
 SELECT bb_test.eq('schema: one link trigger on events, function not callable by API roles',
   (SELECT count(*)::text FROM pg_trigger WHERE tgrelid = 'public.events'::regclass AND tgname = 'events_enforce_booking' AND NOT tgisinternal)
   || ':' || (SELECT prosecdef::text FROM pg_proc WHERE proname = 'backbeat_enforce_event_booking')
@@ -141,7 +141,7 @@ UPDATE public.bookings SET status = 'confirmed' WHERE id <> 'a0000000-0000-4000-
 \ir ../../ops/supabase/booking-event/postflight.sql
 \set postflight `sed -e 's/;[[:space:]]*$//' ../../ops/supabase/booking-event/postflight.sql`
 SELECT bb_test.eq('postflight: every check passes',
-  (SELECT string_agg(result || ' ' || detail, '') FROM (:postflight) AS p WHERE ord = 99), 'ALL PASS 19/19');
+  (SELECT string_agg(result || ' ' || detail, '') FROM (:postflight) AS p WHERE ord = 99), 'ALL PASS 20/20');
 SELECT bb_test.eq('postflight: no failing row',
   (SELECT coalesce(string_agg(item, '; '), 'none') FROM (:postflight) AS p WHERE result <> 'PASS' AND ord <> 99), 'none');
 
@@ -151,12 +151,12 @@ CREATE TABLE bb_test.counts_before AS SELECT
   (SELECT count(*) FROM public.promoters) AS promoters, (SELECT count(*) FROM public.workspaces) AS workspaces,
   (SELECT count(*) FROM public.artists) AS artists;
 \ir ../../ops/supabase/booking-event/verify.sql
-SELECT bb_test.eq('verify.sql: 20 PASS lines, no FAIL or SKIP',
+SELECT bb_test.eq('verify.sql: 21 PASS lines, no FAIL or SKIP',
   (SELECT count(*) FILTER (WHERE line LIKE 'PASS|%')::text || ':' || count(*) FILTER (WHERE line NOT LIKE 'PASS|%')::text
-   FROM unnest(string_to_array(current_setting('backbeat.event_verify_report'), E'\n')) AS line), '20:0');
+   FROM unnest(string_to_array(current_setting('backbeat.event_verify_report'), E'\n')) AS line), '21:0');
 \set verify `sed -e '1,/^\$verify\$;$/d' -e 's/;[[:space:]]*$//' ../../ops/supabase/booking-event/verify.sql`
 SELECT bb_test.eq('verify.sql: summary row',
-  (SELECT result || ' ' || detail FROM (:verify) AS v WHERE ord = 0), 'ALL PASS pass=20 fail=0 skip=0');
+  (SELECT result || ' ' || detail FROM (:verify) AS v WHERE ord = 0), 'ALL PASS pass=21 fail=0 skip=0');
 SELECT bb_test.eq('verify.sql: leaves no row behind',
   (SELECT (c.events = (SELECT count(*) FROM public.events) AND c.bookings = (SELECT count(*) FROM public.bookings)
      AND c.promoters = (SELECT count(*) FROM public.promoters) AND c.workspaces = (SELECT count(*) FROM public.workspaces)
@@ -331,21 +331,41 @@ BEGIN
     (SELECT count(promoter_id)::text || ':' || (SELECT booking_id::text FROM public.events WHERE id = e1)
      FROM public.events WHERE workspace_id = wa), '0:' || b1::text);
 
-  -- Decision 1: the event survives the deletion of its booking; only booking_id is nulled.
-  PERFORM bb_test.eq('booking delete: allowed while an event references it',
-    bb_test.run_as(ua, format('DELETE FROM public.bookings WHERE id = %L', b1)), 'OK:1');
-  PERFORM bb_test.eq('booking delete: event kept with its workspace and data',
-    (SELECT coalesce(booking_id::text, 'NULL') || ':' || workspace_id::text || ':' || title || ':' || artist_id::text
-     FROM public.events WHERE id = e1), 'NULL:' || wa::text || ':Artist A @ Club A:' || a1::text);
-  -- Deleting the artist cascades to its bookings (001); their events survive unlinked.
-  PERFORM bb_test.eq('artist delete: cascades to bookings', bb_test.run_as(ua, format('DELETE FROM public.artists WHERE id = %L', a1)), 'OK:1');
-  PERFORM bb_test.eq('artist delete: events kept without booking and artist',
-    (SELECT count(*)::text || ':' || count(booking_id)::text || ':' || count(artist_id)::text
-     FROM public.events WHERE title IN ('Artist A @ Club A', 'second booking')), '2:0:0');
+  -- Deletion (Simone, 2026-11-26): a booking that has an event cannot be deleted; cancel it instead.
+  PERFORM bb_test.eq('booking delete: refused while an event references it (member)',
+    bb_test.run_as(ua, format('DELETE FROM public.bookings WHERE id = %L', b1)), 'BB011');
+  BEGIN
+    DELETE FROM public.bookings WHERE id = b1;
+    gate_status := 'deleted';
+  EXCEPTION WHEN OTHERS THEN gate_status := SQLSTATE;
+  END;
+  PERFORM bb_test.eq('booking delete: refused for the database owner too', gate_status, 'BB011');
+  PERFORM bb_test.eq('booking delete: booking and event unchanged after the refusal',
+    (SELECT (SELECT count(*)::text FROM public.bookings WHERE id = b1) || ':' || booking_id::text || ':' || workspace_id::text || ':' || title
+     FROM public.events WHERE id = e1), '1:' || b1::text || ':' || wa::text || ':Artist A @ Club A');
+  PERFORM bb_test.eq('booking delete: a cancelled converted booking is refused as well',
+    bb_test.run_as(ua, format('UPDATE public.bookings SET status = ''cancelled'' WHERE id = %L', b2))
+    || ':' || bb_test.run_as(ua, format('DELETE FROM public.bookings WHERE id = %L', b2)), 'OK:1:BB011');
+  PERFORM bb_test.eq('booking delete: a booking without an event stays deletable',
+    bb_test.run_as(ua, format('INSERT INTO public.bookings (id, workspace_id, artist_id, date, start_time) VALUES (''a0000000-0000-4000-8000-0000000b00d1'', %L, %L, ''2030-07-02'', ''20:00'')', wa, a1))
+    || ':' || bb_test.run_as(ua, 'DELETE FROM public.bookings WHERE id = ''a0000000-0000-4000-8000-0000000b00d1'''), 'OK:1:OK:1');
+  PERFORM bb_test.eq('booking delete: B cannot delete an A booking (RLS, no error leak)',
+    bb_test.run_as(ub, format('DELETE FROM public.bookings WHERE id = %L', b3)), 'OK:0');
+  -- Deleting the artist would cascade to its bookings (001): the FK refuses it while one has an event.
+  PERFORM bb_test.eq('artist delete: refused while one of its bookings has an event',
+    bb_test.run_as(ua, format('DELETE FROM public.artists WHERE id = %L', a1)), '23503');
+  PERFORM bb_test.eq('artist delete: artist, bookings and events unchanged',
+    (SELECT count(*)::text FROM public.artists WHERE id = a1) || ':'
+    || (SELECT count(booking_id)::text FROM public.events WHERE title IN ('Artist A @ Club A', 'second booking')), '1:2');
+  -- After the event is deleted by hand, the booking is no longer linked and can be deleted.
+  PERFORM bb_test.eq('booking delete: allowed once its event is deleted by hand',
+    bb_test.run_as(ua, format('DELETE FROM public.events WHERE id = %L', e1))
+    || ':' || bb_test.run_as(ua, format('DELETE FROM public.bookings WHERE id = %L', b1)), 'OK:1:OK:1');
 END
 $$;
 
--- Deleting a whole workspace still cascades through linked events and bookings.
+-- Deleting a whole workspace still cascades through linked events and bookings: the
+-- deletion block applies to a booking deleted on its own or through its artist.
 INSERT INTO public.events (workspace_id, title, date, status, booking_id) VALUES
   ('b0000000-0000-4000-8000-0000000000bb', 'B linked', '2030-05-01', 'confirmed', 'b0000000-0000-4000-8000-0000000b0001');
 UPDATE public.bookings SET promoter_id = 'b0000000-0000-4000-8000-0000000000f1' WHERE id = 'b0000000-0000-4000-8000-0000000b0001';
@@ -373,8 +393,8 @@ SELECT bb_test.eq('rollback: columns, link constraints and status CHECK removed'
         'events_booking_id_fkey', 'bookings_promoter_id_fkey', 'events_fee_pair_check'))
    + (SELECT count(*) FROM pg_proc WHERE proname = 'backbeat_enforce_event_booking')
    + (SELECT count(*) FROM pg_trigger WHERE tgname = 'events_enforce_booking')
-   + (SELECT count(*) FROM pg_proc WHERE proname IN ('backbeat_cancel_booking_event', 'backbeat_keep_cancelled_event'))
-   + (SELECT count(*) FROM pg_trigger WHERE tgname IN ('bookings_cancel_event', 'events_keep_cancelled'))
+   + (SELECT count(*) FROM pg_proc WHERE proname IN ('backbeat_cancel_booking_event', 'backbeat_keep_cancelled_event', 'backbeat_keep_booking_with_event'))
+   + (SELECT count(*) FROM pg_trigger WHERE tgname IN ('bookings_cancel_event', 'events_keep_cancelled', 'bookings_keep_event'))
    + (SELECT count(*) FROM pg_indexes WHERE indexname = 'bookings_workspace_promoter_idx'))::text, '0');
 SELECT bb_test.eq('rollback: additive events key kept',
   (SELECT count(*)::text FROM pg_constraint WHERE conname = 'events_workspace_id_id_key'), '1');

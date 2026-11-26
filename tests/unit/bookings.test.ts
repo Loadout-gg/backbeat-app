@@ -270,6 +270,23 @@ it.each([
     expect(await action()).toEqual({ success: false, error: message })
   } finally { log.mockRestore() }
 })
+it.each([
+  ["BB011", "PRIVATE_DATABASE_DETAIL", ""],
+  ["23503", "update or delete on table \"bookings\" violates foreign key constraint \"events_booking_id_fkey\"", "PRIVATE"],
+])("refuses to delete a booking that has an event (%s) with the cancel hint", async (code, message, details) => {
+  query.maybeSingle.mockResolvedValueOnce({ data: null, error: { code, message, details } })
+  expect(await deleteBooking(id)).toEqual({
+    success: false, error: "This booking has an event, so it cannot be deleted. Cancel the booking instead; its event is cancelled with it.",
+  })
+  expect(revalidatePath).not.toHaveBeenCalled()
+})
+it("keeps other foreign-key failures on delete generic", async () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => {})
+  try {
+    query.maybeSingle.mockResolvedValueOnce({ data: null, error: { code: "23503", message: "violates foreign key constraint \"other_fkey\"" } })
+    expect(await deleteBooking(id)).toEqual({ success: false, error: "Unable to delete booking. Please try again." })
+  } finally { log.mockRestore() }
+})
 it("never persists a status through updateBooking", async () => {
   const result = await updateBooking(id, { notes: "x", status: "confirmed" } as Parameters<typeof updateBooking>[1])
   expect(result).toEqual({ success: false, error: "Change the booking status with the status control" })

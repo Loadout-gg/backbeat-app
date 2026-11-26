@@ -34,9 +34,9 @@ WITH checks(ord, item, ok, detail) AS (
          coalesce(string_agg(pg_get_constraintdef(oid), ' '), 'absent')
   FROM pg_constraint WHERE conrelid = to_regclass('public.events') AND conname = 'events_booking_id_key'
   UNION ALL
-  SELECT 7, 'events: composite FK to bookings, ON DELETE SET NULL (booking_id) only',
-         count(*) = 1 AND bool_and(confrelid = to_regclass('public.bookings') AND confdeltype = 'n'
-           AND pg_get_constraintdef(oid) LIKE 'FOREIGN KEY (workspace_id, booking_id) REFERENCES bookings(workspace_id, id) ON DELETE SET NULL (booking_id)%'),
+  SELECT 7, 'events: composite FK to bookings, ON DELETE NO ACTION (a booking with an event cannot be deleted)',
+         count(*) = 1 AND bool_and(confrelid = to_regclass('public.bookings') AND confdeltype = 'a'
+           AND pg_get_constraintdef(oid) = 'FOREIGN KEY (workspace_id, booking_id) REFERENCES bookings(workspace_id, id)'),
          coalesce(string_agg(pg_get_constraintdef(oid), ' '), 'absent')
   FROM pg_constraint WHERE conrelid = to_regclass('public.events') AND conname = 'events_booking_id_fkey'
   UNION ALL
@@ -77,12 +77,18 @@ WITH checks(ord, item, ok, detail) AS (
          coalesce(string_agg(pg_get_triggerdef(oid), ' '), 'absent')
   FROM pg_trigger WHERE tgrelid = to_regclass('public.events') AND tgname = 'events_keep_cancelled' AND NOT tgisinternal
   UNION ALL
-  SELECT 19, 'cancellation functions: SECURITY INVOKER, empty search_path, not executable by anon/authenticated',
-         count(*) = 2 AND bool_and(NOT prosecdef AND proconfig = ARRAY['search_path=""']
+  SELECT 19, 'cancellation and deletion functions: SECURITY INVOKER, empty search_path, not executable by anon/authenticated',
+         count(*) = 3 AND bool_and(NOT prosecdef AND proconfig = ARRAY['search_path=""']
            AND NOT has_function_privilege('authenticated', oid, 'EXECUTE')
-           AND NOT has_function_privilege('anon', oid, 'EXECUTE')), count(*)::text || '/2'
+           AND NOT has_function_privilege('anon', oid, 'EXECUTE')), count(*)::text || '/3'
   FROM pg_proc WHERE pronamespace = 'public'::regnamespace
-    AND proname IN ('backbeat_cancel_booking_event', 'backbeat_keep_cancelled_event')
+    AND proname IN ('backbeat_cancel_booking_event', 'backbeat_keep_cancelled_event', 'backbeat_keep_booking_with_event')
+  UNION ALL
+  SELECT 20, 'bookings: trigger bookings_keep_event enabled, BEFORE DELETE',
+         count(*) = 1 AND bool_and(tgenabled = 'O'
+           AND pg_get_triggerdef(oid) LIKE '%BEFORE DELETE ON public.bookings FOR EACH ROW%'),
+         coalesce(string_agg(pg_get_triggerdef(oid), ' '), 'absent')
+  FROM pg_trigger WHERE tgrelid = to_regclass('public.bookings') AND tgname = 'bookings_keep_event' AND NOT tgisinternal
   UNION ALL
   SELECT 11, 'RLS still enabled on events, bookings, promoters', count(*) = 3, count(*)::text || '/3'
   FROM pg_class WHERE relrowsecurity

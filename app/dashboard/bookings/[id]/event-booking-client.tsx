@@ -25,6 +25,7 @@ import { BookingPromoterSelect } from "@/components/dashboard/booking-promoter-s
 import type { PromoterOption } from "@/lib/actions/events";
 import type { BookingEventLink as LinkedEvent } from "@/lib/actions/booking-events";
 import { BookingEventLink } from "./booking-event-link";
+import { BOOKING_EVENT_COPY } from "@/lib/booking-event";
 
 interface EventBookingClientProps {
   booking: BookingWithArtist;
@@ -105,6 +106,9 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const deleteQuestionId = useId();
+  const deleteBlockedId = useId();
+  // A booking that has an event cannot be deleted (migration 008); it can only be cancelled.
+  const hasLinkedEvent = linkedEvent != null && linkedEvent !== "unavailable";
   const deleteTriggerRef = useRef<HTMLButtonElement>(null);
   const deleteCancelRef = useRef<HTMLButtonElement>(null);
   // Keyboard flow: opening moves focus to Cancel (the safe choice); Cancel returns it to Delete.
@@ -333,6 +337,11 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
       const result = await deleteBooking(booking.id);
       if (result.success) {
         router.push("/dashboard/bookings");
+      } else if (result.error === BOOKING_EVENT_COPY.bookingHasEvent) {
+        // An event was linked meanwhile (another tab): keep the booking and show the link.
+        setShowDeleteConfirm(false);
+        setDeleteError(BOOKING_EVENT_COPY.bookingHasEvent);
+        router.refresh();
       } else {
         setDeleteError("Unable to delete booking. Please try again.");
       }
@@ -958,12 +967,22 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
         {/* Bottom actions */}
         <div className="flex flex-col gap-4 rounded-b-xl bg-card px-4 py-4 sm:px-6 lg:sticky lg:bottom-0 lg:z-10 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between border-t border-border">
           <div className="relative">
-            {deleteError && (
+            {deleteError && !(hasLinkedEvent && deleteError === BOOKING_EVENT_COPY.bookingHasEvent) && (
               <p role="alert" className="mb-2 text-sm text-destructive">
                 {deleteError}
               </p>
             )}
-            {showDeleteConfirm ? (
+            {hasLinkedEvent ? (
+              <div className="flex max-w-md flex-col gap-2">
+                <Button variant="outline" disabled aria-describedby={deleteBlockedId}>
+                  <Trash2 aria-hidden="true" className="h-4 w-4 mr-2" />
+                  Delete
+                </Button>
+                <p id={deleteBlockedId} className="text-sm text-muted-foreground">
+                  {BOOKING_EVENT_COPY.bookingHasEvent}
+                </p>
+              </div>
+            ) : showDeleteConfirm ? (
               <div role="group" aria-labelledby={deleteQuestionId} className="flex flex-wrap items-center gap-2">
                 <span id={deleteQuestionId} className="text-sm text-muted-foreground">
                   Delete this booking?

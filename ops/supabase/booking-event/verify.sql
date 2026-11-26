@@ -6,7 +6,7 @@
 -- It creates its own booking, promoter, event and a second workspace inside a block that is
 -- always rolled back: no row is changed and nothing is left behind. The report is the
 -- result of the final SELECT:
---   first row "SUMMARY | ALL PASS | pass=20 fail=0 skip=0", then one row per check.
+--   first row "SUMMARY | ALL PASS | pass=21 fail=0 skip=0", then one row per check.
 -- "FAILED" or "INCOMPLETE" in the summary means do not merge.
 DO $verify$
 DECLARE
@@ -208,7 +208,7 @@ BEGIN
     results := results || (CASE WHEN outcome IN ('rows=0', '42501') THEN 'PASS' ELSE 'FAIL' END
       || '|anon: sees no event|' || outcome || ' (expected rows=0 or 42501)');
 
-    -- Member again: deleting the promoter, then the booking, keeps the event.
+    -- Member again: deleting the promoter keeps booking and event.
     PERFORM set_config('request.jwt.claim.sub', member::text, true);
     PERFORM set_config('request.jwt.claims',
       json_build_object('sub', member, 'role', 'authenticated')::text, true);
@@ -250,17 +250,30 @@ BEGIN
     END;
     results := results || (CASE WHEN outcome = 'ok' THEN 'PASS' ELSE 'FAIL' END
       || '|member: deleting the promoter keeps booking and event, only the promoter link is cleared|' || outcome);
+    -- A booking that has an event cannot be deleted (cancel it instead); one without can.
     BEGIN
       DELETE FROM public.bookings WHERE id = booking;
-      SELECT CASE WHEN e.booking_id IS NULL AND e.workspace_id = target.workspace_id
-                    AND e.title = 'BB VERIFY event' AND e.fee_amount_minor = 150000 AND e.start_time = '20:00'
-                  THEN 'ok' ELSE 'unexpected row state' END
-        INTO outcome FROM public.events AS e WHERE e.id = event;
-      outcome := coalesce(outcome, 'event gone');
+      outcome := 'deleted';
     EXCEPTION WHEN OTHERS THEN outcome := SQLSTATE;
     END;
-    results := results || (CASE WHEN outcome = 'ok' THEN 'PASS' ELSE 'FAIL' END
-      || '|member: deleting the booking keeps the event, only booking_id is cleared|' || outcome);
+    IF outcome = 'BB011' AND NOT EXISTS (SELECT 1 FROM public.events AS e
+        WHERE e.id = event AND e.booking_id = booking AND e.title = 'BB VERIFY event'
+          AND e.fee_amount_minor = 150000 AND e.start_time = '20:00') THEN
+      outcome := 'BB011 but event changed';
+    END IF;
+    results := results || (CASE WHEN outcome = 'BB011' THEN 'PASS' ELSE 'FAIL' END
+      || '|member: a booking that has an event cannot be deleted, booking and event unchanged|' || outcome || ' (expected BB011)');
+    BEGIN
+      INSERT INTO public.bookings (workspace_id, artist_id, date, start_time)
+        VALUES (target.workspace_id, target.artist_id, CURRENT_DATE + 31, '20:00')
+        RETURNING id INTO other_booking;
+      DELETE FROM public.bookings WHERE id = other_booking;
+      GET DIAGNOSTICS affected = ROW_COUNT;
+      outcome := 'rows=' || affected;
+    EXCEPTION WHEN OTHERS THEN outcome := SQLSTATE;
+    END;
+    results := results || (CASE WHEN outcome = 'rows=1' THEN 'PASS' ELSE 'FAIL' END
+      || '|member: a booking without an event can still be deleted|' || outcome || ' (expected rows=1)');
     RESET ROLE;
     RAISE EXCEPTION 'BB_VERIFY_ROLLBACK';
   EXCEPTION WHEN OTHERS THEN

@@ -3,7 +3,8 @@
 -- time and fee snapshot, events status CHECK, UNIQUE (workspace_id, id) on events, and an
 -- optional promoter link on bookings, plus a trigger that lets an event be linked only to a
 -- confirmed or completed booking, for every writer including raw REST, and triggers that
--- cancel the event of a cancelled booking and keep it cancelled.
+-- cancel the event of a cancelled booking and keep it cancelled, and a booking that has an
+-- event cannot be deleted (cancel it instead).
 -- No row is rewritten, nothing is backfilled.
 -- Idempotent: safe to re-run. Requires 005. Prefix with an explicit target:
 --   SET backbeat.booking_event_target = 'development';                 -- synthetic local
@@ -143,13 +144,20 @@ BEGIN
       WHERE conrelid = 'public.events'::pg_catalog.regclass AND conname = 'events_booking_id_key') THEN
     ALTER TABLE public.events ADD CONSTRAINT events_booking_id_key UNIQUE (booking_id);
   END IF;
-  -- Same-workspace link. Deleting the booking keeps the event: only booking_id is nulled
-  -- (column list on SET NULL), workspace_id is never touched.
+  -- Same-workspace link. A booking that has an event cannot be deleted (Simone, 2026-11-26):
+  -- NO ACTION, checked at the end of the statement, so deleting a whole workspace still
+  -- cascades through its events and bookings. An earlier draft of this constraint with
+  -- another delete rule is replaced.
+  IF EXISTS (SELECT 1 FROM pg_catalog.pg_constraint
+      WHERE conrelid = 'public.events'::pg_catalog.regclass AND conname = 'events_booking_id_fkey'
+        AND confdeltype <> 'a') THEN
+    ALTER TABLE public.events DROP CONSTRAINT events_booking_id_fkey;
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint
       WHERE conrelid = 'public.events'::pg_catalog.regclass AND conname = 'events_booking_id_fkey') THEN
     ALTER TABLE public.events
       ADD CONSTRAINT events_booking_id_fkey FOREIGN KEY (workspace_id, booking_id)
-        REFERENCES public.bookings (workspace_id, id) ON DELETE SET NULL (booking_id);
+        REFERENCES public.bookings (workspace_id, id) ON DELETE NO ACTION;
   END IF;
   -- Same-workspace link. Deleting the promoter keeps the booking: only promoter_id is nulled.
   IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint
@@ -166,10 +174,11 @@ CREATE INDEX IF NOT EXISTS bookings_workspace_promoter_idx
 -- Decision 4 in the database: an event can be linked only to a booking that is confirmed or
 -- completed at that moment. SECURITY INVOKER: runs as the writer, under the writer's RLS.
 -- Evaluated only when the link is set or changed, so a later status change of the booking
--- neither unlinks nor blocks its event, and the FK's own SET NULL (booking_id) passes.
+-- neither unlinks nor blocks its event.
 -- The booking row is locked FOR SHARE, so its status cannot change before this write commits.
 -- A booking the writer cannot see or that does not exist is left to RLS and to
--- events_booking_id_fkey (42501 / 23503). SQLSTATE BB008 (006 uses BB001-BB003, 007 BB004-BB005, 010 of #33 BB006-BB007).
+-- events_booking_id_fkey (42501 / 23503). SQLSTATE BB008 (006 uses BB001-BB003, 007 BB004-BB005, 010 of #33 BB006-BB007;
+-- 008 uses BB008-BB011).
 CREATE OR REPLACE FUNCTION public.backbeat_enforce_event_booking()
 RETURNS trigger LANGUAGE plpgsql SET search_path = ''
 AS $function$
@@ -232,8 +241,7 @@ DROP TRIGGER IF EXISTS bookings_cancel_event ON public.bookings;
 CREATE TRIGGER bookings_cancel_event AFTER UPDATE OF status ON public.bookings
   FOR EACH ROW EXECUTE FUNCTION public.backbeat_cancel_booking_event();
 
--- The booking link is read from OLD: when the booking itself is deleted, the FK's
--- SET NULL (booking_id) finds no booking row and passes.
+-- The booking link is read from OLD.
 CREATE OR REPLACE FUNCTION public.backbeat_keep_cancelled_event()
 RETURNS trigger LANGUAGE plpgsql SET search_path = ''
 AS $function$
@@ -257,6 +265,29 @@ REVOKE ALL ON FUNCTION public.backbeat_keep_cancelled_event() FROM PUBLIC, anon,
 DROP TRIGGER IF EXISTS events_keep_cancelled ON public.events;
 CREATE TRIGGER events_keep_cancelled BEFORE UPDATE OF status, booking_id ON public.events
   FOR EACH ROW EXECUTE FUNCTION public.backbeat_keep_cancelled_event();
+
+-- Deletion (Simone, 2026-11-26): a booking that has an event cannot be deleted; cancel it
+-- instead. A booking without an event stays deletable. BB011 names the refusal of a direct
+-- delete. A delete cascaded from another row (pg_trigger_depth() > 1: an artist or a
+-- workspace) is left to events_booking_id_fkey (NO ACTION), which refuses an artist delete
+-- with 23503 and lets a workspace delete pass, because that removes the events too.
+-- SECURITY INVOKER: the writer's RLS applies; the FK check does not depend on it.
+CREATE OR REPLACE FUNCTION public.backbeat_keep_booking_with_event()
+RETURNS trigger LANGUAGE plpgsql SET search_path = ''
+AS $function$
+BEGIN
+  IF pg_catalog.pg_trigger_depth() = 1 AND EXISTS (SELECT 1 FROM public.events AS e
+      WHERE e.booking_id = OLD.id AND e.workspace_id = OLD.workspace_id) THEN
+    RAISE EXCEPTION 'BOOKING_WITH_EVENT_CANNOT_BE_DELETED' USING ERRCODE = 'BB011';
+  END IF;
+  RETURN OLD;
+END
+$function$;
+REVOKE ALL ON FUNCTION public.backbeat_keep_booking_with_event() FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS bookings_keep_event ON public.bookings;
+CREATE TRIGGER bookings_keep_event BEFORE DELETE ON public.bookings
+  FOR EACH ROW EXECUTE FUNCTION public.backbeat_keep_booking_with_event();
 
 -- Decision 6: RLS, grants and policies on events, bookings and promoters are unchanged
 -- (one FOR ALL active-member policy each). The new columns inherit them.

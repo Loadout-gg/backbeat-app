@@ -9,7 +9,7 @@ import type { BookingFeeCurrency } from "@/lib/booking-fee";
 import { bookingTransitionBlock, canTransitionBooking, type BookingStatus, type BookingTransitionBlock } from "@/lib/booking-status";
 import { configuredCalendarDay } from "@/lib/calendar-day";
 import { createBookingSchema, updateBookingSchema, bookingStatusSchema, bookingIdSchema } from "@/lib/booking-validation";
-import { BOOKING_EVENT_COPY, CONVERTED_BOOKING_CANCELLED_SQLSTATE, isBookingPromoterViolation } from "@/lib/booking-event";
+import { BOOKING_EVENT_COPY, CONVERTED_BOOKING_CANCELLED_SQLSTATE, isBookingPromoterViolation, isBookingWithEventDeleteViolation } from "@/lib/booking-event";
 
 export interface Booking {
   fee_amount_minor: number | null;
@@ -301,6 +301,8 @@ export async function deleteBooking(
     .maybeSingle();
 
   if (error) {
+    // A booking that has an event is kept (migration 008); cancelling it is the way out.
+    if (isBookingWithEventDeleteViolation(error)) return { success: false, error: BOOKING_EVENT_COPY.bookingHasEvent };
     console.error("Error deleting booking:", error);
     return { success: false, error: "Unable to delete booking. Please try again." };
   }

@@ -2,7 +2,7 @@
 -- row counts, and the id + status of event rows that would violate the new status CHECK
 -- (no title, no other row content). Run it before applying 008; it changes nothing.
 -- Expected on staging before 008: marker class "staging", 005 applied, "008 objects present"
--- = 0/19, no "status_violation" row, and the last row READY_FOR_008.
+-- = 0/21, no "status_violation" row, and the last row READY_FOR_008.
 SELECT section, item, detail FROM (
   SELECT 1 AS ord, 'env' AS section, 'server' AS item,
          current_setting('server_version') || ' | current_date=' || current_date::text AS detail
@@ -46,9 +46,10 @@ SELECT section, item, detail FROM (
           + (CASE WHEN to_regprocedure('public.backbeat_enforce_event_booking()') IS NULL THEN 0 ELSE 1 END)
           + (CASE WHEN to_regprocedure('public.backbeat_cancel_booking_event()') IS NULL THEN 0 ELSE 1 END)
           + (CASE WHEN to_regprocedure('public.backbeat_keep_cancelled_event()') IS NULL THEN 0 ELSE 1 END)
+          + (CASE WHEN to_regprocedure('public.backbeat_keep_booking_with_event()') IS NULL THEN 0 ELSE 1 END)
           + (SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal
              AND ((tgrelid = to_regclass('public.events') AND tgname IN ('events_enforce_booking', 'events_keep_cancelled'))
-               OR (tgrelid = to_regclass('public.bookings') AND tgname = 'bookings_cancel_event'))))::text || '/19'
+               OR (tgrelid = to_regclass('public.bookings') AND tgname IN ('bookings_cancel_event', 'bookings_keep_event')))))::text || '/21'
   UNION ALL
   SELECT 14, 'migration', 'rollback backup table present',
          (CASE WHEN to_regclass('public.booking_event_rollback_backup') IS NULL THEN 0 ELSE 1 END)::text || '/1'

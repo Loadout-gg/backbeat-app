@@ -23,6 +23,8 @@ export const EVENT_BOOKING_STATUS_SQLSTATE = "BB008"
 export const CONVERTED_BOOKING_CANCELLED_SQLSTATE = "BB009"
 /** SQLSTATE raised by backbeat_keep_cancelled_event (migration 008): the event of a cancelled booking is reactivated or unlinked. */
 export const CANCELLED_BOOKING_EVENT_SQLSTATE = "BB010"
+/** SQLSTATE raised by backbeat_keep_booking_with_event (migration 008): a booking that has an event is deleted. */
+export const BOOKING_WITH_EVENT_DELETE_SQLSTATE = "BB011"
 
 /** Fixed user-facing copy: provider and database messages are never returned. */
 export const BOOKING_EVENT_COPY = {
@@ -36,6 +38,8 @@ export const BOOKING_EVENT_COPY = {
   convertedStaysCancelled: "This booking has an event and was cancelled, so it cannot be reopened. Create a new booking to rebook.",
   /** BB010: the event follows its cancelled booking. */
   eventStaysCancelled: "This event was cancelled with its booking and cannot be reopened. Create a new booking to rebook.",
+  /** BB011: a booking that has an event is kept; cancelling it cancels the event too. */
+  bookingHasEvent: "This booking has an event, so it cannot be deleted. Cancel the booking instead; its event is cancelled with it.",
 } as const
 
 /** "<stage name, else name> @ <venue>"; without a venue the title is the artist name alone. */
@@ -60,6 +64,16 @@ type ProviderError = { code?: string | null; message?: string | null; details?: 
 export function isBookingPromoterViolation(error: ProviderError): boolean {
   return error?.code === "23503"
     && `${error.message ?? ""} ${error.details ?? ""}`.includes("bookings_promoter_id_fkey")
+}
+
+/**
+ * A booking delete refused because an event is linked to it: BB011 from the delete trigger,
+ * or 23503 from events_booking_id_fkey when the event was linked while the delete ran.
+ */
+export function isBookingWithEventDeleteViolation(error: ProviderError): boolean {
+  if (error?.code === BOOKING_WITH_EVENT_DELETE_SQLSTATE) return true
+  return error?.code === "23503"
+    && `${error.message ?? ""} ${error.details ?? ""}`.includes("events_booking_id_fkey")
 }
 
 export function promoterOptionLabel(promoter: { name: string; company_name: string | null }): string {

@@ -336,3 +336,35 @@ it.each([
   expect(mocks.updateEvent).not.toHaveBeenCalled()
   expect((screen.getByLabelText("Fee amount") as HTMLInputElement).value).toBe(amount)
 })
+
+// --- Deleting a booking that has an event (Simone, 2026-11-26) --------------------------
+
+const HAS_EVENT = "This booking has an event, so it cannot be deleted. Cancel the booking instead; its event is cancelled with it."
+
+it("disables Delete for a booking that has an event and says to cancel it instead", () => {
+  render(<EventBookingClient booking={booking} promoters={promoters} linkedEvent={{ id: EVENT, title: "DJ Moon @ Club Synthetic" }} today="2026-11-23" />)
+  const remove = screen.getByRole("button", { name: "Delete" }) as HTMLButtonElement
+  expect(remove.disabled).toBe(true)
+  expect(document.getElementById(remove.getAttribute("aria-describedby") ?? "")?.textContent).toBe(HAS_EVENT)
+  fireEvent.click(remove)
+  expect(screen.queryByText("Delete this booking?")).toBeNull()
+  expect(mocks.deleteBooking).not.toHaveBeenCalled()
+})
+
+it.each([null, "unavailable"] as const)("keeps Delete available when the linked event is %s", (linkedEvent) => {
+  render(<EventBookingClient booking={booking} promoters={promoters} linkedEvent={linkedEvent} today="2026-11-23" />)
+  expect((screen.getByRole("button", { name: "Delete" }) as HTMLButtonElement).disabled).toBe(false)
+  expect(screen.queryByText(HAS_EVENT)).toBeNull()
+})
+
+it("shows the cancel hint and refreshes when the database refuses the delete (event linked meanwhile)", async () => {
+  mocks.deleteBooking.mockResolvedValue({ success: false, error: HAS_EVENT })
+  render(<EventBookingClient booking={booking} promoters={promoters} linkedEvent={null} today="2026-11-23" />)
+  fireEvent.click(screen.getByRole("button", { name: "Delete" }))
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Yes, delete" })) })
+  expect(mocks.deleteBooking).toHaveBeenCalledExactlyOnceWith(BOOKING)
+  expect(screen.getByRole("alert").textContent).toBe(HAS_EVENT)
+  expect(screen.queryByText("Delete this booking?")).toBeNull()
+  expect(mocks.router.refresh).toHaveBeenCalledOnce()
+  expect(mocks.router.push).not.toHaveBeenCalled()
+})

@@ -7,9 +7,9 @@ P5 of the reference plan `ARCH-20261114-booking-domain` r02 (D0, D5), implemente
 ### One event per booking
 
 - `events.booking_id` (uuid, nullable) names the booking an event was created from. `UNIQUE (booking_id)` allows at most one event per booking; events without a booking are unlimited.
-- The link is a composite same-workspace foreign key `(workspace_id, booking_id)` → `bookings (workspace_id, id)`, `ON DELETE SET NULL (booking_id)`. Deleting the booking (directly or through the artist cascade of migration 001) keeps the event and clears only `booking_id`; `workspace_id` is never touched.
+- The link is a composite same-workspace foreign key `(workspace_id, booking_id)` → `bookings (workspace_id, id)`, `ON DELETE NO ACTION`: a booking that has an event cannot be deleted (see "Deletion" below).
 - `events` gets `UNIQUE (workspace_id, id)`, like artists, promoters and bookings.
-- Deleting the event frees the booking: it can be converted again.
+- Deleting the event frees the booking: it can be converted again, or deleted.
 
 ### Conversion
 
@@ -51,8 +51,16 @@ The trigger `events_enforce_booking` (`BEFORE INSERT OR UPDATE OF booking_id, wo
 - **No reactivation:** the trigger `events_keep_cancelled` (`BEFORE UPDATE OF status, booking_id` on `events`, function `backbeat_keep_cancelled_event()`) refuses, with SQLSTATE `BB010`, moving the event of a cancelled booking out of `cancelled` or clearing its link; `updateEvent` answers "This event was cancelled with its booking and cannot be reopened. Create a new booking to rebook." A converted booking cannot leave `cancelled` (006 allows `cancelled` → `in_progress` otherwise): SQLSTATE `BB009`, answered by `updateBookingStatus` with "This booking has an event and was cancelled, so it cannot be reopened. Create a new booking to rebook."
 - **Rebooking** is a new booking, converted to a new event; the cancelled event is untouched.
 - Both functions are SECURITY INVOKER with an empty `search_path`, not executable by `PUBLIC`, `anon` or `authenticated`. They run under the writer's RLS; the existing `FOR ALL` active-member policies give the same writers both tables, so no policy or grant changes.
-- Not changed (confirmed by Simone, 2026-11-26): deleting a booking still keeps its event and clears only `booking_id` (foreign key `SET NULL`), whatever its status; deleting an event by hand is still allowed. An event without a booking, or whose booking is not cancelled, changes status freely.
-- SQLSTATEs: `BB008` status gate, `BB009`, `BB010` (`BB001`–`BB003` are 006, `BB004`–`BB005` 007, `BB006`–`BB007` #33's 010). 008 used `BB006` for the gate before 2026-11-25; it was renumbered in place because #33 uses `BB006`.
+- Not changed (confirmed by Simone, 2026-11-26): deleting an event by hand is still allowed. An event without a booking, or whose booking is not cancelled, changes status freely. Booking deletion changed the same day: see "Deletion".
+- SQLSTATEs: `BB008` status gate, `BB009`, `BB010`, `BB011` (deletion) (`BB001`–`BB003` are 006, `BB004`–`BB005` 007, `BB006`–`BB007` #33's 010). 008 used `BB006` for the gate before 2026-11-25; it was renumbered in place because #33 uses `BB006`.
+
+### Deletion (Simone, 2026-11-26)
+
+- **A booking that has an event cannot be deleted**, whatever its status; the way out is cancelling it, which cancels the event (above). A booking without an event stays freely deletable. This replaces the earlier rule (event kept, link cleared by `SET NULL`).
+- Database: the trigger `bookings_keep_event` (`BEFORE DELETE` on `bookings`, function `backbeat_keep_booking_with_event()`, SECURITY INVOKER, empty `search_path`, not executable by API roles) refuses a direct delete with SQLSTATE `BB011`, for members and the database owner alike. Backstop: `events_booking_id_fkey` is `ON DELETE NO ACTION`, so the delete is refused (`23503`) even when the trigger does not apply.
+- Cascades: deleting an **artist** cascades to its bookings (migration 001); while one of them has an event the foreign key refuses the artist delete (`23503`). The app has no artist delete today (F9b). Deleting a whole **workspace** still works: the check runs at the end of the statement, when the workspace's events are gone too. The trigger leaves cascaded deletes (`pg_trigger_depth() > 1`) to the foreign key for that reason; `RESTRICT` would have refused a workspace delete.
+- App: `deleteBooking` answers `BB011` (and `23503` on `events_booking_id_fkey`, an event linked while the delete ran) with "This booking has an event, so it cannot be deleted. Cancel the booking instead; its event is cancelled with it." The booking editor disables Delete and shows that sentence when the booking has a linked event; when the link could not be read, Delete stays available and the database decides. A refusal closes the confirmation, shows the message and refreshes the page.
+- Deleting the event by hand first unlinks the booking, which can then be deleted.
 
 ### Event start time, fee and status
 
@@ -94,21 +102,21 @@ Migration 008 is additive and idempotent, with no backfill. It creates 15 object
 
 Schema first, then code. The current staging code runs unchanged on the migrated schema. The new code reads the new columns, so **do not merge before 008 is applied on staging**.
 
-**Reserved (r03 point 3):** applying 008 on staging is not authorized. Alberto approves the exact file bytes and the staging target, and applies it; no agent or manual SQL path runs it. The PR body lists file, sha256, actors, operations, data and rollout order. The copies in `~/Desktop/backbeat-sql-008/` predate the cancellation triggers and the `BB008` renumbering: they are obsolete and must not be used.
+**Reserved (r03 point 3):** applying 008 on staging is not authorized. Alberto approves the exact file bytes and the staging target, and applies it; no agent or manual SQL path runs it. The PR body lists file, sha256, actors, operations, data and rollout order. The copies in `~/Desktop/backbeat-sql-008/` predate the cancellation triggers, the deletion block and the `BB008` renumbering: they are obsolete and must not be used.
 
 Expected results of the repository files, in order:
 
-1. `preflight.sql`: expect marker class `staging`, `008 objects present` = `0/19`, no `status_violation` row, last row `READY_FOR_008`.
-2. `migrations/008_booking_event.sql`, prefixed with `SET backbeat.booking_event_target = 'hosted:hupkygptbvnzrihrlcxv';`: completes with `COMMIT`; preflight then reports `19/19`.
-3. `postflight.sql`: expect last row `SUMMARY | ALL PASS | 19/19`.
-4. `verify.sql`: expect first row `SUMMARY | ALL PASS | pass=20 fail=0 skip=0`. It needs one artist in a workspace with an active member and one account outside that workspace. `INCOMPLETE` means missing test data, `FAILED` means do not merge.
+1. `preflight.sql`: expect marker class `staging`, `008 objects present` = `0/21`, no `status_violation` row, last row `READY_FOR_008`.
+2. `migrations/008_booking_event.sql`, prefixed with `SET backbeat.booking_event_target = 'hosted:hupkygptbvnzrihrlcxv';`: completes with `COMMIT`; preflight then reports `21/21`.
+3. `postflight.sql`: expect last row `SUMMARY | ALL PASS | 20/20`.
+4. `verify.sql`: expect first row `SUMMARY | ALL PASS | pass=21 fail=0 skip=0`. It needs one artist in a workspace with an active member and one account outside that workspace. `INCOMPLETE` means missing test data, `FAILED` means do not merge.
 5. With 008 applied and the old code still deployed, open the bookings list, a booking and the events list on staging: they must still load (the new foreign keys add relationships that PostgREST reads).
 6. Merge the PR to `staging`, verify the deployment commit.
 
 ## Rollback
 
 1. Redeploy the previous application version (revert the merge through a PR to `staging`). It runs unchanged on the 008 schema.
-2. Only to remove the schema: run `rollback.sql` with the same target prefix. It copies the booking link, start time and fee of events and the promoter of bookings into `public.booking_event_rollback_backup` (RLS on, no grants, no policies), then drops the status-gate and cancellation triggers and functions, those columns, their constraints, the index and `events_status_check`. No event or booking is deleted. `UNIQUE (workspace_id, id)` on events stays.
+2. Only to remove the schema: run `rollback.sql` with the same target prefix. It copies the booking link, start time and fee of events and the promoter of bookings into `public.booking_event_rollback_backup` (RLS on, no grants, no policies), then drops the status-gate, cancellation and deletion triggers and functions, those columns, their constraints, the index and `events_status_check`. No event or booking is deleted. `UNIQUE (workspace_id, id)` on events stays.
 3. To go forward again: apply 008, then restore by hand (staging only) and drop the backup. The status gate is switched off for the restore only: these links existed before, and the gate applies when a link is created, not to a booking that changed status afterwards.
 
 ```sql
@@ -136,10 +144,10 @@ DROP TABLE public.booking_event_rollback_backup;
 COMMIT;
 ```
 
-Events whose booking was deleted after the rollback are skipped by the first statement and keep no snapshot.
+Events whose booking was deleted after the rollback (possible again without 008's deletion block) are skipped by the first statement and keep no snapshot.
 
 ## Tests
 
-- `pnpm test`: conversion action (scope, gate, field map, retry reopens the linked event, race resolved only to a verified event, cancelled-after-conversion reopens, witness, fixed copy, projections), `BB009`/`BB010` copy, event read/update with the new fields, booking promoter create/update, `BB008` mapping, static guard on events read projections, "Create event" control, promoter selector in the modal and the editor, event page fields and link, static migration contracts.
-- `PG_BIN=<postgresql-17 bin> sh tests/sql/run-booking-event.sh`: applies 001–006 and 008 to a throwaway local cluster and executes one event per booking, the retry, the status gate (a raw insert of an event linked to an `in_progress` booking is rejected with `BB008`, all six statuses), cancellation (before conversion no event; after conversion the event is cancelled, kept, linked and editable, cannot be reactivated or unlinked, the booking cannot leave cancelled, a rebooking gets a new event, the owner is bound too), cross-workspace isolation, the status CHECK guard, fee rules, promoter link, deletes that keep the event and the booking, workspace cascade, preflight/postflight/verify, rollback and restore, and the target guard matrix. The `auth` schema there is a stub, so it does not prove hosted Auth or PostgREST behaviour. Not part of CI. It has its own runner so parallel branches do not edit `run-local.sh`.
+- `pnpm test`: conversion action (scope, gate, field map, retry reopens the linked event, race resolved only to a verified event, cancelled-after-conversion reopens, witness, fixed copy, projections), `BB009`/`BB010` copy, `BB011` delete refusal (action copy, disabled Delete, refusal after a late link), event read/update with the new fields, booking promoter create/update, `BB008` mapping, static guard on events read projections, "Create event" control, promoter selector in the modal and the editor, event page fields and link, static migration contracts.
+- `PG_BIN=<postgresql-17 bin> sh tests/sql/run-booking-event.sh`: applies 001–006 and 008 to a throwaway local cluster and executes one event per booking, the retry, the status gate (a raw insert of an event linked to an `in_progress` booking is rejected with `BB008`, all six statuses), cancellation (before conversion no event; after conversion the event is cancelled, kept, linked and editable, cannot be reactivated or unlinked, the booking cannot leave cancelled, a rebooking gets a new event, the owner is bound too), cross-workspace isolation, the status CHECK guard, fee rules, promoter link, deletion (a booking with an event is refused for member and owner, cancelled or not, booking and event unchanged; one without stays deletable; an artist delete that would cascade to it is refused; after a manual event delete the booking can go), promoter delete keeps booking and event, workspace cascade, preflight/postflight/verify, rollback and restore, and the target guard matrix. The `auth` schema there is a stub, so it does not prove hosted Auth or PostgREST behaviour. Not part of CI. It has its own runner so parallel branches do not edit `run-local.sh`.
 - `tests/integration` and `tests/e2e` need an authorized synthetic stack.

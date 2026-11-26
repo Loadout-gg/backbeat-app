@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs"
 import { expect, it } from "vitest"
 import { BOOKING_FEE_CURRENCIES, MAX_BOOKING_FEE_MINOR } from "@/lib/booking-fee"
-import { CONVERTIBLE_BOOKING_STATUSES, EVENT_BOOKING_STATUS_SQLSTATE, EVENT_STATUSES } from "@/lib/booking-event"
+import { BOOKING_WITH_EVENT_DELETE_SQLSTATE, CONVERTIBLE_BOOKING_STATUSES, EVENT_BOOKING_STATUS_SQLSTATE, EVENT_STATUSES } from "@/lib/booking-event"
 const read = (path: string) => readFileSync(path, "utf8")
 const migration = read("migrations/008_booking_event.sql")
 const [preflight, postflight, verify, rollback] = ["preflight", "postflight", "verify", "rollback"]
@@ -53,11 +53,15 @@ it("STATIC: 008 is additive and re-runnable: no backfill, no row rewrite, no pol
   expect(sql).toContain("BOOKING_EVENT_RLS_REQUIRED")
 })
 
-it("STATIC: one event per booking, same-workspace links, and deletes that null only the link column", () => {
+it("STATIC: one event per booking, same-workspace links; a booking with an event is kept, a promoter delete nulls only the link", () => {
   const sql = code(migration).replace(/\s+/g, " ")
   expect(sql).toContain("ADD CONSTRAINT events_workspace_id_id_key UNIQUE (workspace_id, id)")
   expect(sql).toContain("ADD CONSTRAINT events_booking_id_key UNIQUE (booking_id)")
-  expect(sql).toContain("ADD CONSTRAINT events_booking_id_fkey FOREIGN KEY (workspace_id, booking_id) REFERENCES public.bookings (workspace_id, id) ON DELETE SET NULL (booking_id)")
+  expect(sql).toContain("ADD CONSTRAINT events_booking_id_fkey FOREIGN KEY (workspace_id, booking_id) REFERENCES public.bookings (workspace_id, id) ON DELETE NO ACTION;")
+  // A draft of the link FK with another delete rule is replaced, never kept.
+  expect(sql).toContain("AND confdeltype <> 'a') THEN ALTER TABLE public.events DROP CONSTRAINT events_booking_id_fkey;")
+  // RESTRICT would refuse a workspace delete, which cascades to bookings before the events.
+  expect(sql).not.toMatch(/ON DELETE RESTRICT|SET NULL \(booking_id\)/)
   expect(sql).toContain("ADD CONSTRAINT bookings_promoter_id_fkey FOREIGN KEY (workspace_id, promoter_id) REFERENCES public.promoters (workspace_id, id) ON DELETE SET NULL (promoter_id)")
   // A bare SET NULL on a composite key would also null workspace_id (NOT NULL): never used.
   expect(sql).not.toMatch(/ON DELETE SET NULL(?! \()/)
@@ -66,7 +70,7 @@ it("STATIC: one event per booking, same-workspace links, and deletes that null o
 
 it("STATIC: the link trigger gates on the booking status for every writer, as SECURITY INVOKER", () => {
   const sql = code(migration)
-  expect(sql.match(/CREATE OR REPLACE FUNCTION/g)).toHaveLength(3)
+  expect(sql.match(/CREATE OR REPLACE FUNCTION/g)).toHaveLength(4)
   expect(sql).toContain("CREATE OR REPLACE FUNCTION public.backbeat_enforce_event_booking()\nRETURNS trigger LANGUAGE plpgsql SET search_path = ''")
   expect(sql).toContain("REVOKE ALL ON FUNCTION public.backbeat_enforce_event_booking() FROM PUBLIC, anon, authenticated;")
   expect(sql).toContain("DROP TRIGGER IF EXISTS events_enforce_booking ON public.events;")
@@ -142,5 +146,21 @@ it("STATIC: cancelling a converted booking cancels its event, which keeps its li
   expect(keep).toContain("USING ERRCODE = 'BB010'")
   expect(applyTime(sql)).not.toMatch(/SECURITY DEFINER/)
   // SQLSTATEs of 006, 007 and #33's 010 are not reused.
+  // (BB011: see the deletion test below.)
   for (const taken of ["BB001", "BB002", "BB003", "BB004", "BB005", "BB006", "BB007"]) expect(sql).not.toContain(taken)
+})
+
+it("STATIC: a booking that has an event cannot be deleted (BB011); a cascade is left to the FK", () => {
+  const sql = code(migration)
+  expect(sql).toContain("CREATE OR REPLACE FUNCTION public.backbeat_keep_booking_with_event()\nRETURNS trigger LANGUAGE plpgsql SET search_path = ''")
+  expect(sql).toContain("REVOKE ALL ON FUNCTION public.backbeat_keep_booking_with_event() FROM PUBLIC, anon, authenticated;")
+  expect(sql).toContain("CREATE TRIGGER bookings_keep_event BEFORE DELETE ON public.bookings\n  FOR EACH ROW EXECUTE FUNCTION public.backbeat_keep_booking_with_event();")
+  const keep = functionBody(sql, "backbeat_keep_booking_with_event").replace(/\s+/g, " ")
+  expect(keep).toContain("pg_catalog.pg_trigger_depth() = 1 AND EXISTS (SELECT 1 FROM public.events AS e WHERE e.booking_id = OLD.id AND e.workspace_id = OLD.workspace_id)")
+  expect(keep).toContain(`USING ERRCODE = '${BOOKING_WITH_EVENT_DELETE_SQLSTATE}'`)
+  expect(BOOKING_WITH_EVENT_DELETE_SQLSTATE).toBe("BB011")
+  for (const other of ["migrations/006_booking_lifecycle.sql", "migrations/004_booking_fee.sql"]) expect(read(other)).not.toContain("BB011")
+  expect(keep).not.toMatch(/UPDATE|DELETE FROM|INSERT/)
+  expect(code(rollback)).toContain("DROP TRIGGER IF EXISTS bookings_keep_event ON public.bookings;")
+  expect(code(rollback)).toContain("DROP FUNCTION IF EXISTS public.backbeat_keep_booking_with_event();")
 })
