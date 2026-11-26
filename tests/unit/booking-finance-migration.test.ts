@@ -1,5 +1,5 @@
 // STATIC source contracts only. These do not parse or execute PostgreSQL.
-// Executed coverage: tests/sql/booking-finance.sql (manual, throwaway local cluster).
+// SQL execution contracts: tests/sql/booking-finance.sql and tests/sql/booking-payment-history.sql.
 import { readFileSync } from "node:fs"
 import { expect, it } from "vitest"
 import { BOOKING_FEE_CURRENCIES, MAX_BOOKING_FEE_MINOR } from "@/lib/booking-fee"
@@ -128,6 +128,23 @@ it("STATIC: verify.sql rolls every write back and ends with one summarizing SELE
   expect(tail.startsWith("WITH lines AS")).toBe(true)
   expect(tail.split(";").filter(part => part.trim()).length).toBe(1)
   for (const expected of ["BB004", "BB005", "23503", "23514", "42501"]) expect(verify).toContain(`expected ${expected}`)
+})
+it("STATIC: full rollback locks payments and checks for any 010 column before backups or drops", () => {
+  const sql = code(rollback)
+  const guardEnd = sql.indexOf("\n$guard$;")
+  expect(guardEnd).toBeGreaterThan(0)
+  const guard = sql.slice(0, guardEnd)
+  const lock = "LOCK TABLE public.booking_payments IN ACCESS EXCLUSIVE MODE;"
+  expect(guard).toMatch(/BEGIN;\s+SET TRANSACTION ISOLATION LEVEL READ COMMITTED;\s+SET LOCAL lock_timeout = '3s';\s+SET LOCAL statement_timeout = '15s';/)
+  expect(guard).toContain("IF pg_catalog.to_regclass('public.booking_payments') IS NOT NULL THEN")
+  expect(guard.indexOf(lock)).toBeGreaterThan(guard.indexOf("RAISE EXCEPTION 'BOOKING_FINANCE_BOOKINGS_RLS_REQUIRED'"))
+  expect(guard).toContain(`${lock}\n    IF EXISTS (\n      SELECT 1 FROM pg_catalog.pg_attribute`)
+  expect(guard).toContain("WHERE attrelid = 'public.booking_payments'::pg_catalog.regclass\n        AND attnum > 0 AND NOT attisdropped")
+  expect(guard).toContain(`attname IN (${list(["voided_at", "void_kind", "void_reason", "replaces_payment_id"])})`)
+  expect(guard).toContain("RAISE EXCEPTION 'BOOKING_FINANCE_ROLLBACK_REQUIRES_010_REMOVAL';")
+  expect(guard).not.toMatch(/\b(?:CREATE|INSERT|DROP|ALTER)\b/)
+  expect(sql.match(/^COMMIT;$/gm)).toHaveLength(1)
+  expect(sql).not.toMatch(/^ROLLBACK\b/m)
 })
 it("STATIC: rollback backs up before it removes, and the backups are invisible to API roles", () => {
   const sql = code(rollback)

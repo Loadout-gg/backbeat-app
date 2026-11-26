@@ -5,8 +5,10 @@
 -- booking_payments_rollback_backup and booking_finance_rollback_backup (RLS on, no grants,
 -- no policies: invisible to the API). Re-running is safe: a later rollback overwrites the
 -- backup of a row that still exists with its current values and keeps the backup of rows
--- that are already gone. Same explicit target as 007.
+-- that are already gone. Refuses any remaining 010 history column. Same explicit target as 007.
 BEGIN;
+-- Read the catalog at the time of the check, not from a snapshot taken before the lock.
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
 SET LOCAL lock_timeout = '3s';
 SET LOCAL statement_timeout = '15s';
 DO $guard$
@@ -41,6 +43,18 @@ BEGIN
     WHERE oid = pg_catalog.to_regclass('public.bookings') AND relrowsecurity
   ) THEN
     RAISE EXCEPTION 'BOOKING_FINANCE_BOOKINGS_RLS_REQUIRED';
+  END IF;
+  IF pg_catalog.to_regclass('public.booking_payments') IS NOT NULL THEN
+    -- Keep the lock through backup and drop so 010 cannot change the checked schema.
+    LOCK TABLE public.booking_payments IN ACCESS EXCLUSIVE MODE;
+    IF EXISTS (
+      SELECT 1 FROM pg_catalog.pg_attribute
+      WHERE attrelid = 'public.booking_payments'::pg_catalog.regclass
+        AND attnum > 0 AND NOT attisdropped
+        AND attname IN ('voided_at', 'void_kind', 'void_reason', 'replaces_payment_id')
+    ) THEN
+      RAISE EXCEPTION 'BOOKING_FINANCE_ROLLBACK_REQUIRES_010_REMOVAL';
+    END IF;
   END IF;
 END
 $guard$;

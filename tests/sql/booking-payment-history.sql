@@ -96,6 +96,19 @@ SELECT bb_test.eq('apply: one policy, unchanged',
 \o
 \set ON_ERROR_STOP on
 
+-- The full 007 rollback is not an alternative even before any history is recorded.
+\set ON_ERROR_STOP off
+\o /dev/null
+\ir ../../ops/supabase/booking-finance/rollback.sql
+\o
+\set ON_ERROR_STOP on
+SELECT bb_test.eq('full rollback: all-null 010 shape and original row preserved',
+  (SELECT count(*)::text FROM public.booking_payments AS p JOIN bb_test.before AS o USING (id)
+   WHERE to_jsonb(p) = o.row || '{"voided_at":null,"void_kind":null,"void_reason":null,"replaces_payment_id":null}'::jsonb), '1');
+SELECT bb_test.eq('full rollback: no backups on all-null refusal',
+  (to_regclass('public.booking_payments_rollback_backup') IS NULL
+   AND to_regclass('public.booking_finance_rollback_backup') IS NULL)::text, 'true');
+
 DO $test$
 DECLARE
   ua uuid := 'a0000000-0000-4000-8000-000000000001';
@@ -162,6 +175,22 @@ $test$;
 SELECT bb_test.eq('rollback: refused with history',
   (SELECT count(*)::text FROM information_schema.columns WHERE table_schema = 'public'
    AND table_name = 'booking_payments' AND column_name = 'void_kind'), '1');
+
+-- The 007 snapshot format does not store 010 history. Refusal must precede any backup or drop.
+CREATE TEMP TABLE before_full_rollback AS
+  SELECT jsonb_agg(to_jsonb(p) ORDER BY p.id)::text AS row_bytes FROM public.booking_payments AS p;
+\set ON_ERROR_STOP off
+\o /dev/null
+\ir ../../ops/supabase/booking-finance/rollback.sql
+\o
+\set ON_ERROR_STOP on
+SELECT bb_test.eq('full rollback: void and correction rows preserved byte-for-byte',
+  (SELECT jsonb_agg(to_jsonb(p) ORDER BY p.id)::text FROM public.booking_payments AS p),
+  (SELECT row_bytes FROM before_full_rollback));
+SELECT bb_test.eq('full rollback: no backups on recorded-history refusal',
+  (to_regclass('public.booking_payments_rollback_backup') IS NULL
+   AND to_regclass('public.booking_finance_rollback_backup') IS NULL)::text, 'true');
+
 -- Without history it removes exactly the 010 shape (fixture reset as the table owner).
 DELETE FROM public.booking_payments WHERE id = 'a0000000-0000-4000-8000-00000000c003';
 DELETE FROM public.booking_payments WHERE id = 'a0000000-0000-4000-8000-00000000c002';
@@ -173,4 +202,11 @@ SELECT bb_test.eq('rollback: 010 columns and functions removed',
   || ':' || coalesce(to_regprocedure('public.backbeat_guard_booking_payment_record()')::text, 'gone'), '0:gone');
 SELECT bb_test.eq('rollback: original payment intact',
   (SELECT count(*)::text FROM public.booking_payments AS p JOIN bb_test.before AS o USING (id) WHERE to_jsonb(p) = o.row), '1');
+
+\ir ../../ops/supabase/booking-finance/rollback.sql
+SELECT bb_test.eq('ordered rollback: payment table removed after 010 is gone',
+  (to_regclass('public.booking_payments') IS NULL)::text, 'true');
+SELECT bb_test.eq('ordered rollback: original 007 payment backed up unchanged',
+  (SELECT count(*)::text FROM public.booking_payments_rollback_backup AS p JOIN bb_test.before AS o USING (id)
+   WHERE to_jsonb(p) - 'backed_up_at' = o.row), '1');
 \echo BOOKING_PAYMENT_HISTORY_SQL_TESTS_PASSED

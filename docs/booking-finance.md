@@ -88,7 +88,7 @@ The target must have the corresponding synthetic marker; production is refused. 
 ## Rollback
 
 1. Prefer qualifying a frontend revert to the pre-#33 staging code while retaining the schema, history guard and DELETE containment. Do not revert to the unsafe intermediate finance tree.
-2. `rollback.sql` is destructive and not a default reversal. It backs up rows and drops payment schema, trigger functions and finance columns. The backups' declared privileges do not prove technical/inherited access boundaries; absent or now-blank rows may leave older backup values. There is no restore script. Retention, audit access, verified restoration and any destructive authorization remain separate gates.
+2. `rollback.sql` is destructive and not a default reversal. It backs up 007 rows and drops payment schema, trigger functions and finance columns. Its backup cannot represent 010 history. It locks the existing payment table and refuses before creating or writing backups or dropping anything if **any** of the 010 columns (`voided_at`, `void_kind`, `void_reason`, `replaces_payment_id`) remains, even in a partial schema, an empty table or with all-null values. If 010 is installed, the only supported order is an authorized `010-rollback.sql` first, then `rollback.sql` if the 010 rollback succeeded. The 010 rollback itself refuses recorded history; do not clear it to bypass that refusal. The backups' declared privileges do not prove technical/inherited access boundaries; absent or now-blank rows may leave older backup values. There is no restore script. Retention, audit access, verified restoration and any destructive authorization remain separate gates.
 
 ## Tests
 
