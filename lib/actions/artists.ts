@@ -13,6 +13,9 @@ import {
   type UpdateArtistInput,
   type SocialLink,
 } from "@/lib/artist-validation"
+import { artistDefaultCommissionSchema, type ArtistDefaultCommissionInput, type CommissionMode, type CommissionType } from "@/lib/booking-finance"
+import type { BookingFeeCurrency } from "@/lib/booking-fee"
+import { bookingIdSchema } from "@/lib/booking-validation"
 
 export type {
   CreateArtistInput,
@@ -50,6 +53,12 @@ export type Artist = {
   documents: { name: string; url: string }[]
   updated_at: string | null
   profile_image_url: string | null
+  /** Present after migration 007. Percent in basis points; all-or-none with the mode. */
+  default_commission_type?: CommissionType | null
+  default_commission_value?: number | null
+  default_commission_mode?: CommissionMode | null
+  /** Set exactly when the default type is fixed; the value is in minor units of this currency. */
+  default_commission_currency?: BookingFeeCurrency | null
 }
 
 
@@ -293,5 +302,43 @@ export async function updateArtist(
   revalidatePath(`/dashboard/artists/${id}`)
   revalidatePath("/dashboard")
 
+  return { success: true }
+}
+
+/**
+ * Default agency commission of an artist (type, value, mode, and a currency when fixed),
+ * prefilled on new bookings.
+ * Null clears it. Workspace-scoped, affected-row witness, fixed error copy.
+ */
+export async function updateArtistDefaultCommission(
+  id: string,
+  input: ArtistDefaultCommissionInput,
+): Promise<{ success: boolean; error?: string }> {
+  if (!bookingIdSchema.safeParse(id).success) return { success: false, error: "Invalid artist ID" }
+  const validated = artistDefaultCommissionSchema.safeParse(input)
+  if (!validated.success) return { success: false, error: validated.error.issues[0].message }
+  const supabase = await createClient()
+  const workspaceId = await getCurrentWorkspaceId()
+
+  const { data: updated, error } = await supabase
+    .from("artists")
+    .update({
+      default_commission_type: validated.data?.type ?? null,
+      default_commission_value: validated.data?.value ?? null,
+      default_commission_mode: validated.data?.mode ?? null,
+      default_commission_currency: validated.data?.currency ?? null,
+    })
+    .eq("id", id)
+    .eq("workspace_id", workspaceId)
+    .select("id")
+    .maybeSingle()
+
+  if (error) {
+    console.error("Error updating the artist default commission:", error)
+    return { success: false, error: "Unable to save the default commission. Please try again." }
+  }
+  if (!updated) return { success: false, error: "Artist not found" }
+
+  revalidatePath(`/dashboard/artists/${id}`)
   return { success: true }
 }

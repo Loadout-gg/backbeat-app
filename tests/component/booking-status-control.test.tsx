@@ -13,6 +13,10 @@ vi.mock("@/lib/actions/bookings", () => ({
   updateBooking: mocks.updateBooking, updateBookingStatus: mocks.updateBookingStatus,
   deleteBooking: mocks.deleteBooking, getBooking: mocks.getBooking, getBookings: mocks.getBookings,
 }))
+vi.mock("@/lib/actions/booking-payments", () => ({ getBookingPayments: vi.fn(async () => []) }))
+vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: {
+  getUser: async () => ({ data: { user: { id: "server-member" } }, error: null }),
+} }) }))
 import { EventBookingClient } from "@/app/dashboard/bookings/[id]/event-booking-client"
 import EventBookingPage from "@/app/dashboard/bookings/[id]/page"
 import BookingsPage from "@/app/dashboard/bookings/page"
@@ -148,8 +152,10 @@ it("shows only the server-projected priority for the saved hold while the notice
   mocks.getBooking.mockResolvedValueOnce(mine)
   mocks.getBookings.mockResolvedValueOnce([mine, other])
   const page = await EventBookingPage(params)
-  expect(page.props).toStrictEqual({
-    booking: mine, sameDayBookingCounts: { [mine.date]: 1 }, holdPosition: { rank: 2, total: 2 }, today: TODAY,
+  const { draftOwnerId, ...previousProps } = page.props
+  expect(draftOwnerId).toBe("server-member")
+  expect(previousProps).toStrictEqual({
+    booking: mine, sameDayBookingCounts: { [mine.date]: 1 }, holdPosition: { rank: 2, total: 2 }, today: TODAY, payments: [],
   })
   const { unmount } = render(page)
   expect(statusSection().getByText("Hold priority 2 of 2")).toBeTruthy()
