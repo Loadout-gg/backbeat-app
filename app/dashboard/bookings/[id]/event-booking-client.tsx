@@ -21,6 +21,11 @@ import {
 } from "@/lib/booking-display";
 import { allowedBookingTransitions, type BookingStatus } from "@/lib/booking-status";
 import { formatArtistBaseRate } from "@/lib/artist-base-rate";
+import { BookingPromoterSelect } from "@/components/dashboard/booking-promoter-select";
+import type { PromoterOption } from "@/lib/actions/events";
+import type { BookingEventLink as LinkedEvent } from "@/lib/actions/booking-events";
+import { BookingEventLink } from "./booking-event-link";
+import { BOOKING_EVENT_COPY } from "@/lib/booking-event";
 import {
   BOOKING_HAS_PAYMENTS_MESSAGE, COMMISSION_CURRENCY_CHANGED_MESSAGE, COMMISSION_MODES, COMMISSION_MODE_LABELS, COMMISSION_WITHIN_FEE_MESSAGE, DEFAULT_COMMISSION_MODE,
   MAX_TAX_NOTE_LENGTH, artistDefaultCommission, bookingCommission, defaultCommissionPrefill, formatArtistDefaultCommission,
@@ -41,12 +46,17 @@ interface EventBookingClientProps {
   today?: string;
   /** Payments of this booking; null when that read failed (shown as an error, not as "none"). */
   payments?: readonly BookingPayment[] | null;
+  /** Promoter directory options; null when that read failed. Omitted: no promoter selector. */
+  promoters?: readonly PromoterOption[] | null;
+  /** Event created from this booking; null = none, "unavailable" = read failed. Omitted: no event section. */
+  linkedEvent?: LinkedEvent | null | "unavailable";
 }
 
 /** Saved values the form started from; a field is sent only when the draft differs from it. */
 type EditBaseline = {
   date: string; startTime: string; durationMinutes: number; notes: string;
   venueName: string; venueAddress: string; contactNameMain: string; contactPhoneMain: string; contactEmailMain: string;
+  promoterId: string;
   taxNote: string;
 };
 
@@ -61,6 +71,7 @@ function editBaseline(booking: BookingWithArtist): EditBaseline {
     contactNameMain: booking.contact_name_main ?? "",
     contactPhoneMain: booking.contact_phone_main ?? "",
     contactEmailMain: booking.contact_email_main ?? "",
+    promoterId: booking.promoter_id ?? "",
     taxNote: booking.tax_note ?? "",
   };
 }
@@ -90,7 +101,7 @@ const TABS = [
   "Artist contacts",
 ] as const;
 
-export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts, holdPosition, today, payments = [] }: EventBookingClientProps) {
+export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts, holdPosition, today, payments = [], promoters, linkedEvent }: EventBookingClientProps) {
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
   const saveInFlight = useRef(false);
@@ -106,6 +117,8 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const deleteQuestionId = useId();
   const deleteBlockedId = useId();
+  // A booking that has an event cannot be deleted (migration 008); it can only be cancelled.
+  const hasLinkedEvent = linkedEvent != null && linkedEvent !== "unavailable";
   const deleteTriggerRef = useRef<HTMLButtonElement>(null);
   const deleteCancelRef = useRef<HTMLButtonElement>(null);
   // Keyboard flow: opening moves focus to Cancel (the safe choice); Cancel returns it to Delete.
@@ -206,6 +219,7 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
   const savedTaxNote = booking.tax_note ?? "";
   const [taxNote, setTaxNote] = useState(savedTaxNote);
   const hasPayments = !!payments && payments.length > 0;
+  const deleteBlocked = hasPayments || hasLinkedEvent;
   // Owned here, not by the panel: the Financial tab content unmounts on a tab change.
   const paymentsState = useBookingPaymentsState(draftOwnerId, booking.workspace_id, booking.id, payments);
   // A payment draft restored after a reload is shown once, so it can be retried with its original
@@ -248,6 +262,7 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
   const [contactNameSecondary, setContactNameSecondary] = useState("");
   const [contactPhoneSecondary, setContactPhoneSecondary] = useState("");
   const [contactEmailSecondary, setContactEmailSecondary] = useState("");
+  const [promoterId, setPromoterId] = useState(booking.promoter_id ?? "");
 
   const artist = booking.artist;
   const artistDisplayName = artist.stage_name || artist.name || "Unknown";
@@ -397,6 +412,7 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
     const submitted: EditBaseline = {
       date: bookingDate, startTime, durationMinutes, notes,
       venueName, venueAddress, contactNameMain, contactPhoneMain, contactEmailMain,
+      promoterId,
       taxNote,
     };
 
@@ -406,6 +422,7 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
       ...(commissionPatch ?? {}),
       ...(send("tax_note", !sameText(taxNote, saved.taxNote)) ? { tax_note: taxNote } : {}),
       ...(holdExpiryChanged ? { hold_expires_on: holdExpiresOn || null } : {}),
+      ...(send("promoter_id", promoterId !== saved.promoterId) ? { promoter_id: promoterId || null } : {}),
       ...(send("start_time", startTime !== saved.startTime) ? { start_time: startTime } : {}),
       ...(send("duration_minutes", durationMinutes !== saved.durationMinutes) ? { duration_minutes: durationMinutes || null } : {}),
       ...(send("notes", notes !== saved.notes) ? { notes: notes || null } : {}),
@@ -452,7 +469,7 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
   };
 
   const handleDelete = async () => {
-    if (deleteInFlight.current || hasPayments) return;
+    if (deleteInFlight.current || deleteBlocked) return;
     deleteInFlight.current = true;
     setIsDeleting(true);
     setDeleteError(null);
@@ -461,6 +478,11 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
       const result = await deleteBooking(booking.id);
       if (result.success) {
         router.push("/dashboard/bookings");
+      } else if (result.error === BOOKING_EVENT_COPY.bookingHasEvent) {
+        // An event was linked meanwhile (another tab): keep the booking and show the link.
+        setShowDeleteConfirm(false);
+        setDeleteError(BOOKING_EVENT_COPY.bookingHasEvent);
+        router.refresh();
       } else {
         // Only the fixed "has payments" copy is shown as returned; anything else stays generic.
         setDeleteError(result.error === BOOKING_HAS_PAYMENTS_MESSAGE ? BOOKING_HAS_PAYMENTS_MESSAGE : "Unable to delete booking. Please try again.");
@@ -618,6 +640,10 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
             </p>
           )}
         </section>
+
+        {linkedEvent !== undefined && (
+          <BookingEventLink bookingId={booking.id} status={booking.status} linkedEvent={linkedEvent} />
+        )}
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-0 min-w-0">
           <div className="px-4 py-3 sm:px-6 border-b border-border">
@@ -904,6 +930,16 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
                   Contact info
                 </h3>
                 <div className="space-y-4">
+                  {promoters !== undefined && (
+                    <BookingPromoterSelect
+                      id="booking-promoter"
+                      value={promoterId}
+                      onChange={setPromoterId}
+                      options={promoters}
+                      disabled={isSaving}
+                      className="max-w-md"
+                    />
+                  )}
                   {/* Main contact */}
                   <div className="border border-border rounded-lg p-4">
                     <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-3">
@@ -1180,21 +1216,22 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
         {/* Bottom actions */}
         <div className="flex flex-col gap-4 rounded-b-xl bg-card px-4 py-4 sm:px-6 lg:sticky lg:bottom-0 lg:z-10 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between border-t border-border">
           <div className="relative">
-            {deleteError && !hasPayments && (
+            {deleteError && !deleteBlocked && (
               <p role="alert" className="mb-2 text-sm text-destructive">
                 {deleteError}
               </p>
             )}
-            {hasPayments ? (
-              // Owner decision: any payment row (incl. voided or corrected) means cancel, never
-              // delete. The database RESTRICT FK stays the authority; this only avoids a dead end.
-              <div className="flex flex-col gap-2">
+            {deleteBlocked ? (
+              // A booking with an event (008, BB011) or with any payment row (007 RESTRICT FK,
+              // owner decision incl. voided or corrected rows) is cancelled, never deleted. The
+              // database stays the authority; this only avoids a dead end.
+              <div className="flex max-w-md flex-col gap-2">
                 <Button variant="outline" disabled aria-describedby={deleteBlockedId}>
                   <Trash2 aria-hidden="true" className="h-4 w-4 mr-2" />
                   Delete
                 </Button>
-                <p id={deleteBlockedId} className="max-w-md text-sm text-muted-foreground">
-                  {BOOKING_HAS_PAYMENTS_MESSAGE}
+                <p id={deleteBlockedId} className="text-sm text-muted-foreground">
+                  {hasLinkedEvent ? BOOKING_EVENT_COPY.bookingHasEvent : BOOKING_HAS_PAYMENTS_MESSAGE}
                 </p>
               </div>
             ) : showDeleteConfirm ? (
@@ -1250,14 +1287,6 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
               className="aria-disabled:cursor-wait aria-disabled:opacity-50"
             >
               {isSaving ? "Saving..." : "Update booking"}
-            </Button>
-            <Button
-              variant="outline"
-              className="whitespace-normal h-auto min-h-9"
-              disabled
-              title="Coming soon"
-            >
-              Complete and create event
             </Button>
           </div>
         </div>

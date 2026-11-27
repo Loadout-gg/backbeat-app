@@ -1,5 +1,7 @@
 import { notFound, unstable_rethrow } from "next/navigation";
 import { getBooking, getBookings } from "@/lib/actions/bookings";
+import { getBookingEventLink, type BookingEventLink } from "@/lib/actions/booking-events";
+import { listPromoters, type PromoterOption } from "@/lib/actions/events";
 import { getBookingPayments } from "@/lib/actions/booking-payments";
 import { holdRank } from "@/lib/booking-display";
 import type { BookingPayment } from "@/lib/booking-finance";
@@ -41,6 +43,21 @@ export default async function EventBookingPage({ params }: EventBookingPageProps
     unstable_rethrow(error);
   }
 
+  // Promoter options and the linked event: a failed read is shown as such in its own
+  // control, never as "no promoters" or "no event".
+  let promoters: PromoterOption[] | null = null;
+  try {
+    promoters = await listPromoters();
+  } catch (error) {
+    unstable_rethrow(error);
+  }
+  let linkedEvent: BookingEventLink | null | "unavailable" = "unavailable";
+  try {
+    linkedEvent = await getBookingEventLink(booking.id);
+  } catch (error) {
+    unstable_rethrow(error);
+  }
+
   // A failed payments read is reported in the Financial tab, never shown as "no payments".
   let payments: BookingPayment[] | null = null;
   try {
@@ -60,5 +77,16 @@ export default async function EventBookingPage({ params }: EventBookingPageProps
     unstable_rethrow(error);
   }
 
-  return <EventBookingClient booking={booking} draftOwnerId={draftOwnerId} sameDayBookingCounts={sameDayBookingCounts} holdPosition={holdPosition} today={configuredCalendarDay()} payments={payments} />;
+  return (
+    <EventBookingClient
+      booking={booking}
+      draftOwnerId={draftOwnerId}
+      sameDayBookingCounts={sameDayBookingCounts}
+      holdPosition={holdPosition}
+      today={configuredCalendarDay()}
+      payments={payments}
+      promoters={promoters}
+      linkedEvent={linkedEvent}
+    />
+  );
 }

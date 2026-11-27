@@ -49,6 +49,7 @@ const booking = {
 const detail = (event: (typeof events)[number]): EventDetail => ({
   id: event.id, title: event.title, date: event.date, location: event.location,
   status: event.status, artist_id: event.artist_id, promoter_id: event.promoter_id,
+  booking_id: null, start_time: null, fee_amount_minor: null, fee_currency: null,
 })
 const promoterCard = () => screen.getByRole("heading", { level: 2, name: "Promoter" }).closest('[data-slot="card"]') as HTMLElement
 

@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { BOOKING_FEE_CURRENCIES, bookingFeeShape, validateBookingFeePair } from "./booking-fee"
 import { BOOKING_STATUSES } from "./booking-status"
+import { bookingPromoterIdSchema } from "./booking-event"
 import { MAX_TAX_NOTE_LENGTH, bookingCommissionShape, validateBookingCommission } from "./booking-finance"
 
 // Preserve the incumbent literal UUID-shaped format, including legacy variant bits.
@@ -17,6 +18,7 @@ export const createBookingSchema = z.object({
   startTime: time,
   durationMinutes: duration,
   notes: z.string().optional(),
+  promoterId: bookingPromoterIdSchema.optional(),
 })
 const optionalBookingText = (max: number, label: string) => z.string().trim()
   .max(max, `${label} must be at most ${max} characters`).nullable().optional()
@@ -38,6 +40,7 @@ export const updateBookingSchema = z.object({
   duration_minutes: duration.nullable().optional(),
   notes: z.string().nullable().optional(),
   hold_expires_on: z.string().date("Enter a valid hold expiry date").nullable().optional(),
+  promoter_id: bookingPromoterIdSchema.nullable().optional(),
   // Status changes go through updateBookingStatus only (transition graph + compare-and-set).
   status: z.undefined("Change the booking status with the status control").optional(),
 }).superRefine(validateBookingFeePair).superRefine(validateBookingCommission)

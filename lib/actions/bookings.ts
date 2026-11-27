@@ -9,6 +9,7 @@ import type { BookingFeeCurrency } from "@/lib/booking-fee";
 import { bookingTransitionBlock, canTransitionBooking, type BookingStatus, type BookingTransitionBlock } from "@/lib/booking-status";
 import { configuredCalendarDay } from "@/lib/calendar-day";
 import { createBookingSchema, updateBookingSchema, bookingStatusSchema, bookingIdSchema } from "@/lib/booking-validation";
+import { BOOKING_EVENT_COPY, CONVERTED_BOOKING_CANCELLED_SQLSTATE, isBookingPromoterViolation, isBookingWithEventDeleteViolation } from "@/lib/booking-event";
 import {
   BOOKING_HAS_PAYMENTS_MESSAGE, COMMISSION_CURRENCY_CHANGED_MESSAGE, COMMISSION_WITHIN_FEE_MESSAGE, FEE_CURRENCY_LOCKED_MESSAGE,
   artistDefaultCommission, defaultCommissionPrefill,
@@ -33,6 +34,8 @@ export interface Booking {
   status: BookingStatus;
   /** Present after migration 006; only meaningful while status is "hold". */
   hold_expires_on?: string | null;
+  /** Present after migration 008. Optional promoter from the directory; the free-text main contact is separate. */
+  promoter_id?: string | null;
   /** Present after migration 007. Percent values are basis points, fixed values minor units of the fee currency. */
   commission_type?: CommissionType | null;
   commission_value?: number | null;
@@ -181,6 +184,7 @@ export async function createBooking(formData: {
   startTime: string;
   durationMinutes: number;
   notes?: string;
+  promoterId?: string;
 }): Promise<{ success: boolean; error?: string; booking?: CreatedBooking }> {
   const validation = createBookingSchema.safeParse(formData);
   if (!validation.success) return { success: false, error: validation.error.issues[0].message };
@@ -225,6 +229,7 @@ export async function createBooking(formData: {
       duration_minutes: formData.durationMinutes || null,
       notes: formData.notes || null,
       status: "in_progress",
+      ...(validation.data.promoterId ? { promoter_id: validation.data.promoterId } : {}),
       ...commission,
     })
     .select(CREATED_BOOKING_COLUMNS)
@@ -232,6 +237,7 @@ export async function createBooking(formData: {
 
   if (error) {
     console.error("Error creating booking:", error);
+    if (isBookingPromoterViolation(error)) return { success: false, error: BOOKING_EVENT_COPY.promoterGone };
     return { success: false, error: "Unable to create booking. Please try again." };
   }
 
@@ -280,6 +286,9 @@ export async function updateBookingStatus(
 
   if (error) {
     console.error("Error updating booking status:", error);
+    if (error.code === CONVERTED_BOOKING_CANCELLED_SQLSTATE) {
+      return { success: false, error: BOOKING_EVENT_COPY.convertedStaysCancelled };
+    }
     return {
       success: false,
       error: lifecycleErrorMessage(error) ?? "Unable to update the booking status. Please try again.",
@@ -308,6 +317,8 @@ export async function updateBookingStatus(
   revalidatePath("/dashboard/bookings");
   revalidatePath("/dashboard/artists");
   revalidatePath(`/dashboard/bookings/${bookingId}`);
+  // Cancelling a converted booking also cancels its event (migration 008 trigger).
+  if (status === "cancelled") revalidatePath("/dashboard/events", "layout");
 
   return { success: true };
 }
@@ -336,6 +347,8 @@ export async function deleteBooking(
     .maybeSingle();
 
   if (error) {
+    // A booking that has an event is kept (migration 008); cancelling it is the way out.
+    if (isBookingWithEventDeleteViolation(error)) return { success: false, error: BOOKING_EVENT_COPY.bookingHasEvent };
     console.error("Error deleting booking:", error);
     // PostgreSQL reports the RESTRICT FK as 23503 or 23001 depending on its version.
     const hasPayments = (error.code === "23503" || error.code === "23001") &&
@@ -399,6 +412,7 @@ export async function updateBooking(
     duration_minutes?: number | null;
     notes?: string | null;
     hold_expires_on?: string | null;
+    promoter_id?: string | null;
     venue_name?: string | null;
     venue_address?: string | null;
     event_type?: string;
@@ -496,7 +510,9 @@ export async function updateBooking(
       : null;
     return {
       success: false,
-      error: lifecycleErrorMessage(error) ?? financeErrorMessage(error) ?? holdExpiry ?? "Unable to save booking. Please try again.",
+      error: lifecycleErrorMessage(error) ?? financeErrorMessage(error) ?? holdExpiry
+        ?? (isBookingPromoterViolation(error) ? BOOKING_EVENT_COPY.promoterGone : null)
+        ?? "Unable to save booking. Please try again.",
     };
   }
   if (!changedBooking && commissionCurrency) {

@@ -13,6 +13,8 @@ vi.mock("@/lib/actions/bookings", () => ({
   updateBooking: mocks.updateBooking, updateBookingStatus: mocks.updateBookingStatus,
   deleteBooking: mocks.deleteBooking, getBooking: mocks.getBooking, getBookings: mocks.getBookings,
 }))
+vi.mock("@/lib/actions/booking-events", () => ({ getBookingEventLink: vi.fn(async () => null), createEventFromBooking: vi.fn() }))
+vi.mock("@/lib/actions/events", () => ({ listPromoters: vi.fn(async () => []) }))
 vi.mock("@/lib/actions/booking-payments", () => ({ getBookingPayments: vi.fn(async () => []) }))
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: {
   getUser: async () => ({ data: { user: { id: "server-member" } }, error: null }),
@@ -156,6 +158,7 @@ it("shows only the server-projected priority for the saved hold while the notice
   expect(draftOwnerId).toBe("server-member")
   expect(previousProps).toStrictEqual({
     booking: mine, sameDayBookingCounts: { [mine.date]: 1 }, holdPosition: { rank: 2, total: 2 }, today: TODAY, payments: [],
+    promoters: [], linkedEvent: null,
   })
   const { unmount } = render(page)
   expect(statusSection().getByText("Hold priority 2 of 2")).toBeTruthy()
