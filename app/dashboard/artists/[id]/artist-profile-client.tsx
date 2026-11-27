@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback, type ComponentProps } from "react"
+import { useEffect, useState, useCallback, type ComponentProps, type ReactNode } from "react"
 import { useSearchParams, useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { parseISO } from "date-fns"
@@ -70,9 +70,11 @@ interface ArtistProfileClientProps {
   events: EventWithRelations[]
   calendarError?: boolean
   calendarToday: string
+  /** Travel documents section (server-loaded, self-saving); kept outside the tabs so drafts survive. */
+  travelDocuments?: ReactNode
 }
 
-export function ArtistProfileClient({ artist, bookings, events, calendarError = false, calendarToday }: ArtistProfileClientProps) {
+export function ArtistProfileClient({ artist, bookings, events, calendarError = false, calendarToday, travelDocuments }: ArtistProfileClientProps) {
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
@@ -745,6 +747,8 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
         </CardContent>
       </Card>
 
+      {travelDocuments}
+
       {/* New Booking Modal */}
       <NewBookingModal
         open={isBookingModalOpen}
@@ -757,7 +761,8 @@ export function ArtistProfileClient({ artist, bookings, events, calendarError = 
 
       {/* Footer */}
       <footer className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-muted/60 px-4 py-4 text-xs text-muted-foreground">
-        <span>© 2025 Backbeat. All rights reserved.</span>
+        {/* Year of the configured calendar day (server zone policy), not the viewer clock. */}
+        <span>© {calendarToday.slice(0, 4)} Backbeat. All rights reserved.</span>
         <span>Terms, Privacy, Help and Contact are currently unavailable.</span>
       </footer>
     </div>

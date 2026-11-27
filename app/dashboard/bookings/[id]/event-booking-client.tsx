@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useTransition, type ReactNode } from "react";
 import { BOOKING_FEE_CURRENCIES, parseBookingFee, formatBookingFeeInput, type BookingFeeCurrency, type BookingFeeError } from "@/lib/booking-fee";
 import { createBookingSchema } from "@/lib/booking-validation";
 import Link from "next/link";
@@ -9,7 +9,6 @@ import { X, Trash2, Plus, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +50,9 @@ interface EventBookingClientProps {
   promoters?: readonly PromoterOption[] | null;
   /** Event created from this booking; null = none, "unavailable" = read failed. Omitted: no event section. */
   linkedEvent?: LinkedEvent | null | "unavailable";
+  /** Travel and Accommodation tab bodies (server-loaded, self-saving); see docs/booking-travel.md. */
+  travelPanel?: ReactNode;
+  accommodationPanel?: ReactNode;
 }
 
 /** Saved values the form started from; a field is sent only when the draft differs from it. */
@@ -102,7 +104,7 @@ const TABS = [
   "Artist contacts",
 ] as const;
 
-export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts, holdPosition, today, payments = [], promoters, linkedEvent }: EventBookingClientProps) {
+export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts, holdPosition, today, payments = [], promoters, linkedEvent, travelPanel, accommodationPanel }: EventBookingClientProps) {
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
   const saveInFlight = useRef(false);
@@ -255,12 +257,6 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
   const [openArtist1, setOpenArtist1] = useState("");
   const [openArtist2, setOpenArtist2] = useState("");
   const [closeArtist, setCloseArtist] = useState("");
-
-  // Driver fields (placeholder UI)
-  const [sameDriver, setSameDriver] = useState(true);
-  const [driverName, setDriverName] = useState("");
-  const [driverPhone, setDriverPhone] = useState("");
-  const [driverDistance, setDriverDistance] = useState("");
 
   // Main contact and secondary contact placeholders
   const [contactNameMain, setContactNameMain] = useState(booking.contact_name_main ?? "");
@@ -785,7 +781,7 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
               </div>
 
                 <p id="unavailable-booking-fields" className="text-sm text-muted-foreground">
-                  Not available yet: event type, expected audience, lineup, driver and secondary contact fields are not saved.
+                  Not available yet: event type, expected audience, lineup and secondary contact fields are not saved. Drivers are recorded per travel leg in the Travel tab.
                 </p>
               {/* Venue & Additional details */}
               <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-2">
@@ -897,68 +893,6 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
                         placeholder="Artist name"
                         value={closeArtist}
                         onChange={(e) => setCloseArtist(e.target.value)}
-                        className="min-w-0 h-9 text-sm placeholder:text-foreground"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Driver inbound */}
-              <div>
-                <div className="flex flex-wrap items-center gap-3 mb-3">
-                  <h3 className="text-base font-medium text-foreground">
-                    Driver inbound
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      disabled
-                      id="same-driver"
-                      checked={sameDriver}
-                      onCheckedChange={(checked) =>
-                        setSameDriver(checked === true)
-                      }
-                    />
-                    <label
-                      htmlFor="same-driver"
-                      className="text-sm text-foreground cursor-not-allowed"
-                    >
-                      Same driver Inbound/Outbound
-                    </label>
-                  </div>
-                </div>
-                <div className="border border-border rounded-lg p-4">
-                  <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-3">
-                    <div>
-                      <label className="text-xs font-medium text-foreground mb-1.5 block">
-                        Driver name
-                      </label>
-                      <Input
-                        placeholder="Driver name"
-                        value={driverName}
-                        onChange={(e) => setDriverName(e.target.value)}
-                        className="min-w-0 h-9 text-sm placeholder:text-foreground"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-foreground mb-1.5 block">
-                        Driver phone number
-                      </label>
-                      <Input
-                        placeholder="Driver phone number"
-                        value={driverPhone}
-                        onChange={(e) => setDriverPhone(e.target.value)}
-                        className="min-w-0 h-9 text-sm placeholder:text-foreground"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-foreground mb-1.5 block">
-                        Distance
-                      </label>
-                      <Input
-                        placeholder="Distance"
-                        value={driverDistance}
-                        onChange={(e) => setDriverDistance(e.target.value)}
                         className="min-w-0 h-9 text-sm placeholder:text-foreground"
                       />
                     </div>
@@ -1249,7 +1183,19 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
               />
             </div>
           </TabsContent>
-          {TABS.filter((tab) => tab !== "Performance" && tab !== "Financial").map((tab) => (
+          {/* Mounted while hidden so an unsaved travel or accommodation draft survives a tab switch. */}
+          {travelPanel && (
+            <TabsContent value="Travel" forceMount className="min-w-0 px-4 py-6 sm:px-6 data-[state=inactive]:hidden">
+              {travelPanel}
+            </TabsContent>
+          )}
+          {accommodationPanel && (
+            <TabsContent value="Accommodation" forceMount className="min-w-0 px-4 py-6 sm:px-6 data-[state=inactive]:hidden">
+              {accommodationPanel}
+            </TabsContent>
+          )}
+          {TABS.filter((tab) => tab !== "Performance" && tab !== "Financial"
+            && !(tab === "Travel" && travelPanel) && !(tab === "Accommodation" && accommodationPanel)).map((tab) => (
             <TabsContent key={tab} value={tab.replaceAll(" ", "-")} className="min-w-0 px-4 py-16 text-center sm:px-6">
               <h2 className="text-lg font-medium text-foreground mb-2">{tab}</h2>
               <p className="text-muted-foreground">This section is coming soon.</p>

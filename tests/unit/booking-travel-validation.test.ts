@@ -1,0 +1,111 @@
+import { expect, it } from "vitest"
+import {
+  TRANSPORT_TO_CITY_LABELS, TRANSPORT_TO_CITY_VALUES, bookingStaySchema, dateOfBirthSchema, firstIssue,
+  transportToCitySchema, travelDocumentSchema, travelLegSchema,
+} from "@/lib/booking-travel-validation"
+
+const leg = (patch: Record<string, unknown> = {}) => travelLegSchema.safeParse({ direction: "inbound", ...patch })
+const issue = (result: { success: boolean; error?: { issues: { message: string }[] } }) =>
+  result.success ? null : result.error!.issues[0].message
+
+it("normalizes a full leg: trims text, blank optional fields become NULL", () => {
+  const result = leg({ mode: " flight ", carrier: "", depart_date: "2030-05-02", depart_time: "09:00", arrive_time: "" })
+  expect(result.success).toBe(true)
+  expect(result.data).toMatchObject({ mode: "flight", carrier: null, depart_date: "2030-05-02", depart_time: "09:00", arrive_time: null, notes: null })
+})
+it.each([
+  [{ direction: "sideways" }, "Choose a direction"],
+  [{ depart_date: "2030-02-30" }, "Enter a valid departure date"],
+  [{ depart_date: "2030-05-02", depart_time: "25:00" }, "Enter a valid departure time"],
+  [{ depart_time: "09:00" }, "Enter the departure date for the departure time"],
+  [{ arrive_time: "09:00" }, "Enter the arrival date for the arrival time"],
+  [{ depart_date: "2030-05-02", arrive_date: "2030-05-01" }, "Arrival cannot be before departure"],
+  [{ depart_date: "2030-05-02", depart_time: "10:00", arrive_date: "2030-05-02", arrive_time: "09:59" }, "Arrival cannot be before departure"],
+  [{ depart_date: "2030-05-02", depart_time: "10:00", depart_zone: "cet", arrive_date: "2030-05-02", arrive_time: "09:00", arrive_zone: " CET " }, "Arrival cannot be before departure"],
+  [{ notes: "x".repeat(2001) }, "Notes must be at most 2000 characters"],
+  [{ driver_phone: "1".repeat(101) }, "Driver phone must be at most 100 characters"],
+  [{ depart_zone: "z".repeat(65) }, "Departure time zone must be at most 64 characters"],
+])("rejects leg %j with fixed copy", (patch, message) => {
+  expect(issue(leg(patch))).toBe(message)
+})
+it.each([
+  [{ depart_date: "2030-05-02", depart_zone: "Tokyo", arrive_date: "2030-04-30", arrive_zone: "Los Angeles" }, "Arrival can be at most one day before departure across time zones"],
+  [{ depart_date: "2030-05-02", depart_zone: "Tokyo", arrive_date: "2030-05-01" }, "Arrival cannot be before departure"],
+  [{ depart_date: "2030-05-02", arrive_date: "2030-05-01", arrive_zone: "PST" }, "Arrival cannot be before departure"],
+  [{ depart_date: "2030-05-02", depart_zone: "JST", arrive_date: "2030-05-01", arrive_zone: " jst " }, "Arrival cannot be before departure"],
+  [{ depart_date: "2030-05-02", depart_time: "10:00", depart_zone: "CET", arrive_date: "2030-05-02", arrive_time: "09:00" }, "Arrival cannot be before departure"],
+  [{ depart_date: "2030-05-02", depart_zone: "  ", arrive_date: "2030-05-01", arrive_zone: "PST" }, "Arrival cannot be before departure"],
+])("date-line rule rejects %j", (patch, message) => {
+  expect(issue(leg(patch))).toBe(message)
+})
+it("date-line rule accepts an arrival one calendar day earlier only with two different zone labels", () => {
+  expect(leg({ depart_date: "2030-05-02", depart_time: "17:00", depart_zone: "Tokyo", arrive_date: "2030-05-01", arrive_time: "10:00", arrive_zone: "Los Angeles" }).success).toBe(true)
+  expect(leg({ depart_date: "2030-03-01", depart_zone: "Auckland", arrive_date: "2030-02-28", arrive_zone: "Honolulu" }).success).toBe(true)
+  expect(leg({ depart_date: "2028-03-01", depart_zone: "Auckland", arrive_date: "2028-02-29", arrive_zone: "Honolulu" }).success).toBe(true)
+  expect(leg({ depart_date: "2030-01-01", depart_zone: "Tokyo", arrive_date: "2029-12-31", arrive_zone: "Los Angeles" }).success).toBe(true)
+})
+it("compares clock times only for the same date and the same zone label", () => {
+  expect(leg({ depart_date: "2030-05-02", depart_time: "10:00", depart_zone: "Tokyo", arrive_date: "2030-05-02", arrive_time: "09:00", arrive_zone: "Honolulu" }).success).toBe(true)
+  expect(leg({ depart_date: "2030-05-02", depart_time: "10:00:00", arrive_date: "2030-05-02", arrive_time: "10:00" }).success).toBe(true)
+  expect(leg({ depart_date: "2030-05-02", depart_time: "23:00", arrive_date: "2030-05-03", arrive_time: "01:00" }).success).toBe(true)
+})
+it("rejects unknown leg keys (no workspace or booking override from the client)", () => {
+  expect(leg({ workspace_id: "x" }).success).toBe(false)
+  expect(leg({ booking_id: "x" }).success).toBe(false)
+})
+it("validates stays: name required, check-out not before check-in, same day allowed", () => {
+  expect(issue(bookingStaySchema.safeParse({ name: "  " }))).toBe("Enter the accommodation name")
+  expect(issue(bookingStaySchema.safeParse({}))).toBe("Enter the accommodation name")
+  expect(issue(bookingStaySchema.safeParse({ name: "Hotel", check_in_on: "2030-05-02", check_out_on: "2030-05-01" }))).toBe("Check-out cannot be before check-in")
+  expect(bookingStaySchema.safeParse({ name: "Hotel", check_in_on: "2030-05-02", check_out_on: "2030-05-02" }).success).toBe(true)
+  expect(bookingStaySchema.parse({ name: " Hotel ", address: "" })).toMatchObject({ name: "Hotel", address: null, check_in_on: null })
+  expect(issue(bookingStaySchema.safeParse({ name: "x".repeat(201) }))).toBe("Accommodation name must be at most 200 characters")
+})
+it("validates travel documents", () => {
+  expect(travelDocumentSchema.parse({ doc_type: "passport", number: " YA1 ", expires_on: "" })).toEqual({
+    doc_type: "passport", number: "YA1", issuing_country: null, nationality: null, issued_on: null, expires_on: null, holder_name: null,
+  })
+  expect(issue(travelDocumentSchema.safeParse({ doc_type: "visa", number: "1" }))).toBe("Choose a document type")
+  expect(issue(travelDocumentSchema.safeParse({ doc_type: "id_card", number: " " }))).toBe("Enter the document number")
+  expect(issue(travelDocumentSchema.safeParse({ doc_type: "id_card", number: "1".repeat(65) }))).toBe("Document number must be at most 64 characters")
+  expect(travelDocumentSchema.safeParse({ doc_type: "other", number: "1", artist_id: "x" }).success).toBe(false)
+})
+it("validates the date of birth against 1900 and the configured today", () => {
+  const schema = dateOfBirthSchema("2026-11-23")
+  expect(schema.parse("")).toBeNull()
+  expect(schema.parse(null)).toBeNull()
+  expect(schema.parse("1990-02-03")).toBe("1990-02-03")
+  expect(schema.parse("2026-11-23")).toBe("2026-11-23")
+  expect(issue(schema.safeParse("2026-11-24"))).toBe("Date of birth cannot be in the future")
+  expect(issue(schema.safeParse("1899-12-31"))).toBe("Enter a date of birth from 1900 onwards")
+  expect(issue(schema.safeParse("1990-13-01"))).toBe("Enter a valid date of birth")
+})
+
+// Owner decision on PR #36: D4 (card fields) and D6 (transport to the city).
+it("DATA-01 nationality and issue date are optional, trimmed, date-only and independent of issuing country and expiry", () => {
+  const parsed = travelDocumentSchema.parse({ doc_type: "passport", number: "YA1", nationality: "  Italian ", issued_on: "2024-02-29", issuing_country: "France", expires_on: "2034-02-28" })
+  expect(parsed).toEqual({ doc_type: "passport", number: "YA1", nationality: "Italian", issued_on: "2024-02-29", issuing_country: "France", expires_on: "2034-02-28", holder_name: null })
+  expect(travelDocumentSchema.parse({ doc_type: "id_card", number: "1" })).toMatchObject({ nationality: null, issued_on: null })
+  expect(travelDocumentSchema.parse({ doc_type: "id_card", number: "1", nationality: "", issued_on: "" })).toMatchObject({ nationality: null, issued_on: null })
+  for (const issued_on of ["2023-02-29", "29/02/2024", "2024-02-29T10:00:00Z", "tomorrow"]) {
+    expect(firstIssue(travelDocumentSchema.safeParse({ doc_type: "passport", number: "1", issued_on }).error!)).toBe("Enter a valid issue date")
+  }
+  expect(firstIssue(travelDocumentSchema.safeParse({ doc_type: "passport", number: "1", nationality: "x".repeat(101) }).error!)).toBe("Nationality must be at most 100 characters")
+  // An issue date after the expiry date is the document's business, not a validation rule here.
+  expect(travelDocumentSchema.safeParse({ doc_type: "passport", number: "1", issued_on: "2030-01-01", expires_on: "2029-01-01" }).success).toBe(true)
+})
+
+it("CORE-06 the card schema is strict: a reason, a scan path or a lifecycle field is not an accepted input", () => {
+  for (const extra of [{ reason: "hotel" }, { state: "active" }, { current_file_id: "x" }, { object_key: "k" }, { restore_until: "2099-01-01" }, { workspace_id: "w" }]) {
+    expect(travelDocumentSchema.safeParse({ doc_type: "passport", number: "1", ...extra }).success).toBe(false)
+  }
+})
+
+it("BOOK-02 transport to the city: three values or empty", () => {
+  expect(TRANSPORT_TO_CITY_VALUES).toEqual(["promoter", "artist", "not_needed"])
+  for (const value of TRANSPORT_TO_CITY_VALUES) expect(transportToCitySchema.parse(value)).toBe(value)
+  expect(transportToCitySchema.parse("")).toBeNull()
+  expect(transportToCitySchema.parse(null)).toBeNull()
+  for (const value of ["flight", "Promoter", "landed", "all_in", 1, undefined, {}]) expect(transportToCitySchema.safeParse(value).success).toBe(false)
+  expect(Object.keys(TRANSPORT_TO_CITY_LABELS)).toEqual([...TRANSPORT_TO_CITY_VALUES])
+})

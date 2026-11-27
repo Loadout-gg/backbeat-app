@@ -489,7 +489,8 @@ const readers = [
     run: () => listArtists(),
     order: "name.asc,id.asc",
     status: null,
-    columns: "*",
+    // Explicit projection: never "*", never date_of_birth (migration 009, sensitive).
+    columns: "id,workspace_id,name,email,phone,notes,stage_name,surname,location,travel_fee,pricing_notes,overview,dj_equipment,sound_system,allergies,special_diet,special_needs,genres,fee,currency,social_links,documents,profile_image_url,default_commission_type,default_commission_value,default_commission_mode,default_commission_currency,created_at,updated_at",
   },
 ]
 

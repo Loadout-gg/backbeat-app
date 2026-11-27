@@ -7,10 +7,24 @@ import { holdRank } from "@/lib/booking-display";
 import type { BookingPayment } from "@/lib/booking-finance";
 import { configuredCalendarDay } from "@/lib/calendar-day";
 import { createClient } from "@/lib/supabase/server";
+import { getBookingTravel } from "@/lib/actions/booking-travel";
+import { getArtistTravelProfile } from "@/lib/actions/artist-travel-documents";
+import { BookingTravelPanel } from "@/components/dashboard/booking-travel/booking-travel-panel";
+import { BookingStaysPanel } from "@/components/dashboard/booking-travel/booking-stays-panel";
 import { EventBookingClient } from "./event-booking-client";
 
 interface EventBookingPageProps {
   params: Promise<{ id: string }>;
+}
+
+/** A failed optional read becomes null, rendered as an explicit unavailable state. */
+async function readOrNull<T>(read: () => Promise<T>): Promise<T | null> {
+  try {
+    return await read();
+  } catch (error) {
+    unstable_rethrow(error);
+    return null;
+  }
 }
 
 export default async function EventBookingPage({ params }: EventBookingPageProps) {
@@ -77,6 +91,13 @@ export default async function EventBookingPage({ params }: EventBookingPageProps
     unstable_rethrow(error);
   }
 
+  // Sensitive travel reads: a failed read renders "could not be loaded", never an empty list.
+  const [travel, travelProfile] = await Promise.all([
+    readOrNull(() => getBookingTravel(booking.id)),
+    readOrNull(() => getArtistTravelProfile(booking.artist_id)),
+  ]);
+  const artistName = booking.artist.stage_name || booking.artist.name || "Unknown";
+
   return (
     <EventBookingClient
       booking={booking}
@@ -87,6 +108,19 @@ export default async function EventBookingPage({ params }: EventBookingPageProps
       payments={payments}
       promoters={promoters}
       linkedEvent={linkedEvent}
+      travelPanel={
+        <BookingTravelPanel
+          bookingId={booking.id}
+          bookingDate={booking.date}
+          artistId={booking.artist_id}
+          artistName={artistName}
+          legs={travel?.legs ?? null}
+          travelProfile={travelProfile}
+          transportToCity={travel ? travel.transportToCity : undefined}
+          today={configuredCalendarDay()}
+        />
+      }
+      accommodationPanel={<BookingStaysPanel bookingId={booking.id} stays={travel?.stays ?? null} />}
     />
   );
 }

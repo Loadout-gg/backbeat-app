@@ -1,0 +1,428 @@
+"use client"
+
+import { useId, useState, type FormEvent } from "react"
+import { useRouter } from "next/navigation"
+import { Plus } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import {
+  createArtistTravelDocument, deleteArtistTravelDocument, endArtistRelationship, restoreArtistTravelDocument,
+  resumeArtistRelationship, updateArtistDateOfBirth, updateArtistTravelDocument,
+  type ArchivedTravelDocument, type ArtistTravelDocument, type ArtistTravelProfile, type TravelDocumentActivity,
+} from "@/lib/actions/artist-travel-documents"
+import {
+  TRAVEL_DOCUMENT_TYPES, TRAVEL_DOCUMENT_TYPE_LABELS, dateOfBirthSchema, firstIssue, travelDocumentSchema,
+  type TravelDocumentType,
+} from "@/lib/booking-travel-validation"
+import { SCAN_MEDIA_TYPE_LABELS } from "@/lib/travel-document-scan"
+import {
+  DeleteControl, FormActions, FormFields, TextField, UnavailableNotice, selectClass, useGuardedAction,
+} from "@/components/dashboard/booking-travel/form-kit"
+import { ScanDownloadButton, ScanUploadButton } from "@/components/dashboard/travel-document-scan-controls"
+
+interface ArtistTravelDocumentsSectionProps {
+  artistId: string
+  /** null: the scoped read failed; the section says so instead of showing an empty list. */
+  profile: ArtistTravelProfile | null
+  /** Configured calendar day, for the "not in the future" date-of-birth rule and the expired state. */
+  today: string
+}
+
+/** UTC calendar day of a timestamp, for the fixed-format dates of the recovery window. */
+const day = (timestamp: string) => timestamp.slice(0, 10)
+
+function formatBytes(bytes: number | null): string | null {
+  if (bytes === null) return null
+  return bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`
+}
+
+/** Dedicated artist-profile section for identity documents and date of birth. */
+export function ArtistTravelDocumentsSection({ artistId, profile, today }: ArtistTravelDocumentsSectionProps) {
+  const [adding, setAdding] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const ended = Boolean(profile?.relationshipEndedAt)
+
+  return (
+    <Card>
+      <CardContent className="space-y-6 p-4 sm:p-6">
+        <section aria-labelledby="travel-documents-heading" className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h3 id="travel-documents-heading" className="text-xl font-semibold">Travel documents</h3>
+            {profile !== null && !adding && !ended && (
+              <Button type="button" variant="outline" onClick={() => setAdding(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add travel document
+              </Button>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Sensitive personal data, used to book travel. Every active member of this workspace can see, edit,
+            download and delete these documents; each of those actions is recorded automatically. Shown read-only
+            in the Travel tab of this artist&apos;s bookings. Never sent with a booking, email or PDF: download the
+            scan and attach it yourself when someone asks for it. Not included in lists or exports.
+          </p>
+          {profile === null ? (
+            <UnavailableNotice>Travel documents could not be loaded. Reload the page to try again.</UnavailableNotice>
+          ) : (
+            <>
+              {!profile.scansEnabled && (
+                <p className="rounded-lg border border-border p-3 text-sm text-muted-foreground">
+                  Scan upload and download are not enabled yet. Document details can be recorded now.
+                </p>
+              )}
+              <DateOfBirthForm artistId={artistId} saved={profile.dateOfBirth} today={today} />
+              {adding && !ended && <DocumentForm artistId={artistId} onDone={() => setAdding(false)} />}
+              {profile.documents.length === 0 && !adding && (
+                <p className="text-sm text-muted-foreground">No travel documents yet.</p>
+              )}
+              <ul className="space-y-3">
+                {profile.documents.map(document => (
+                  <li key={document.id}>
+                    {editingId === document.id ? (
+                      <DocumentForm artistId={artistId} document={document}
+                        onDone={() => setEditingId(current => current === document.id ? null : current)} />
+                    ) : (
+                      <DocumentCard artistId={artistId} document={document} today={today}
+                        scansEnabled={profile.scansEnabled} onEdit={() => setEditingId(document.id)} />
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <ArchivedDocuments artistId={artistId} archived={profile.archived} today={today} ended={ended} />
+              <RelationshipControl artistId={artistId} endedAt={profile.relationshipEndedAt}
+                activeCount={profile.documents.length} />
+              <ActivityList activity={profile.activity} />
+            </>
+          )}
+        </section>
+      </CardContent>
+    </Card>
+  )
+}
+
+function DateOfBirthForm({ artistId, saved, today }: { artistId: string; saved: string | null; today: string }) {
+  const router = useRouter()
+  const id = useId()
+  const [value, setValue] = useState(saved ?? "")
+  const [notice, setNotice] = useState("")
+  const save = useGuardedAction()
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setNotice("")
+    const parsed = dateOfBirthSchema(today).safeParse(value)
+    if (!parsed.success) {
+      save.setError(firstIssue(parsed.error))
+      return
+    }
+    const ok = await save.run(() => updateArtistDateOfBirth(artistId, value || null), "Unable to save the date of birth. Please try again.")
+    if (ok) {
+      setNotice("Date of birth saved.")
+      router.refresh()
+    }
+  }
+
+  return (
+    <form onSubmit={submit} noValidate aria-label="Artist date of birth" className="flex min-w-0 flex-wrap items-end gap-3">
+      <TextField id={`${id}-dob`} label="Date of birth" type="date" value={value}
+        onChange={next => { setValue(next); setNotice("") }} className="w-full max-w-xs" />
+      <Button type="submit" size="sm" variant="outline" aria-disabled={save.pending} className="aria-disabled:cursor-wait aria-disabled:opacity-50">
+        {save.pending ? "Saving..." : "Save date of birth"}
+      </Button>
+      <p role="status" aria-live="polite" className="text-sm text-foreground">{notice}</p>
+      {save.error && <p role="alert" className="w-full text-sm text-destructive">{save.error}</p>}
+    </form>
+  )
+}
+
+function DocumentCard({ artistId, document, today, scansEnabled, onEdit }: {
+  artistId: string
+  document: ArtistTravelDocument
+  today: string
+  scansEnabled: boolean
+  onEdit: () => void
+}) {
+  const router = useRouter()
+  const remove = useGuardedAction()
+  const label = TRAVEL_DOCUMENT_TYPE_LABELS[document.doc_type]
+  const expired = document.expires_on !== null && document.expires_on < today
+  const details: [string, string | null][] = [
+    ["Number", document.number],
+    ["Name on document", document.holder_name],
+    ["Nationality", document.nationality],
+    ["Issuing country", document.issuing_country],
+    ["Issued", document.issued_on],
+    ["Expires", document.expires_on],
+  ]
+  return (
+    <article aria-label={`Travel document: ${label}`} className="min-w-0 space-y-3 rounded-lg border p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <h4 className="font-medium">{label}</h4>
+          {expired && <Badge variant="destructive">Expired</Badge>}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={onEdit} aria-label={`Edit travel document: ${label}`}>Edit</Button>
+          <DeleteControl label={`Delete travel document: ${label}`} onConfirm={async () => {
+            const ok = await remove.run(() => deleteArtistTravelDocument(artistId, document.id), "Unable to delete the travel document. Please try again.")
+            if (ok) router.refresh()
+            return ok
+          }} />
+        </div>
+      </div>
+      <dl className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+        {details.filter(([, value]) => value).map(([name, value]) => (
+          <div key={name} className="min-w-0 break-words">
+            <dt className="text-xs text-muted-foreground">{name}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
+      <ScanRow artistId={artistId} document={document} scansEnabled={scansEnabled} />
+      {remove.error && <p role="alert" className="text-sm text-destructive">{remove.error}</p>}
+    </article>
+  )
+}
+
+function ScanRow({ artistId, document, scansEnabled }: {
+  artistId: string
+  document: ArtistTravelDocument
+  scansEnabled: boolean
+}) {
+  const label = TRAVEL_DOCUMENT_TYPE_LABELS[document.doc_type]
+  const scan = document.scan
+  const description = !scan ? "No scan uploaded."
+    : scan.state === "missing" ? "The scan file is missing. Upload it again."
+    : [scan.mediaType ? SCAN_MEDIA_TYPE_LABELS[scan.mediaType] : null, formatBytes(scan.byteSize)].filter(Boolean).join(", ")
+      + (scan.state === "restore_pending" ? " (checked on first download after a restore)" : "")
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-2 border-t border-border pt-3 text-sm">
+      <span className="text-xs text-muted-foreground">Scan</span>
+      <span className={scan?.state === "missing" ? "text-destructive" : "text-foreground"}>{description}</span>
+      {scansEnabled && scan && scan.state !== "missing" && (
+        <ScanDownloadButton fileId={scan.fileId} label={`Download scan: ${label}`} />
+      )}
+      {scansEnabled && (
+        <ScanUploadButton artistId={artistId} documentId={document.id} replace={scan !== null}
+          label={`${scan ? "Replace" : "Upload"} scan: ${label}`} />
+      )}
+    </div>
+  )
+}
+
+function ArchivedDocuments({ artistId, archived, today, ended }: {
+  artistId: string
+  archived: ArchivedTravelDocument[]
+  today: string
+  ended: boolean
+}) {
+  if (archived.length === 0) return null
+  return (
+    <section aria-labelledby="deleted-travel-documents-heading" className="space-y-3">
+      <h4 id="deleted-travel-documents-heading" className="text-sm font-medium">Deleted travel documents</h4>
+      <p className="text-sm text-muted-foreground">
+        Kept for 12 months after deletion so a mistake can be undone, then removed for good. Not used for
+        bookings and not downloadable while deleted.
+      </p>
+      <ul className="space-y-2">
+        {archived.map(document => (
+          <li key={document.id}>
+            <ArchivedDocumentRow artistId={artistId} document={document} today={today} ended={ended} />
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+function ArchivedDocumentRow({ artistId, document, today, ended }: {
+  artistId: string
+  document: ArchivedTravelDocument
+  today: string
+  ended: boolean
+}) {
+  const router = useRouter()
+  const restore = useGuardedAction()
+  const label = TRAVEL_DOCUMENT_TYPE_LABELS[document.doc_type]
+  const expired = document.expires_on !== null && document.expires_on < today
+  return (
+    <article aria-label={`Deleted travel document: ${label}`}
+      className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-dashed p-3 text-sm">
+      <span className="font-medium">{label}</span>
+      {document.holder_name && <span className="break-words">{document.holder_name}</span>}
+      {expired && <Badge variant="destructive">Expired</Badge>}
+      {document.hasScan && <span className="text-muted-foreground">With scan</span>}
+      <span className="text-muted-foreground">
+        {document.cause === "relationship_ended" ? "Relationship ended" : "Deleted"} {day(document.archived_at)}.{" "}
+        {document.restorable ? `Can be restored until ${day(document.restore_until)}.` : "Can no longer be restored."}
+      </span>
+      {document.restorable && !ended && (
+        <Button type="button" size="sm" variant="outline" aria-label={`Restore travel document: ${label}`}
+          aria-disabled={restore.pending} className="aria-disabled:cursor-wait aria-disabled:opacity-50"
+          onClick={async () => {
+            const ok = await restore.run(() => restoreArtistTravelDocument(artistId, document.id), "Unable to restore the travel document. Please try again.")
+            if (ok) router.refresh()
+          }}>
+          {restore.pending ? "Restoring..." : "Restore"}
+        </Button>
+      )}
+      {restore.error && <p role="alert" className="w-full text-sm text-destructive">{restore.error}</p>}
+    </article>
+  )
+}
+
+function RelationshipControl({ artistId, endedAt, activeCount }: {
+  artistId: string
+  endedAt: string | null
+  activeCount: number
+}) {
+  const router = useRouter()
+  const action = useGuardedAction()
+  return (
+    <section aria-labelledby="artist-relationship-heading" className="space-y-2 border-t border-border pt-4">
+      <h4 id="artist-relationship-heading" className="text-sm font-medium">Relationship with this artist</h4>
+      {endedAt ? (
+        <>
+          <p className="text-sm text-muted-foreground">
+            Ended on {day(endedAt)}. Travel documents were deleted and stay restorable for 12 months from then.
+            Resume the relationship to add documents or restore deleted ones; nothing is restored automatically.
+          </p>
+          <Button type="button" size="sm" variant="outline" aria-disabled={action.pending}
+            className="aria-disabled:cursor-wait aria-disabled:opacity-50"
+            onClick={async () => {
+              const ok = await action.run(() => resumeArtistRelationship(artistId), "Unable to update the relationship. Please try again.")
+              if (ok) router.refresh()
+            }}>
+            {action.pending ? "Resuming..." : "Resume relationship"}
+          </Button>
+        </>
+      ) : (
+        <>
+          <p className="text-sm text-muted-foreground">
+            When the agency stops working with this artist, end the relationship: {activeCount === 0 ? "no travel document is active now, and none can be added until you resume." : "all travel documents are deleted together and stay restorable for 12 months."} The artist, bookings and payments are not changed.
+          </p>
+          <DeleteControl label="End relationship with this artist" trigger="End relationship"
+            question="End the relationship and delete this artist's travel documents?" confirm="Yes, end relationship" working="Ending..."
+            onConfirm={async () => {
+              const ok = await action.run(() => endArtistRelationship(artistId), "Unable to update the relationship. Please try again.")
+              if (ok) router.refresh()
+              return ok
+            }} />
+        </>
+      )}
+      {action.error && <p role="alert" className="text-sm text-destructive">{action.error}</p>}
+    </section>
+  )
+}
+
+const ACTIVITY_LABELS: Record<string, string> = {
+  card_created: "Document added",
+  card_updated: "Document details edited",
+  archived: "Document deleted (restorable)",
+  restored: "Document restored",
+  relationship_ended: "Relationship ended",
+  relationship_resumed: "Relationship resumed",
+  scan_upload_reserved: "Scan upload started",
+  scan_uploaded: "Scan uploaded",
+  scan_replaced: "Scan replaced",
+  scan_rejected: "Scan upload not accepted",
+  scan_restore_verified: "Scan checked after restore",
+  scan_restore_missing: "Scan file missing after restore",
+  download_authorized: "Scan download requested",
+  download_issued: "Scan download link issued",
+  download_not_issued: "Scan download link not issued",
+  purge_claimed: "Permanent removal started",
+  file_purged: "Scan removed for good",
+  document_purged: "Document removed for good",
+  quarantine_cleaned: "Unaccepted upload removed",
+}
+const ACTOR_LABELS: Record<TravelDocumentActivity["actor"], string> = { you: "You", member: "Team member", system: "System" }
+
+function ActivityList({ activity }: { activity: TravelDocumentActivity[] }) {
+  if (activity.length === 0) return null
+  return (
+    <details className="border-t border-border pt-4 text-sm">
+      <summary className="cursor-pointer font-medium">Activity ({activity.length} latest)</summary>
+      <p className="mt-2 text-muted-foreground">
+        Recorded automatically, times in UTC. A download entry means the app issued a link, not that the file
+        was saved or forwarded.
+      </p>
+      <ul className="mt-2 space-y-1">
+        {activity.map(entry => (
+          <li key={entry.id} className="flex min-w-0 flex-wrap gap-x-2 break-words">
+            <span className="text-muted-foreground">{entry.occurredAt.slice(0, 16).replace("T", " ")}</span>
+            <span>{ACTIVITY_LABELS[entry.action] ?? "Recorded action"}</span>
+            <span className="text-muted-foreground">{ACTOR_LABELS[entry.actor]}{entry.withBooking ? ", from a booking" : ""}</span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  )
+}
+
+type DocumentDraft = {
+  doc_type: TravelDocumentType
+  number: string
+  issuing_country: string
+  nationality: string
+  issued_on: string
+  expires_on: string
+  holder_name: string
+}
+
+function DocumentForm({ artistId, document, onDone }: { artistId: string; document?: ArtistTravelDocument; onDone: () => void }) {
+  const router = useRouter()
+  const id = useId()
+  const [draft, setDraft] = useState<DocumentDraft>(() => ({
+    doc_type: document?.doc_type ?? "passport",
+    number: document?.number ?? "",
+    issuing_country: document?.issuing_country ?? "",
+    nationality: document?.nationality ?? "",
+    issued_on: document?.issued_on ?? "",
+    expires_on: document?.expires_on ?? "",
+    holder_name: document?.holder_name ?? "",
+  }))
+  const save = useGuardedAction()
+  const set = (field: keyof DocumentDraft) => (value: string) => setDraft(current => ({ ...current, [field]: value }))
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    const parsed = travelDocumentSchema.safeParse(draft)
+    if (!parsed.success) {
+      save.setError(firstIssue(parsed.error))
+      return
+    }
+    const ok = await save.run(
+      () => document ? updateArtistTravelDocument(artistId, document.id, draft) : createArtistTravelDocument(artistId, draft),
+      "Unable to save the travel document. Please try again.",
+    )
+    if (ok) {
+      onDone()
+      router.refresh()
+    }
+  }
+
+  return (
+    <form onSubmit={submit} noValidate aria-label={document ? "Edit travel document" : "New travel document"}
+      className="min-w-0 space-y-4 rounded-lg border bg-muted/30 p-4">
+      <FormFields pending={save.pending}>
+      <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="min-w-0">
+          <label htmlFor={`${id}-type`} className="mb-1.5 block text-xs font-medium text-foreground">Document type</label>
+          <select id={`${id}-type`} value={draft.doc_type} className={selectClass} onChange={event => set("doc_type")(event.target.value)}>
+            {TRAVEL_DOCUMENT_TYPES.map(type => <option key={type} value={type}>{TRAVEL_DOCUMENT_TYPE_LABELS[type]}</option>)}
+          </select>
+        </div>
+        <TextField id={`${id}-number`} label="Document number" value={draft.number} onChange={set("number")} maxLength={64} />
+        <TextField id={`${id}-holder`} label="Name on document" value={draft.holder_name} onChange={set("holder_name")} maxLength={200} />
+        <TextField id={`${id}-nationality`} label="Nationality" value={draft.nationality} onChange={set("nationality")} maxLength={100} />
+        <TextField id={`${id}-country`} label="Issuing country" value={draft.issuing_country} onChange={set("issuing_country")} maxLength={100} />
+        <TextField id={`${id}-issued`} label="Issue date" type="date" value={draft.issued_on} onChange={set("issued_on")} />
+        <TextField id={`${id}-expires`} label="Expiry date" type="date" value={draft.expires_on} onChange={set("expires_on")} />
+      </div>
+      </FormFields>
+      <FormActions pending={save.pending} error={save.error} saveLabel={document ? "Save travel document" : "Add travel document"} onCancel={onDone} />
+    </form>
+  )
+}

@@ -16,6 +16,8 @@ vi.mock("@/lib/actions/bookings", () => ({
 vi.mock("@/lib/actions/booking-events", () => ({ getBookingEventLink: vi.fn(async () => null), createEventFromBooking: vi.fn() }))
 vi.mock("@/lib/actions/events", () => ({ listPromoters: vi.fn(async () => []) }))
 vi.mock("@/lib/actions/booking-payments", () => ({ getBookingPayments: vi.fn(async () => []) }))
+vi.mock("@/lib/actions/booking-travel", () => ({ getBookingTravel: vi.fn(async () => ({ legs: [], stays: [] })) }))
+vi.mock("@/lib/actions/artist-travel-documents", () => ({ getArtistTravelProfile: vi.fn(async () => null) }))
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: {
   getUser: async () => ({ data: { user: { id: "server-member" } }, error: null }),
 } }) }))
@@ -156,7 +158,9 @@ it("shows only the server-projected priority for the saved hold while the notice
   mocks.getBooking.mockResolvedValueOnce(mine)
   mocks.getBookings.mockResolvedValueOnce([mine, other])
   const page = await EventBookingPage(params)
-  const { draftOwnerId, ...previousProps } = page.props
+  const { draftOwnerId, travelPanel, accommodationPanel, ...previousProps } = page.props
+  expect(travelPanel).toBeTruthy()
+  expect(accommodationPanel).toBeTruthy()
   expect(draftOwnerId).toBe("server-member")
   expect(previousProps).toStrictEqual({
     booking: mine, sameDayBookingCounts: { [mine.date]: 1 }, holdPosition: { rank: 2, total: 2 }, today: TODAY, payments: [],

@@ -20,6 +20,8 @@ vi.mock("@/lib/actions/artists", () => ({ getArtist: mocks.getArtist, getArtists
 vi.mock("@/lib/actions/events", () => ({ listEvents: mocks.listEvents, listPromoters: vi.fn(async () => []) }))
 vi.mock("@/lib/actions/booking-events", () => ({ getBookingEventLink: vi.fn(async () => null), createEventFromBooking: vi.fn() }))
 vi.mock("@/lib/actions/booking-payments", () => ({ getBookingPayments: mocks.getBookingPayments }))
+vi.mock("@/lib/actions/booking-travel", () => ({ getBookingTravel: vi.fn(async () => ({ legs: [], stays: [] })) }))
+vi.mock("@/lib/actions/artist-travel-documents", () => ({ getArtistTravelProfile: vi.fn(async () => null) }))
 vi.mock("next/navigation", async (importOriginal) => ({
   ...await importOriginal<typeof import("next/navigation")>(),
   useRouter: () => ({ push: mocks.push, refresh: mocks.refresh, back: vi.fn() }),
@@ -170,7 +172,9 @@ it("passes only the selected booking, its payments and exact date counts, rank a
   expect(mocks.getBooking).toHaveBeenCalledWith(editorBooking.id)
   expect(mocks.getBookings).toHaveBeenCalledExactlyOnceWith({ artistId, failOnError: true })
   expect(mocks.getBookingPayments).toHaveBeenCalledExactlyOnceWith(editorBooking.id)
-  const { booking, draftOwnerId, ...notice } = page.props
+  const { booking, draftOwnerId, travelPanel, accommodationPanel, ...notice } = page.props
+  expect(travelPanel).toBeTruthy()
+  expect(accommodationPanel).toBeTruthy()
   expect(booking).toBe(editorBooking)
   expect(draftOwnerId).toBe("server-member")
   expect(mocks.getUser).toHaveBeenCalledExactlyOnceWith()
@@ -218,7 +222,9 @@ it("says the same-day check could not run when the artist read failed, without b
   mocks.getBooking.mockResolvedValueOnce(editorBooking)
   mocks.getBookings.mockRejectedValueOnce(new Error("private detail"))
   const page = await EventBookingPage(editorParams)
-  const { draftOwnerId, ...previousProps } = page.props
+  const { draftOwnerId, travelPanel, accommodationPanel, ...previousProps } = page.props
+  expect(travelPanel).toBeTruthy()
+  expect(accommodationPanel).toBeTruthy()
   expect(draftOwnerId).toBe("server-member")
   expect(previousProps).toStrictEqual({ booking: editorBooking, sameDayBookingCounts: null, holdPosition: null, today: "2026-11-14", payments: [], promoters: [], linkedEvent: null })
   render(page)
@@ -247,7 +253,9 @@ it("keeps date counts after a payment read failure and passes unavailable, not e
   mocks.getBookings.mockResolvedValueOnce(artistBookings)
   mocks.getBookingPayments.mockRejectedValueOnce(new Error("private payment read detail"))
   const page = await EventBookingPage(editorParams)
-  const { draftOwnerId, ...previousProps } = page.props
+  const { draftOwnerId, travelPanel, accommodationPanel, ...previousProps } = page.props
+  expect(travelPanel).toBeTruthy()
+  expect(accommodationPanel).toBeTruthy()
   expect(draftOwnerId).toBe("server-member")
   expect(previousProps).toStrictEqual({
     booking: editorBooking, sameDayBookingCounts: { "2026-11-20": 1, "2026-11-21": 2 },
