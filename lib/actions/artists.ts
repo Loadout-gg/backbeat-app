@@ -64,7 +64,7 @@ export type Artist = {
 
 // Explicit profile/list projection. artists.date_of_birth (migration 009) is sensitive and is
 // read only by lib/actions/artist-travel-documents.ts: never add it here, never select "*".
-const ARTIST_COLUMNS = "id,workspace_id,name,email,phone,notes,stage_name,surname,location,travel_fee,pricing_notes,overview,dj_equipment,sound_system,allergies,special_diet,special_needs,genres,fee,currency,social_links,documents,profile_image_url,created_at,updated_at"
+const ARTIST_COLUMNS = "id,workspace_id,name,email,phone,notes,stage_name,surname,location,travel_fee,pricing_notes,overview,dj_equipment,sound_system,allergies,special_diet,special_needs,genres,fee,currency,social_links,documents,profile_image_url,default_commission_type,default_commission_value,default_commission_mode,default_commission_currency,created_at,updated_at"
 
 export async function listArtists(): Promise<Artist[]> {
   const supabase = await createClient()

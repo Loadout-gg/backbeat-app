@@ -14,7 +14,7 @@ const columns = {
   onboarding_status: 'user_id,completed,workspace_id',
   workspaces: 'id,name,created_by,created_at',
   workspace_members: 'workspace_id,user_id,role,status',
-  artists: 'id,workspace_id,name,email,phone,notes,stage_name,surname,location,travel_fee,pricing_notes,overview,dj_equipment,sound_system,allergies,special_diet,special_needs,genres,fee,currency,social_links,documents,profile_image_url,created_at,updated_at',
+  artists: 'id,workspace_id,name,email,phone,notes,stage_name,surname,location,travel_fee,pricing_notes,overview,dj_equipment,sound_system,allergies,special_diet,special_needs,genres,fee,currency,social_links,documents,profile_image_url,default_commission_type,default_commission_value,default_commission_mode,default_commission_currency,created_at,updated_at',
   promoters: 'id,workspace_id,name,company_name,email,phone,notes,created_at',
   events: 'id,workspace_id,title,date,location,status,artist_id,promoter_id,public_token,created_at',
   bookings: 'id,workspace_id,artist_id,date,start_time,duration_minutes,notes,status,created_at,updated_at,venue_name,venue_address,contact_name_main,contact_phone_main,contact_email_main,fee_amount_minor,fee_currency',

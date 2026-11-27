@@ -108,4 +108,17 @@ it("STATIC: no artist read selects every column", () => {
     expect(source, path).not.toMatch(/from\("artists"\)\s*\.select\("\*"/)
   }
   expect(read("lib/actions/artists.ts")).not.toMatch(/ARTIST_COLUMNS = "[^"]*date_of_birth/)
+  // The explicit list must keep every non-sensitive column the profile renders: the artist
+  // default commission of migration 007 (#33) is shown and edited on the artist profile.
+  const columns = read("lib/actions/artists.ts").match(/ARTIST_COLUMNS = "([^"]*)"/)![1].split(",")
+  for (const column of ["default_commission_type", "default_commission_value", "default_commission_mode", "default_commission_currency"]) {
+    expect(columns, column).toContain(column)
+  }
+  // And every column of the artists table except the sensitive one (001 + later ADD COLUMNs).
+  const created = read("migrations/001_development_schema.sql").match(/CREATE TABLE public\.artists \(([\s\S]*?)\n\);/)![1]
+  const base = [...created.matchAll(/^  ([a-z_]+) (?:uuid|text|date|numeric|integer|bigint|boolean|jsonb|timestamptz|text\[\])/gm)].map(match => match[1])
+  const added = readdirSync("migrations").flatMap(name => [...read(join("migrations", name))
+    .matchAll(/ALTER TABLE public\.artists\s+ADD COLUMN(?: IF NOT EXISTS)? ([a-z_]+)/g)].map(match => match[1]))
+  expect(base.length).toBeGreaterThan(20)
+  for (const column of [...base, ...added].filter(name => name !== "date_of_birth")) expect(columns, column).toContain(column)
 })
