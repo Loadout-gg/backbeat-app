@@ -1,8 +1,8 @@
 # Backbeat Git and staging workflow
 
-These instructions apply to Claude and to every other agent working with Simone. Simone describes the product outcome; the agent controls branch, permissions, tests and destination. Do not hand Simone unexplained technical decisions.
+These instructions apply to Claude and to every other agent working with Simone. Simone describes the product outcome; the agent verifies the branch, permissions, tests and destination within the authorized scope. Only Alberto authorizes changes to workflow, policy or roles.
 
-Language: agents reply to Simone in English only (terse technical English), including summaries, handoffs, questions and merge confirmations. Decided by Simone on 2026-11-23; recorded in the [decision register](decision-register.md). The architecture stop line in `AGENTS.md` is a fixed string and stays verbatim.
+Language: terse technical English is the handoff convention with Simone, not an owner-approved English-only policy (see `AGENT-LANGUAGE-EN` in the [decision register](decision-register.md#governance-correction-and-supersession)). The architecture stop line in `AGENTS.md` is a fixed string and stays verbatim.
 
 ## Approved flow
 
@@ -67,14 +67,14 @@ A check that was not run is reported as `NOT_RUN`, with the reason. Do not disab
 
 ## Commit, push and PR
 
-- Authorization to develop is not automatically authorization to publish. If Simone explicitly asked to prepare/publish a PR, that request covers pushing the working branch only and the PR to `staging`; otherwise ask before publishing.
+- Authorization to develop is not automatically authorization to publish. For work within her scope, Simone may explicitly authorize pushing the working branch and opening its PR to `staging` only. For reserved work, obtain Alberto's explicit authorization for the action; otherwise ask before publishing.
 - Check `git diff` and add only the files of the change. Do not use `git add .` blindly.
 - Do not commit `.env*` with secrets, tokens, passwords, admin keys, dumps, real data, `.vercel/` or credentials of other environments. Keep any secret-free example templates the repository already provides.
 - Push explicitly to your own branch and create the PR with explicit base `staging`; never rely on the `main` default.
 - To create a PR use `gh pr create --repo Loadout-gg/backbeat-app --base staging --head <working-branch> --title <title> --body-file <description-file>`; then re-read URL, head and base with `gh pr view`.
 - Describe the visible result, changed files, real tests, limits and acceptance steps for a non-technical person.
 - Wait for the GitHub `Quality` check on the current commit. A green check on an earlier commit does not count.
-- Do not merge on your own, do not enable auto-merge and do not approve your own work. **Simone can authorize merging a PR into `staging`**, without waiting for Alberto, after the agent has shown the PR link, the expected result and `Quality` green on the current commit. The agent must first state: "This merge updates staging only, not production. Confirm merging the PR above?". A "yes" in reply applies to that PR, not to other tasks. After consent, re-check head/base/checks and merge pinned to the verified head; do not use `--admin` or bypasses. Authorization to create a PR does not include the merge.
+- Do not merge on your own, do not enable auto-merge and do not approve your own work. **Simone may explicitly authorize a merge to `staging` only within her scope below.** Alberto authorizes reserved changes, including this governance sync. Show the PR link, expected result, current-head Codex review and `Quality` green. Ask the applicable decision owner: "This merge updates staging only, not production. Confirm merging the PR above?". A "yes" applies to that PR, not to other tasks. After consent, re-check head/base/checks and merge pinned to the verified head; do not use `--admin` or bypasses. Authorization to create a PR does not include the merge. A reported statement, green CI, review or merged PR does not establish owner approval.
 
 ## Staging and release
 
@@ -114,15 +114,17 @@ The `staging` -> `main` merge creates a commit on `main` that `staging` must acq
 
 The rule also applies after an authorized live hotfix. New independent tasks start from the realigned `staging`.
 
-## Staging delegation (2026-11-21)
+### One-time conflict resolution for the post-#24 sync
 
-Alberto (`DerekLoadout`) gave Simone full autonomy on `staging` (stated by Simone, 2026-11-21); staging uses a Supabase database separate from production.
+For this sync only, Alberto authorized an integration branch to resolve the conflicts and carry the governance correction, with `staging` (`9299c71ed2c63f0d623be6e7f68eafd8c2c0e996`) as first parent and `main` (`89639affbc6f39354b10eab6627c0f1eab27f97a`) as second parent. The branch is a technical exception to using `main` itself as the PR head, not a permanent alternative. No feature work belongs in it.
 
-- On `staging` Simone decides and the agent may implement, without the architecture stop line: schema, migrations (additive and destructive), RLS, auth, roles and contracts.
-- Preconditions are unchanged: PR to `staging`, `Quality` green on the current head, Codex review clean, migrations versioned in the repository and described in the PR body (what, why, rollback).
-- Migrations are applied to the staging Supabase project only, never to production. Production apply and promotion to `main` remain Alberto's alone; he reviews the full diff (migrations included) at release and can require changes before live.
-- The stop line and request package still apply to anything touching `main`, the production database, Vercel/GitHub settings, secrets or billing.
-- The exceptions below ("Do not modify Auth, … RLS, roles…" and "Database changes…") are read in light of this delegation for staging; branch protection and release rules do not change.
+The correction and candidate preparation are local only. If Alberto separately authorizes publication and integration, use a PR from that integration branch to `staging`, normal current-head review and `Quality`, a merge commit that preserves both parents' ancestry, and the usual post-merge ancestry/deployment checks. If either pinned branch moves, stop and ask Alberto before reusing the exception. No direct push, squash, rebase, protection change or bypass. Future syncs still use head `main`, base `staging`; conflicts go to Alberto.
+
+## Decision authority on staging
+
+Follow the [staging decision matrix](../../AGENTS.md#staging-decision-authority). Simone may merge ordinary product/UX after required checks without an owner batch. Alberto approves exact migration bytes and target; Simone may trigger only a verified path bound to both, never generic SQL. An additive SQL statement that changes behavior, access, isolation or existing data is not eligible.
+
+On staging, apply [r03 point 3](../../AGENTS.md#point-3-functional-visibility-and-security): Simone decides functional read/write needs inside approved scope. Alberto approves new or expanded sensitive access, destructive operations and other reserved security effects before activation; he controls enforcement, verifies and applies them. Classify by the effect of a merge or deploy, not the file type. Keep the architecture stop, normal PRs, current-head `Quality` and clean Codex review. Neither PR readiness nor an environment guard authorizes execution; production remains reserved to Alberto.
 
 ## Boundaries that are not bypassed
 

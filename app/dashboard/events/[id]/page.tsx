@@ -29,9 +29,17 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
     )
   }
 
+  // The saved link only, from the promoter directory; a booking's contact is never used here.
+  const linkedPromoter = event.promoter_id === null
+    ? null
+    : promoters.find(promoter => promoter.id === event.promoter_id) ?? "missing"
+
   return (
     <EventEditClient
       event={event}
+      linkedPromoter={linkedPromoter === null || linkedPromoter === "missing"
+        ? linkedPromoter
+        : { id: linkedPromoter.id, name: linkedPromoter.name, company_name: linkedPromoter.company_name }}
       artists={artists.map(artist => ({ id: artist.id, label: artist.stage_name }))}
       promoters={promoters.map(promoter => ({
         id: promoter.id,

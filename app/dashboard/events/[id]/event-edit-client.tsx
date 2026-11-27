@@ -9,7 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { updateEvent, type EventDetail, type EventUpdateInput } from "@/lib/actions/events"
+import { updateEvent, type EventDetail, type EventUpdateInput, type PromoterOption } from "@/lib/actions/events"
+import { BOOKING_FEE_CURRENCIES, formatBookingFeeInput, parseBookingFee } from "@/lib/booking-fee"
 import { DeleteEvent } from "./delete-event"
 
 type Option = { id: string; label: string }
@@ -20,7 +21,47 @@ const STATUSES = [
 ] as const
 const UNCONFIRMED = "Unable to confirm whether the event was saved. Check the event list before retrying."
 
-export function EventEditClient({ event, artists, promoters }: { event: EventDetail; artists: Option[]; promoters: Option[] }) {
+/** The event's saved promoter: a directory entry, none, or a link whose entry is no longer listed. */
+export type LinkedPromoter = PromoterOption | null | "missing"
+
+function EventPromoterCard({ promoter }: { promoter: LinkedPromoter }) {
+  return (
+    <Card className="max-w-2xl">
+      <CardHeader>
+        <h2 className="leading-none font-semibold">Promoter</h2>
+        <CardDescription>The promoter saved on this event, from your promoter directory.</CardDescription>
+      </CardHeader>
+      <CardContent className="[overflow-wrap:anywhere]">
+        {promoter === null ? (
+          <p className="text-sm text-muted-foreground">No promoter is linked to this event.</p>
+        ) : promoter === "missing" ? (
+          <p className="text-sm text-muted-foreground">The linked promoter is no longer in your promoter directory.</p>
+        ) : (
+          <dl className="space-y-3 text-sm">
+            <div>
+              <dt className="text-muted-foreground">Person</dt>
+              <dd className="font-medium">
+                <Link
+                  href={`/dashboard/promoters/${promoter.id}/edit`}
+                  aria-label={`Open ${promoter.name} in the promoter directory`}
+                  className="rounded-sm underline underline-offset-4 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  {promoter.name}
+                </Link>
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Company</dt>
+              <dd>{promoter.company_name ?? "No company recorded"}</dd>
+            </div>
+          </dl>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+export function EventEditClient({ event, linkedPromoter, artists, promoters }: { event: EventDetail; linkedPromoter: LinkedPromoter; artists: Option[]; promoters: Option[] }) {
   const router = useRouter()
   const [title, setTitle] = useState(event.title)
   const [date, setDate] = useState(event.date)
@@ -28,6 +69,12 @@ export function EventEditClient({ event, artists, promoters }: { event: EventDet
   const [status, setStatus] = useState(event.status)
   const [artistId, setArtistId] = useState(event.artist_id ?? "none")
   const [promoterId, setPromoterId] = useState(event.promoter_id ?? "none")
+  // Start time and fee (migration 008) are sent only when edited, so an untouched field is never rewritten.
+  const savedStartTime = event.start_time ? event.start_time.slice(0, 5) : ""
+  const [startTime, setStartTime] = useState(savedStartTime)
+  const [feeAmount, setFeeAmount] = useState(() => formatBookingFeeInput(event.fee_amount_minor ?? null, event.fee_currency ?? null))
+  const [feeCurrency, setFeeCurrency] = useState<string>(event.fee_currency ?? "")
+  const [feeDirty, setFeeDirty] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const knownStatus = STATUSES.some(item => item.value === status)
@@ -38,6 +85,9 @@ export function EventEditClient({ event, artists, promoters }: { event: EventDet
     if (!title.trim()) { setError("Event title is required"); return }
     if (!date) { setError("Enter a valid event date"); return }
     if (!knownStatus) { setError("Choose a valid status"); return }
+    if (startTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime)) { setError("Enter a valid start time"); return }
+    const fee = parseBookingFee(feeAmount, feeCurrency)
+    if (feeDirty && !fee.success) { setError(fee.error.replace("Booking fee", "Fee").replace("booking fee", "fee")); return }
     setError(null)
     setIsSaving(true)
     try {
@@ -46,6 +96,8 @@ export function EventEditClient({ event, artists, promoters }: { event: EventDet
         status: status as EventUpdateInput["status"],
         artist_id: artistId === "none" ? null : artistId,
         promoter_id: promoterId === "none" ? null : promoterId,
+        ...(startTime !== savedStartTime ? { start_time: startTime || null } : {}),
+        ...(feeDirty && fee.success ? fee.data : {}),
       })
       if (result.success) {
         router.push("/dashboard/events")
@@ -72,6 +124,16 @@ export function EventEditClient({ event, artists, promoters }: { event: EventDet
         </div>
       </div>
 
+      {event.booking_id && (
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          Created from a booking.{" "}
+          <Link href={`/dashboard/bookings/${event.booking_id}`} className="font-medium text-foreground underline underline-offset-4">
+            Open booking
+          </Link>
+        </p>
+      )}
+      <EventPromoterCard promoter={linkedPromoter} />
+
       <Card className="max-w-2xl">
         <CardHeader>
           <CardTitle>Event details</CardTitle>
@@ -89,6 +151,10 @@ export function EventEditClient({ event, artists, promoters }: { event: EventDet
             <div className="space-y-2">
               <Label htmlFor="event-date">Date *</Label>
               <Input id="event-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} required disabled={isSaving} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="event-start-time">Start time</Label>
+              <Input id="event-start-time" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} disabled={isSaving} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="event-location">Location</Label>
@@ -123,6 +189,34 @@ export function EventEditClient({ event, artists, promoters }: { event: EventDet
                   {promoters.map(promoter => <SelectItem key={promoter.id} value={promoter.id}>{promoter.label}</SelectItem>)}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="event-fee-amount">Fee amount</Label>
+                <Input
+                  id="event-fee-amount" type="text" inputMode="decimal" autoComplete="off" value={feeAmount}
+                  onChange={(e) => { setFeeAmount(e.target.value); setFeeDirty(true) }}
+                  disabled={isSaving} aria-describedby="event-fee-help"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="event-fee-currency">Fee currency</Label>
+                <select
+                  id="event-fee-currency" value={feeCurrency}
+                  onChange={(e) => { setFeeCurrency(e.target.value); setFeeDirty(true) }}
+                  disabled={isSaving} aria-describedby="event-fee-help"
+                  className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                >
+                  <option value="">Not specified</option>
+                  {BOOKING_FEE_CURRENCIES.map(currency => <option key={currency} value={currency}>{currency}</option>)}
+                </select>
+              </div>
+              <p id="event-fee-help" className="text-sm text-muted-foreground sm:col-span-2">
+                {event.booking_id
+                  ? "Copied from the booking when the event was created. Editing it here does not change the booking."
+                  : "Optional."}{" "}
+                Clear both fields to remove the fee. No grouping separators; JPY uses whole numbers.
+              </p>
             </div>
             <div className="flex flex-wrap gap-3 pt-4">
               <Button type="submit" disabled={isSaving}>{isSaving ? "Saving..." : "Save changes"}</Button>

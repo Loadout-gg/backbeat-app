@@ -1,21 +1,37 @@
 #!/bin/sh
-# Runs one SQL contract suite (default booking-lifecycle; also booking-travel) on a THROWAWAY
-# local PostgreSQL 17 cluster.
-# No Docker, no Supabase stack, no network: the cluster listens on a private unix socket
+# Runs SQL contract suites, each on its own THROWAWAY local PostgreSQL 17 cluster. Default:
+# booking-lifecycle, booking-finance and booking-payment-history; name suites to run only those
+# (booking-travel is opt-in).
+# No Docker, no Supabase stack, no network: each cluster listens on a private unix socket
 # only and is deleted on exit. The auth schema is a stub (see local-stub.sql), so a PASS
 # here is not proof of hosted Auth/PostgREST behaviour. Not part of CI.
-# Usage: PG_BIN=/path/to/postgresql-17/bin sh tests/sql/run-local.sh [booking-lifecycle|booking-travel]
+# Usage: PG_BIN=/path/to/postgresql-17/bin sh tests/sql/run-local.sh [suite ...]
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
-suite=${1:-booking-lifecycle}
-case $suite in booking-lifecycle|booking-travel) ;; *) echo "unknown suite: $suite" >&2; exit 2 ;; esac
+suites=${*:-booking-lifecycle booking-finance booking-payment-history}
+for suite in $suites; do
+  case $suite in
+    booking-lifecycle|booking-finance|booking-payment-history|booking-travel) ;;
+    *) echo "unknown suite: $suite" >&2; exit 2 ;;
+  esac
+done
 bin=${PG_BIN:?Set PG_BIN to a PostgreSQL 17 bin directory}
 work=$(mktemp -d "${TMPDIR:-/tmp}/bb-sql.XXXXXX")
-cleanup() { "$bin/pg_ctl" -D "$work/data" -m immediate stop >/dev/null 2>&1 || true; rm -rf "$work"; }
+cleanup() {
+  for data in "$work"/*/data; do
+    [ -d "$data" ] && "$bin/pg_ctl" -D "$data" -m immediate stop >/dev/null 2>&1 || true
+  done
+  rm -rf "$work"
+}
 trap cleanup EXIT INT TERM
-"$bin/initdb" -D "$work/data" -U postgres -A trust -E UTF8 --no-locale >/dev/null
-"$bin/pg_ctl" -D "$work/data" -w -l "$work/log" \
-  -o "-c listen_addresses='' -c unix_socket_directories='$work' -c timezone=UTC" start >/dev/null
+# Suites read ops files through psql backticks, relative to this directory.
 cd "$here"
-"$bin/psql" -X -q -v ON_ERROR_STOP=1 -h "$work" -U postgres -d postgres \
-  -f "$here/$suite.sql"
+for suite in $suites; do
+  dir="$work/$suite"
+  mkdir "$dir"
+  "$bin/initdb" -D "$dir/data" -U postgres -A trust -E UTF8 --no-locale >/dev/null
+  "$bin/pg_ctl" -D "$dir/data" -w -l "$dir/log" \
+    -o "-c listen_addresses='' -c unix_socket_directories='$dir' -c timezone=UTC" start >/dev/null
+  "$bin/psql" -X -q -v ON_ERROR_STOP=1 -h "$dir" -U postgres -d postgres -f "$here/$suite.sql"
+  "$bin/pg_ctl" -D "$dir/data" -m immediate stop >/dev/null
+done

@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { signOut } from "@/lib/actions/workspace"
+import { invalidatePaymentDraftsOnLogout } from "@/lib/payment-draft-storage"
 
 interface HeaderProps {
   title: string
@@ -25,6 +26,7 @@ export function Header({ title, userName = "User", avatarUrl, navigation }: Head
   const initials = displayName.split(" ").map((name) => name[0]).join("").toUpperCase().slice(0, 2)
 
   const handleSignOut = async () => {
+    invalidatePaymentDraftsOnLogout()
     await signOut()
   }
 

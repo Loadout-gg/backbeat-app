@@ -57,9 +57,8 @@ it.each(["edited", "blank"])("submits explicit %s venue and main contact strings
     fireEvent.change(screen.getByLabelText(label), { target: { value: draft[key] } })
   }
   fireEvent.click(screen.getByRole("button", { name: "Update booking" }))
-  await waitFor(() => expect(updateBooking).toHaveBeenCalledWith(booking.id, {
-    start_time: "19:00", duration_minutes: 60, notes: "Original note", ...draft,
-  }))
+  // Only the changed venue/contact fields are sent; unchanged time, duration and note are not rewritten.
+  await waitFor(() => expect(updateBooking).toHaveBeenCalledWith(booking.id, draft))
   expect(refresh).toHaveBeenCalledOnce()
 })
 it.each(["returned", "thrown"])("preserves the new-field draft across %s failure and retry", async (failure) => {
@@ -72,12 +71,12 @@ it.each(["returned", "thrown"])("preserves the new-field draft across %s failure
     fireEvent.change(screen.getByLabelText(label), { target: { value: draft[key as keyof typeof draft] } })
   }
   fireEvent.click(screen.getByRole("button", { name: "Update booking" }))
-  expect((await screen.findByRole("alert")).textContent).toContain(failure === "returned" ? "Save denied" : "Unable to save booking. Please try again.")
+  expect((await screen.findByRole("alert")).textContent).toContain(failure === "returned" ? "Save denied" : "The result could not be confirmed")
   expect(refresh).not.toHaveBeenCalled()
   for (const [key, label] of Object.entries(fieldLabels)) {
     expect((screen.getByLabelText(label) as HTMLInputElement).value).toBe(draft[key as keyof typeof draft])
   }
-  const payload = { start_time: "19:00", duration_minutes: 60, notes: "Original note", ...draft }
+  const payload = draft
   expect(updateBooking).toHaveBeenNthCalledWith(1, booking.id, payload)
   fireEvent.click(screen.getByRole("button", { name: "Update booking" }))
   await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
@@ -101,10 +100,7 @@ it.each([
   render(<EventBookingClient booking={{ ...booking, start_time: initial }} />)
   fireEvent.change(screen.getByDisplayValue(initial.slice(0, 5)), { target: { value: edited } })
   fireEvent.click(screen.getByRole("button", { name: "Update booking" }))
-  await waitFor(() => expect(updateBooking).toHaveBeenCalledWith(booking.id, {
-    start_time: edited, duration_minutes: 60, notes: "Original note",
-    venue_name: "", venue_address: "", contact_name_main: "", contact_phone_main: "", contact_email_main: "",
-  }))
+  await waitFor(() => expect(updateBooking).toHaveBeenCalledWith(booking.id, { start_time: edited }))
   expect((screen.getByLabelText("End time") as HTMLInputElement).value).toBe(end)
   expect(screen.queryByText(/^(AM|PM)$/)).toBeNull()
   expect(screen.queryByRole("combobox")).toBeNull()
@@ -154,7 +150,9 @@ it("recovers from a thrown save promise and retains user input", async () => {
   render(<EventBookingClient booking={booking} />)
   fireEvent.change(screen.getByDisplayValue("Original note"), { target: { value: "Keep this edit" } })
   fireEvent.click(screen.getByRole("button", { name: "Update booking" }))
-  expect((await screen.findByRole("alert")).textContent).toContain("Unable to save booking. Please try again.")
+  const alert = await screen.findByRole("alert")
+  expect(alert.textContent).toContain("The result could not be confirmed")
+  expect(alert.textContent).toContain("Your changes are still on this page")
   expect((screen.getByRole("button", { name: "Update booking" }) as HTMLButtonElement).disabled).toBe(false)
   expect(screen.getByDisplayValue("Keep this edit")).toBeTruthy()
   expect(refresh).not.toHaveBeenCalled()
@@ -168,11 +166,7 @@ it("edits a booking date without changing other supported values", async () => {
   expect(date.value).toBe(booking.date)
   fireEvent.change(date, { target: { value: "2026-10-26" } })
   fireEvent.click(screen.getByRole("button", { name: "Update booking" }))
-  await waitFor(() => expect(updateBooking).toHaveBeenCalledWith(booking.id, {
-    date: "2026-10-26", start_time: "19:00", duration_minutes: 60,
-    notes: "Original note", venue_name: "", venue_address: "",
-    contact_name_main: "", contact_phone_main: "", contact_email_main: "",
-  }))
+  await waitFor(() => expect(updateBooking).toHaveBeenCalledWith(booking.id, { date: "2026-10-26" }))
   expect(refresh).toHaveBeenCalledOnce()
 })
 it("rejects an empty date before calling the action", async () => {
@@ -210,7 +204,7 @@ it("records a booking fee without changing the artist rate or the note", async (
   fireEvent.click(screen.getByRole("button", { name: "Update booking" }))
   await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
   const payload = updateBooking.mock.calls[0][1]
-  expect(payload).toMatchObject({ fee_amount_minor: 105000, fee_currency: "EUR", notes: "Original note" })
+  expect(payload).toEqual({ fee_amount_minor: 105000, fee_currency: "EUR" })
   expect(payload).not.toHaveProperty("artist")
   expect(payload).not.toHaveProperty("fee")
   expect(payload).not.toHaveProperty("status")

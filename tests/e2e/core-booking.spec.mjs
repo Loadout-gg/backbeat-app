@@ -208,8 +208,8 @@ test('local operator completes onboarding, artist and booking persistence, and r
       await dialog.locator('input[type=time]').nth(1).fill('01:30')
       await dialog.getByPlaceholder('Type your message here.').fill(`${tag} initial note`)
       await dialog.getByRole('button', { name: 'Save on calendar', exact: true }).click()
-      await expect(dialog.getByRole('heading', { name: /Booking successfully added/ })).toBeVisible()
-      await dialog.getByRole('button', { name: 'Start event setup', exact: true }).click()
+      await expect(dialog.getByRole('heading', { name: /Booking saved for/ })).toBeVisible()
+      await dialog.getByRole('button', { name: 'Open booking', exact: true }).click()
       await expect(page).toHaveURL(/\/dashboard\/bookings\/[0-9a-f-]+$/)
       const bookingId = new URL(page.url()).pathname.split('/').at(-1)
       await page.reload()
@@ -259,7 +259,7 @@ test('local operator completes onboarding, artist and booking persistence, and r
           } else await route.fallback();
         });
         await save.click();
-        await expect(page.getByRole('alert').filter({ hasText: 'Unable to save booking. Please try again.' })).toBeVisible();
+        await expect(page.getByRole('alert').filter({ hasText: 'Unable to save booking. The result could not be confirmed.' })).toBeVisible();
         await expect(save).toBeEnabled();
         expect(failedM2).toBe(true);
         expect(await readDetails()).toEqual(expected);
@@ -297,7 +297,7 @@ test('local operator completes onboarding, artist and booking persistence, and r
       })
       await notes.fill(`${tag} should not persist`)
       await page.getByRole('button', { name: 'Update booking', exact: true }).click()
-      await expect(page.getByRole('alert').filter({ hasText: 'Unable to save booking. Please try again.' })).toBeVisible()
+      await expect(page.getByRole('alert').filter({ hasText: 'Unable to save booking. The result could not be confirmed.' })).toBeVisible()
       await expect(page.getByRole('button', { name: 'Update booking', exact: true })).toBeEnabled()
       expect(failed).toBe(true)
       expect((await request(`/rest/v1/bookings?id=eq.${bookingId}`))[0].notes).toBe(`${tag} persisted update`)

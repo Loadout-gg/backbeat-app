@@ -362,7 +362,7 @@ test('Booking editor preserves saved data, accessible tabs and usable narrow lay
       await expect(page.getByLabel('Start time', { exact: true })).toHaveValue('21:15')
       await expect(page.getByLabel('Duration', { exact: true })).toHaveValue('01:30')
       await expect(page.getByLabel('Note', { exact: true })).toHaveValue('Synthetic saved booking note')
-      await expect(page.getByRole('button', { name: 'Complete and create event', exact: true })).toBeDisabled()
+      await expect(page.getByRole('button', { name: 'Create event', exact: true })).toBeDisabled()
       await expect(page.getByPlaceholder('Driver name', { exact: true })).toHaveCount(0)
       await expect(page.getByPlaceholder('Contact name', { exact: true }).nth(1)).toBeDisabled()
     })

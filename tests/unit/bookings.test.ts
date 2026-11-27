@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest"
 const { db, query, workspace } = vi.hoisted(() => {
   const query: Record<string, ReturnType<typeof vi.fn>> = {}
-  for (const method of ["insert", "update", "delete", "select", "eq", "lte", "single", "maybeSingle", "order", "range"]) query[method] = vi.fn()
+  for (const method of ["insert", "update", "delete", "select", "eq", "is", "lte", "single", "maybeSingle", "order", "range"]) query[method] = vi.fn()
   return { query, workspace: vi.fn(async () => "selected-workspace"), db: { from: vi.fn(), auth: { getUser: vi.fn() } } }
 })
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn(async () => db) }))
@@ -12,6 +12,7 @@ import { revalidatePath } from "next/cache"
 const id = "11111111-1111-4111-8111-111111111111"
 const input = { artistId: id, date: "2026-10-12", startTime: "19:00", durationMinutes: 60 }
 beforeEach(() => {
+  delete (query as { then?: unknown }).then
   db.auth.getUser.mockResolvedValue({ data: { user: { id: "user-a" } } })
   db.from.mockReturnValue(query)
   for (const method of Object.values(query)) method.mockReturnValue(query)
@@ -153,6 +154,9 @@ it.each([
   { fee_amount_minor: 0, fee_currency: "GBP" },
   { fee_amount_minor: null, fee_currency: null },
 ])("persists only the scoped booking fee pair %j", async patch => {
+  // A currency change first counts the booking's payments (awaited query builder): none here.
+  query.maybeSingle.mockResolvedValueOnce({ data: null, error: null })
+  Object.assign(query, { then: (resolve: (value: unknown) => void) => resolve({ count: 0, error: null }) })
   expect(await updateBooking(id, patch)).toEqual({ success: true })
   expect(query.update).toHaveBeenCalledWith({ ...patch, updated_at: expect.any(String) })
   expect(db.from).toHaveBeenCalledWith("bookings")
@@ -235,6 +239,7 @@ it("refuses completion before the booking date with its own message", async () =
 it.each([
   ["BB002", "This status change is not allowed."],
   ["BB003", "A completed booking cannot be moved to a future date."],
+  ["BB009", "This booking has an event and was cancelled, so it cannot be reopened. Create a new booking to rebook."],
   ["XX000", "Unable to update the booking status. Please try again."],
 ])("maps database rejection %s to fixed copy on status change", async (code, message) => {
   const log = vi.spyOn(console, "error").mockImplementation(() => {})
@@ -242,6 +247,11 @@ it.each([
     query.maybeSingle.mockResolvedValueOnce({ data: null, error: { code, message: "PRIVATE_DATABASE_DETAIL" } })
     expect(await updateBookingStatus(id, "confirmed", "in_progress")).toEqual({ success: false, error: message })
   } finally { log.mockRestore() }
+})
+it("revalidates the events pages when a booking is cancelled (its event follows)", async () => {
+  query.maybeSingle.mockResolvedValueOnce({ data: { id }, error: null })
+  expect(await updateBookingStatus(id, "cancelled", "confirmed")).toEqual({ success: true })
+  expect(revalidatePath).toHaveBeenCalledWith("/dashboard/events", "layout")
 })
 it("fails closed when the conflict read itself fails", async () => {
   const log = vi.spyOn(console, "error").mockImplementation(() => {})
@@ -264,6 +274,23 @@ it.each([
     expect(await action()).toEqual({ success: false, error: message })
   } finally { log.mockRestore() }
 })
+it.each([
+  ["BB011", "PRIVATE_DATABASE_DETAIL", ""],
+  ["23503", "update or delete on table \"bookings\" violates foreign key constraint \"events_booking_id_fkey\"", "PRIVATE"],
+])("refuses to delete a booking that has an event (%s) with the cancel hint", async (code, message, details) => {
+  query.maybeSingle.mockResolvedValueOnce({ data: null, error: { code, message, details } })
+  expect(await deleteBooking(id)).toEqual({
+    success: false, error: "This booking has an event, so it cannot be deleted. Cancel the booking instead; its event is cancelled with it.",
+  })
+  expect(revalidatePath).not.toHaveBeenCalled()
+})
+it("keeps other foreign-key failures on delete generic", async () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => {})
+  try {
+    query.maybeSingle.mockResolvedValueOnce({ data: null, error: { code: "23503", message: "violates foreign key constraint \"other_fkey\"" } })
+    expect(await deleteBooking(id)).toEqual({ success: false, error: "Unable to delete booking. Please try again." })
+  } finally { log.mockRestore() }
+})
 it("never persists a status through updateBooking", async () => {
   const result = await updateBooking(id, { notes: "x", status: "confirmed" } as Parameters<typeof updateBooking>[1])
   expect(result).toEqual({ success: false, error: "Change the booking status with the status control" })
@@ -284,5 +311,47 @@ it("explains a hold expiry rejected because the booking is not on hold", async (
     expect(await updateBooking(id, { date: "2031-01-01" })).toEqual({
       success: false, error: "A completed booking cannot be moved to a future date.",
     })
+  } finally { log.mockRestore() }
+})
+
+// Migration 008: optional promoter from the directory (decision 2).
+const promoter = "33333333-3333-4333-8333-333333333333"
+it("creates a booking with the chosen promoter, and without the column when none is chosen", async () => {
+  await createBooking({ ...input, promoterId: promoter })
+  expect(query.insert).toHaveBeenLastCalledWith(expect.objectContaining({ promoter_id: promoter, workspace_id: "selected-workspace", status: "in_progress" }))
+  await createBooking(input)
+  expect("promoter_id" in (query.insert.mock.calls.at(-1)?.[0] as object)).toBe(false)
+})
+it.each(["", "not-a-uuid"])("rejects a malformed promoter %j on create before backend access", async (promoterId) => {
+  expect(await createBooking({ ...input, promoterId })).toEqual({ success: false, error: "Choose a valid promoter" })
+  expect(db.from).not.toHaveBeenCalled()
+})
+it.each([[promoter], [null]])("persists promoter_id %j through the validated update only", async (promoter_id) => {
+  expect(await updateBooking(id, { promoter_id })).toEqual({ success: true })
+  expect(query.update).toHaveBeenLastCalledWith({ promoter_id, updated_at: expect.any(String) })
+  expect(query.eq).toHaveBeenCalledWith("workspace_id", "selected-workspace")
+})
+it("leaves the promoter out of the write when it is omitted, and rejects a malformed one", async () => {
+  await updateBooking(id, { notes: "x" })
+  expect("promoter_id" in (query.update.mock.calls.at(-1)?.[0] as object)).toBe(false)
+  db.from.mockClear()
+  expect(await updateBooking(id, { promoter_id: "nope" })).toEqual({ success: false, error: "Choose a valid promoter" })
+  expect(db.from).not.toHaveBeenCalled()
+})
+it.each([
+  ["create", () => createBooking({ ...input, promoterId: promoter }), "single"],
+  ["update", () => updateBooking(id, { promoter_id: promoter }), "maybeSingle"],
+] as const)("answers %s with fixed copy when the promoter was deleted or belongs to another workspace", async (_label, action, terminal) => {
+  query[terminal].mockResolvedValueOnce({ data: null, error: { code: "23503", message: 'insert or update on table "bookings" violates foreign key constraint "bookings_promoter_id_fkey"' } })
+  const log = vi.spyOn(console, "error").mockImplementation(() => {})
+  try {
+    expect(await action()).toEqual({ success: false, error: "The selected promoter no longer exists. Choose another promoter." })
+  } finally { log.mockRestore() }
+})
+it("does not blame the promoter for another foreign-key failure", async () => {
+  query.single.mockResolvedValueOnce({ data: null, error: { code: "23503", message: 'violates foreign key constraint "bookings_artist_id_fkey"' } })
+  const log = vi.spyOn(console, "error").mockImplementation(() => {})
+  try {
+    expect(await createBooking({ ...input, promoterId: promoter })).toEqual({ success: false, error: "Unable to create booking. Please try again." })
   } finally { log.mockRestore() }
 })

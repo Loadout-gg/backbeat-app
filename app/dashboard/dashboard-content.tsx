@@ -9,8 +9,11 @@ import { QuickActions } from "@/components/dashboard/quick-actions"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 import { NewBookingModal } from "@/components/dashboard/new-booking-modal"
-import { type Booking } from "@/lib/actions/bookings"
-import { bookingArtistName, formatBookingTime } from "@/lib/booking-display"
+import { type BookingDashboardItem } from "@/lib/actions/bookings"
+import { bookingArtistName, compareBookingSchedule, formatBookingTimeRange } from "@/lib/booking-display"
+
+/** The events panel is a short preview, not the full schedule. */
+export const DASHBOARD_EVENTS_LIMIT = 6
 
 interface DashboardStats {
   eventsInProgress: number
@@ -32,7 +35,7 @@ interface DashboardContentProps {
   welcomeMessage: string
   stats: DashboardStats
   eventsInProgress: Event[]
-  bookings: Booking[]
+  bookings: BookingDashboardItem[]
   calendarToday: string
 }
 
@@ -45,8 +48,12 @@ export function DashboardContent({
 }: DashboardContentProps) {
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false)
 
-  // Filter bookings in progress
-  const bookingsInProgress = bookings.filter((b) => b.status === "in_progress")
+  // Bookings in progress, soonest first; same-day bookings in start-time order.
+  const bookingsInProgress = bookings
+    .filter((b) => b.status === "in_progress")
+    .sort(compareBookingSchedule)
+  const shownEvents = eventsInProgress.slice(0, DASHBOARD_EVENTS_LIMIT)
+  const hasArtists = stats.totalArtists > 0
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
@@ -69,7 +76,7 @@ export function DashboardContent({
         <div className="grid min-w-0 grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_16rem]">
           {/* Right column - Quick Actions */}
           <div className="row-start-1 min-w-0 xl:col-start-2 xl:row-start-1">
-            <QuickActions onNewBooking={() => setIsBookingModalOpen(true)} />
+            <QuickActions onNewBooking={() => setIsBookingModalOpen(true)} hasArtists={hasArtists} />
           </div>
           {/* Left column - Events and Bookings */}
           <div className="min-w-0 space-y-7">
@@ -79,18 +86,24 @@ export function DashboardContent({
                 <h2 id="dashboard-events" className="text-base font-semibold">Events in progress</h2>
                 <Link
                   href="/dashboard/events"
-                  className="rounded-sm py-1 text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+                  className="inline-flex min-h-10 items-center rounded-sm text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
                 >
-                  View all
+                  View all events
                 </Link>
               </div>
+              <p id="dashboard-events-scope" className="mb-3 text-sm text-muted-foreground">
+                {eventsInProgress.length > DASHBOARD_EVENTS_LIMIT
+                  ? `Showing the next ${DASHBOARD_EVENTS_LIMIT} of ${eventsInProgress.length} events in progress. `
+                  : `Shows at most ${DASHBOARD_EVENTS_LIMIT} events in progress, soonest first. `}
+                Confirmed events and other commitments are not listed here.
+              </p>
               {eventsInProgress.length === 0 ? (
                 <p className="rounded-xl bg-muted/60 px-4 py-6 text-sm text-muted-foreground">
                   No events in progress at the moment
                 </p>
               ) : (
-                <ul className="space-y-2 rounded-xl bg-muted/60 p-2">
-                  {eventsInProgress.slice(0, 6).map((event) => {
+                <ul aria-describedby="dashboard-events-scope" className="space-y-2 rounded-xl bg-muted/60 p-2">
+                  {shownEvents.map((event) => {
                     const hasTime = /[T ]\d{2}:\d{2}/.test(event.date)
                     const date = new Date(hasTime ? event.date : `${event.date}T00:00:00`)
                     return (
@@ -126,9 +139,9 @@ export function DashboardContent({
                 <h2 id="dashboard-bookings" className="text-base font-semibold">Bookings in progress</h2>
                 <Link
                   href="/dashboard/bookings"
-                  className="rounded-sm py-1 text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+                  className="inline-flex min-h-10 items-center rounded-sm text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
                 >
-                  View all
+                  View all bookings
                 </Link>
               </div>
               {bookingsInProgress.length === 0 ? (
@@ -136,14 +149,28 @@ export function DashboardContent({
                   <p className="text-sm text-muted-foreground">
                     No bookings in progress at the moment
                   </p>
-                  <p className="text-sm text-muted-foreground">Create a booking to choose an artist and add a date.</p>
-                  <Button
-                    className="gap-2"
-                    onClick={() => setIsBookingModalOpen(true)}
-                  >
-                    <Plus className="h-4 w-4" />
-                    New booking
-                  </Button>
+                  {hasArtists ? (
+                    <>
+                      <p className="text-sm text-muted-foreground">Create a booking to choose an artist and add a date.</p>
+                      <Button
+                        className="gap-2"
+                        onClick={() => setIsBookingModalOpen(true)}
+                      >
+                        <Plus className="h-4 w-4" />
+                        New booking
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-muted-foreground">A booking starts from an artist. Add your first artist, then create a booking from their profile.</p>
+                      <Button className="gap-2" asChild>
+                        <Link href="/dashboard/artists/new">
+                          <Plus className="h-4 w-4" />
+                          Add first artist
+                        </Link>
+                      </Button>
+                    </>
+                  )}
                 </div>
               ) : (
                 <ul className="space-y-2 rounded-xl bg-muted/60 p-2">
@@ -160,7 +187,7 @@ export function DashboardContent({
                           artistName={bookingArtistName(booking.artist)}
                           venue={booking.venue_name || ""}
                           location={booking.venue_address || ""}
-                          time={formatBookingTime(booking.start_time)}
+                          time={formatBookingTimeRange(booking.start_time, booking.duration_minutes)}
                         />
                       </li>
                     )
@@ -183,7 +210,8 @@ export function DashboardContent({
       />
 
       <footer className="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-muted/60 px-4 py-4 text-xs text-muted-foreground">
-        <span>© 2025 Backbeat. All rights reserved.</span>
+        {/* Year of the configured calendar day (server zone policy), not the viewer clock. */}
+        <span>© {calendarToday.slice(0, 4)} Backbeat. All rights reserved.</span>
         <span>Terms, Privacy, Help and Contact are currently unavailable.</span>
       </footer>
     </div>

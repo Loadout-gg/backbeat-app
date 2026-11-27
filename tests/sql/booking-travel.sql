@@ -11,6 +11,14 @@ SET backbeat.booking_fee_target = 'development';
 SET backbeat.booking_lifecycle_target = 'development';
 \ir ../../migrations/005_booking_workspace_key.sql
 \ir ../../migrations/006_booking_lifecycle.sql
+-- Staging apply order (2026-11-27): 007, 010, 008 are already applied; 009 must apply after them.
+SET backbeat.booking_finance_target = 'development';
+\ir ../../migrations/007_booking_finance.sql
+\ir ../../ops/supabase/booking-finance/007-forward-payment-history.sql
+SET backbeat.booking_payment_history_target = 'development';
+\ir ../../migrations/010_booking_payment_history.sql
+SET backbeat.booking_event_target = 'development';
+\ir ../../migrations/008_booking_event.sql
 
 -- Fixtures: two workspaces, one active member, one artist and one booking each.
 INSERT INTO auth.users (id, email, email_confirmed_at) VALUES
@@ -117,8 +125,9 @@ ALTER TABLE public.artists DROP COLUMN date_of_birth;
 DROP TABLE public.runtime_environment;
 ALTER TABLE public.runtime_environment_real RENAME TO runtime_environment;
 
--- 005 is required: without the bookings composite key the file refuses.
-ALTER TABLE public.bookings DROP CONSTRAINT bookings_workspace_id_id_key;
+-- 005 is required: without the bookings composite key the file refuses. The key is hidden by a
+-- rename, not dropped: the 007 and 008 foreign keys depend on it.
+ALTER TABLE public.bookings RENAME CONSTRAINT bookings_workspace_id_id_key TO bb_test_hidden_key;
 SET backbeat.booking_travel_target = 'development';
 \set ON_ERROR_STOP off
 \o /dev/null
@@ -127,7 +136,7 @@ SET backbeat.booking_travel_target = 'development';
 \set ON_ERROR_STOP on
 SELECT bb_test.eq('requires: 005 missing refused',
   (SELECT count(*)::text FROM pg_class WHERE relname = 'booking_travel_legs'), '0');
-\ir ../../migrations/005_booking_workspace_key.sql
+ALTER TABLE public.bookings RENAME CONSTRAINT bb_test_hidden_key TO bookings_workspace_id_id_key;
 
 -- Apply, then apply again: idempotent, no existing row touched.
 \ir ../../migrations/009_booking_travel_stays.sql

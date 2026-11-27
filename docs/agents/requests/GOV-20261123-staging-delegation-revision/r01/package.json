@@ -1,0 +1,30 @@
+{
+  "format_version": 1,
+  "request_id": "GOV-20261123-staging-delegation-revision",
+  "revision": "r01",
+  "status": "REQUESTED_NOT_APPROVED",
+  "decision_owner": "Alberto",
+  "requester": "Claude Code agent, task assigned by Simone",
+  "task_reference": "docs-only governance PR from branch docs/staging-delegation-r2 to staging, Loadout-gg/backbeat-app",
+  "source": {
+    "head": "ac72fec43fbf4def2d5f5640ab5b5b5045bdb168",
+    "branch": "docs/staging-delegation-r2 (from origin/staging)",
+    "worktree_state": "clean before this change"
+  },
+  "architecture_approved": false,
+  "implementation_authorized": false,
+  "external_actions_authorized": false,
+  "files": [
+    {
+      "path": "REQUEST.md",
+      "bytes": 7578,
+      "sha256": "1aaad4e74c885b1f43d988446e465f1b2d6376ca6962b5c52f39d7e3eb2f7150"
+    },
+    {
+      "path": "EVIDENCE.md",
+      "bytes": 3922,
+      "sha256": "fa4c1fbeab7012ce501846afb410c05594843e1788be93c09cab45dbdbe7d448"
+    }
+  ],
+  "manifest_self_excluded": true
+}

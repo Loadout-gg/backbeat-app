@@ -2,7 +2,6 @@ FROM node:26.13.1-bookworm-slim
 WORKDIR /app
 RUN npm install --global pnpm@12.3.4
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY patches/ ./patches/
 RUN pnpm install --frozen-lockfile --ignore-scripts
 COPY . .
 ARG NEXT_PUBLIC_SUPABASE_ANON_KEY

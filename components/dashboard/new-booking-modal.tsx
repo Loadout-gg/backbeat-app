@@ -14,9 +14,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getArtists, type ArtistOption } from "@/lib/actions/artists";
-import { createBooking, type Booking } from "@/lib/actions/bookings";
+import { createBooking, type BookingCalendarItem, type CreatedBooking } from "@/lib/actions/bookings";
 import { formatArtistBaseRate } from "@/lib/artist-base-rate";
 import { findSameDayBookings, isPastBookingDate, sameDayWarning } from "@/lib/booking-display";
+import { BookingPromoterSelect } from "@/components/dashboard/booking-promoter-select";
 
 type ModalStep = "select-artist" | "booking-details" | "success";
 
@@ -25,9 +26,11 @@ interface NewBookingModalProps {
   onOpenChange: (open: boolean) => void;
   preselectedArtist?: ArtistOption | null;
   /** Bookings already loaded by the page; null when that read failed, omitted when not available. */
-  existingBookings?: readonly Booking[] | null;
+  existingBookings?: readonly Pick<BookingCalendarItem, "id" | "artist_id" | "date" | "status">[] | null;
   /** Server "today" (configured calendar zone) for the non-blocking past-date hint. */
   calendarToday?: string;
+  /** Page the modal was opened from; closing the confirmation stays there. */
+  returnTo?: "dashboard" | "artist";
 }
 
 export function NewBookingModal({
@@ -36,6 +39,7 @@ export function NewBookingModal({
   preselectedArtist,
   existingBookings,
   calendarToday,
+  returnTo = "dashboard",
 }: NewBookingModalProps) {
   const router = useRouter();
   const [step, setStep] = useState<ModalStep>(
@@ -54,7 +58,7 @@ export function NewBookingModal({
   const [completion, setCompletion] = useState<{
     session: number;
     request: number;
-    booking: Booking;
+    booking: CreatedBooking;
     artist: ArtistOption;
   } | null>(null);
 
@@ -69,6 +73,7 @@ export function NewBookingModal({
   const [startTime, setStartTime] = useState("10:30");
   const [duration, setDuration] = useState("00:00");
   const [notes, setNotes] = useState("");
+  const [promoterId, setPromoterId] = useState("");
 
   const lifecycle = useRef({
     mounted: false,
@@ -130,6 +135,7 @@ export function NewBookingModal({
     setStartTime("10:30");
     setDuration("00:00");
     setNotes("");
+    setPromoterId("");
   }, [open, preselectedArtist, preselectedArtistId, invalidateSession]);
 
   useEffect(() => {
@@ -218,7 +224,7 @@ export function NewBookingModal({
     const session = current.session;
     const request = ++current.saveRequest;
     const submittedArtist = Object.freeze({ ...draftArtist });
-    const submitted = Object.freeze({ date, startTime, duration, notes });
+    const submitted = Object.freeze({ date, startTime, duration, notes, promoterId });
     current.saving = true;
     setIsSaving(true);
     setSaveError(null);
@@ -236,6 +242,7 @@ export function NewBookingModal({
         startTime: submitted.startTime,
         durationMinutes,
         notes: submitted.notes || undefined,
+        ...(submitted.promoterId ? { promoterId: submitted.promoterId } : {}),
       });
 
       if (!isCurrent()) return;
@@ -243,7 +250,7 @@ export function NewBookingModal({
       if (result.success && result.booking) {
         if (result.booking.artist_id !== submittedArtist.id) {
           setSaveError(
-            "Unable to confirm the saved booking. Check the calendar before retrying."
+            "Unable to confirm the saved booking. Check Bookings before retrying."
           );
           return;
         }
@@ -260,7 +267,7 @@ export function NewBookingModal({
     } catch {
       if (isCurrent()) {
         setSaveError(
-          "Unable to save booking. The result could not be confirmed; check the calendar before retrying."
+          "Unable to save booking. The result could not be confirmed. Your details are still here; check Bookings before saving again."
         );
       }
     } finally {
@@ -276,13 +283,15 @@ export function NewBookingModal({
     isCurrentSession(completion.session) &&
     lifecycle.current.saveRequest === completion.request;
 
-  const handleBackToDashboard = () => {
+  // Return to the page the user started from (dashboard or artist profile) and
+  // refresh its server data so the new booking is listed there.
+  const handleCloseConfirmation = () => {
     if (!hasCurrentCompletion()) return;
     handleOpenChange(false);
-    router.push("/dashboard");
+    router.refresh();
   };
 
-  const handleStartEventSetup = () => {
+  const handleOpenBooking = () => {
     if (!hasCurrentCompletion() || !completion) return;
     const bookingId = completion.booking.id;
     handleOpenChange(false);
@@ -323,6 +332,9 @@ export function NewBookingModal({
   const sameDayNotice = draftArtist && date && existingBookings === null
     ? "Other bookings for this date could not be checked."
     : sameDayCount > 0 ? sameDayWarning(sameDayCount) : null;
+  // Upcoming calendar = today or later in the configured zone; unknown "today" promises neither.
+  const createdIsPast = Boolean(createdBooking && calendarToday && isPastBookingDate(createdBooking.date, calendarToday));
+  const createdIsUpcoming = Boolean(createdBooking && calendarToday && !createdIsPast);
   const dateNoticeIds = [
     isPastDate ? "new-booking-past-date" : "",
     sameDayNotice ? "new-booking-same-day" : "",
@@ -331,13 +343,13 @@ export function NewBookingModal({
   // Dynamic width based on step
   const dialogClassName =
     step === "select-artist"
-      ? "w-[calc(100vw-2rem)] max-w-6xl max-h-[calc(100vh-2rem)] overflow-hidden p-0"
+      ? "w-[calc(100vw-2rem)] max-w-6xl max-h-[calc(100dvh-2rem)] overflow-y-auto p-0"
       : step === "success"
-        ? "max-w-2xl p-0"
+        ? "max-w-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto p-0"
         : "w-[calc(100vw-2rem)] max-w-5xl sm:max-w-5xl max-h-[calc(100dvh-2rem)] overflow-y-auto p-0";
 
   return (
-    <Dialog open={open} onOpenChange={step === "success" ? () => {} : handleOpenChange}>
+    <Dialog open={open} onOpenChange={step === "success" ? (next) => { if (!next) handleCloseConfirmation() } : handleOpenChange}>
       <DialogContent aria-describedby={undefined} className={dialogClassName} showCloseButton={step !== "success"}>
         {/* ========== STEP 1: Select Artist ========== */}
         {step === "select-artist" && (
@@ -443,6 +455,7 @@ export function NewBookingModal({
                           size="sm"
                           onClick={() => handleSelectArtist(artist)}
                           className="shrink-0"
+                          aria-label={`Select ${artist.stage_name}`}
                         >
                           Select
                         </Button>
@@ -466,8 +479,8 @@ export function NewBookingModal({
 
             <div className="px-6 pb-6">
               {/* Selected artist header */}
-              <div className="flex items-center justify-between py-4 border-t border-b border-border mb-6">
-                <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-4 py-4 border-t border-b border-border mb-6">
+                <div className="flex min-w-0 items-center gap-4">
                   <Avatar className="h-14 w-14">
                     <AvatarImage
                       src={selectedArtist.profile_image_url || undefined}
@@ -517,7 +530,7 @@ export function NewBookingModal({
                     </div>
                     {isPastDate && (
                       <p id="new-booking-past-date" role="status" className="mt-2 text-sm text-muted-foreground">
-                        This date is in the past. You can still save the booking.
+                        This date is in the past. You can still save the booking; it will be listed in Bookings, not in the upcoming calendar.
                       </p>
                     )}
                     {sameDayNotice && (
@@ -562,6 +575,14 @@ export function NewBookingModal({
                       </div>
                     </div>
                   </div>
+
+                  {/* Optional promoter from the directory */}
+                  <BookingPromoterSelect
+                    id="new-booking-promoter"
+                    value={promoterId}
+                    onChange={setPromoterId}
+                    disabled={isSaving}
+                  />
                 </div>
 
                 {/* Right column - Notes */}
@@ -583,7 +604,7 @@ export function NewBookingModal({
               {isSaving && (
                 <p role="status" className="mt-4 text-sm text-muted-foreground">
                   Closing this dialog does not cancel a submitted booking.
-                  Check the calendar before submitting again.
+                  Check Bookings before submitting again.
                 </p>
               )}
               {/* Save button */}
@@ -602,10 +623,11 @@ export function NewBookingModal({
 
         {/* ========== STEP 3: Success Confirmation ========== */}
         {step === "success" && createdBooking && selectedArtist && (
-          <div className="px-8 py-10">
+          <div className="px-4 py-6 sm:px-8 sm:py-10">
             <div className="flex justify-end -mt-4 -mr-2 mb-2">
               <button
-                onClick={handleBackToDashboard}
+                type="button"
+                onClick={handleCloseConfirmation}
                 className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                 aria-label="Close"
               >
@@ -626,14 +648,21 @@ export function NewBookingModal({
               </button>
             </div>
 
-            <div className="border border-border rounded-lg p-8">
+            <div className="border border-border rounded-lg p-4 sm:p-8">
               {/* Title */}
-              <h2 className="text-2xl font-semibold text-foreground text-center mb-8 text-balance">
-                {"Booking successfully added to Artist\u2019s calendar!"}
-              </h2>
+              <DialogTitle className="text-2xl font-semibold text-foreground text-center mb-3 text-balance">
+                {`Booking saved for ${selectedArtist.stage_name} on ${formatBookingDate(createdBooking.date)}`}
+              </DialogTitle>
+              <p className="mb-8 text-center text-sm text-muted-foreground">
+                {createdIsPast
+                  ? "This date is in the past, so the booking does not appear in the artist\u2019s upcoming calendar. Find it in Bookings."
+                  : createdIsUpcoming
+                    ? "It appears in the artist\u2019s upcoming calendar and in Bookings."
+                    : "Find it in Bookings."}
+              </p>
 
               <div className="border-t border-border pt-6 pb-6">
-                <div className="grid grid-cols-2 gap-8">
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 sm:gap-8">
                   {/* Artist */}
                   <div>
                     <h4 className="text-base font-medium text-foreground mb-3">
@@ -675,18 +704,18 @@ export function NewBookingModal({
               </div>
 
               <div className="border-t border-border pt-6">
-                <div className="flex items-center justify-center gap-4">
+                <div className="flex flex-wrap items-center justify-center gap-4">
                   <Button
                     variant="outline"
-                    onClick={handleBackToDashboard}
+                    onClick={handleCloseConfirmation}
                   >
-                    Back to dashboard
+                    {returnTo === "artist" ? "Back to artist profile" : "Back to dashboard"}
                   </Button>
                   <Button
-                    onClick={handleStartEventSetup}
+                    onClick={handleOpenBooking}
                     className="bg-foreground text-background hover:bg-foreground/90"
                   >
-                    Start event setup
+                    Open booking
                   </Button>
                 </div>
               </div>

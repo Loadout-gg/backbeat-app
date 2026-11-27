@@ -2,7 +2,7 @@ import { notFound, unstable_rethrow } from "next/navigation"
 import { getArtist } from "@/lib/actions/artists"
 import { getArtistTravelProfile, type ArtistTravelProfile } from "@/lib/actions/artist-travel-documents"
 import { ArtistTravelDocumentsSection } from "@/components/dashboard/artist-travel-documents-section"
-import { getBookings } from "@/lib/actions/bookings"
+import { getBookings, type BookingCalendarItem } from "@/lib/actions/bookings"
 import { listEvents } from "@/lib/actions/events"
 import { ArtistProfileClient } from "./artist-profile-client"
 import { configuredCalendarDay } from "@/lib/calendar-day"
@@ -20,12 +20,12 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
     notFound()
   }
 
-  let bookings: Awaited<ReturnType<typeof getBookings>> = []
+  let bookings: BookingCalendarItem[] = []
   let events: Awaited<ReturnType<typeof listEvents>> = []
   let calendarError = false
   try {
     const results = await Promise.all([
-      getBookings({ artistId: id, failOnError: true }),
+      getBookings({ artistId: id, failOnError: true, fields: "calendar" }),
       listEvents({ artistId: id }),
     ])
     bookings = results[0].filter((booking) => booking.artist_id === id)

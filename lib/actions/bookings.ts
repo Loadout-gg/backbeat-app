@@ -9,6 +9,12 @@ import type { BookingFeeCurrency } from "@/lib/booking-fee";
 import { bookingTransitionBlock, canTransitionBooking, type BookingStatus, type BookingTransitionBlock } from "@/lib/booking-status";
 import { configuredCalendarDay } from "@/lib/calendar-day";
 import { createBookingSchema, updateBookingSchema, bookingStatusSchema, bookingIdSchema } from "@/lib/booking-validation";
+import { BOOKING_EVENT_COPY, CONVERTED_BOOKING_CANCELLED_SQLSTATE, isBookingPromoterViolation, isBookingWithEventDeleteViolation } from "@/lib/booking-event";
+import {
+  BOOKING_HAS_PAYMENTS_MESSAGE, COMMISSION_CURRENCY_CHANGED_MESSAGE, COMMISSION_WITHIN_FEE_MESSAGE, FEE_CURRENCY_LOCKED_MESSAGE,
+  artistDefaultCommission, defaultCommissionPrefill,
+  type CommissionMode, type CommissionType,
+} from "@/lib/booking-finance";
 
 export interface Booking {
   fee_amount_minor: number | null;
@@ -28,6 +34,13 @@ export interface Booking {
   status: BookingStatus;
   /** Present after migration 006; only meaningful while status is "hold". */
   hold_expires_on?: string | null;
+  /** Present after migration 008. Optional promoter from the directory; the free-text main contact is separate. */
+  promoter_id?: string | null;
+  /** Present after migration 007. Percent values are basis points, fixed values minor units of the fee currency. */
+  commission_type?: CommissionType | null;
+  commission_value?: number | null;
+  commission_mode?: CommissionMode | null;
+  tax_note?: string | null;
   created_at: string;
   updated_at: string;
   artist?: {
@@ -52,8 +65,37 @@ export interface BookingWithArtist extends Booking {
     fee: number | null;
     currency: string | null;
     profile_image_url: string | null;
+    /** Only on the single-booking read (getBooking), after migration 007. */
+    default_commission_type?: string | null;
+    default_commission_value?: number | null;
+    default_commission_mode?: string | null;
+    default_commission_currency?: string | null;
   };
 }
+
+// List projections (R17/F19): each caller receives only the fields it renders or
+// computes from (duration_minutes: start–end and "next day" times, F20). Notes, contacts, fees, workspace_id and the artist's fee never leave
+// the server through a list read; the single-booking detail read (getBooking) is the
+// only wide read. Keep these in sync with tests/unit/bookings-read-projection.test.ts.
+const BOOKING_LIST_COLUMNS = {
+  calendar: "id,artist_id,date,start_time,duration_minutes,status",
+  dashboard: "id,artist_id,date,start_time,duration_minutes,status,venue_name,venue_address,artist:artists(stage_name,name)",
+  list: "id,artist_id,date,start_time,duration_minutes,status,hold_expires_on,created_at,venue_name,venue_address,artist:artists(stage_name,name)",
+} as const;
+const CREATED_BOOKING_COLUMNS = "id,artist_id,date";
+
+type BookingArtistName = { stage_name: string | null; name: string | null } | null;
+/** Artist profile calendar and the same-day notice of the new booking dialog. */
+export type BookingCalendarItem = Pick<Booking, "id" | "artist_id" | "date" | "start_time" | "duration_minutes" | "status">;
+/** Dashboard "Bookings in progress" cards. */
+export type BookingDashboardItem = BookingCalendarItem &
+  Pick<Booking, "venue_name" | "venue_address"> & { artist: BookingArtistName };
+/** Bookings list page (server-rendered) and server-only counts on the detail page. */
+export type BookingListItem = BookingDashboardItem & Pick<Booking, "created_at" | "hold_expires_on">;
+export type BookingFields = keyof typeof BOOKING_LIST_COLUMNS;
+type BookingRows = { calendar: BookingCalendarItem; dashboard: BookingDashboardItem; list: BookingListItem };
+/** What createBooking returns to the dialog: identity, artist check and the saved date. */
+export type CreatedBooking = Pick<Booking, "id" | "artist_id" | "date">;
 
 // Fixed user-facing copy: provider/database messages are logged, never returned.
 const TRANSITION_BLOCK_MESSAGES: Record<BookingTransitionBlock, string> = {
@@ -63,7 +105,17 @@ const TRANSITION_BLOCK_MESSAGES: Record<BookingTransitionBlock, string> = {
 const BOOKING_NOT_FOUND = "Booking not found";
 const BOOKING_CHANGED_ELSEWHERE = "This booking was changed elsewhere. Reload and try again.";
 
-type ProviderError = { code?: string | null } | null;
+
+type ProviderError = { code?: string | null; message?: string | null } | null;
+/** Migration 007: BB005 fee currency locked by payments; 23514 on the commission-within-fee CHECK. */
+function financeErrorMessage(error: ProviderError): string | null {
+  if (error?.code === "BB005") return FEE_CURRENCY_LOCKED_MESSAGE;
+  // The provider message is only inspected for the constraint name, never returned.
+  if (error?.code === "23514" && error.message?.includes("bookings_commission_within_fee_check")) {
+    return COMMISSION_WITHIN_FEE_MESSAGE;
+  }
+  return null;
+}
 /** SQLSTATEs raised by backbeat_enforce_booking_status (migration 006). */
 function lifecycleErrorMessage(error: ProviderError): string | null {
   if (error?.code === "BB002") return TRANSITION_BLOCK_MESSAGES.not_allowed;
@@ -73,9 +125,12 @@ function lifecycleErrorMessage(error: ProviderError): string | null {
 
 // failOnError is retained for source compatibility only.
 // Collection/auth failures always reject; false no longer means "return []".
-export async function getBookings(
-  options: { artistId?: string; failOnError?: boolean } = {}
-): Promise<Booking[]> {
+export async function getBookings<F extends BookingFields = "list">(
+  options: { artistId?: string; failOnError?: boolean; fields?: F } = {}
+): Promise<BookingRows[F][]> {
+  const fields = options.fields ?? "list";
+  if (!Object.hasOwn(BOOKING_LIST_COLUMNS, fields)) throw new Error("Invalid booking fields");
+  const columns: string = BOOKING_LIST_COLUMNS[fields];
   if (
     options.artistId !== undefined &&
     !createBookingSchema.shape.artistId.safeParse(options.artistId).success
@@ -97,16 +152,10 @@ export async function getBookings(
   const workspaceId = await getCurrentWorkspaceId();
 
   try {
-    return await readCompleteCollection<Booking>(async (from, to) => {
+    return await readCompleteCollection<BookingRows[F]>(async (from, to) => {
       let query = supabase
         .from("bookings")
-        .select(
-          `
-          *,
-          artist:artists(id, stage_name, name, surname, location, fee, currency, profile_image_url)
-          `,
-          { count: "exact" }
-        )
+        .select(columns, { count: "exact" })
         .eq("workspace_id", workspaceId);
 
       if (options.artistId !== undefined) {
@@ -119,7 +168,7 @@ export async function getBookings(
         .range(from, to);
 
       return {
-        data: data as unknown as Booking[] | null,
+        data: data as unknown as BookingRows[F][] | null,
         error,
         count,
       };
@@ -135,7 +184,8 @@ export async function createBooking(formData: {
   startTime: string;
   durationMinutes: number;
   notes?: string;
-}): Promise<{ success: boolean; error?: string; booking?: Booking }> {
+  promoterId?: string;
+}): Promise<{ success: boolean; error?: string; booking?: CreatedBooking }> {
   const validation = createBookingSchema.safeParse(formData);
   if (!validation.success) return { success: false, error: validation.error.issues[0].message };
   const supabase = await createClient();
@@ -149,6 +199,26 @@ export async function createBooking(formData: {
 
   const workspaceId = await getCurrentWorkspaceId();
 
+  // The artist default commission is copied once, at creation; later edits of the default do
+  // not rewrite existing bookings. A booking is created without a fee, so only a percent
+  // default can be copied here: a fixed default is in its own currency and is prefilled by
+  // the editor when the booking gets a fee in that currency (defaultCommissionPrefill).
+  const { data: artistRow, error: artistError } = await supabase
+    .from("artists")
+    .select("id, default_commission_type, default_commission_value, default_commission_mode, default_commission_currency")
+    .eq("id", formData.artistId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (artistError) {
+    console.error("Error reading the artist default commission:", artistError);
+    return { success: false, error: "Unable to create booking. Please try again." };
+  }
+  if (!artistRow) return { success: false, error: "Artist not found" };
+  const prefill = defaultCommissionPrefill(artistDefaultCommission(artistRow), null);
+  const commission = prefill.status === "applied"
+    ? { commission_type: prefill.commission.type, commission_value: prefill.commission.value, commission_mode: prefill.commission.mode }
+    : {};
+
   const { data: booking, error } = await supabase
     .from("bookings")
     .insert({
@@ -159,17 +229,15 @@ export async function createBooking(formData: {
       duration_minutes: formData.durationMinutes || null,
       notes: formData.notes || null,
       status: "in_progress",
+      ...(validation.data.promoterId ? { promoter_id: validation.data.promoterId } : {}),
+      ...commission,
     })
-    .select(
-      `
-      *,
-      artist:artists(id, stage_name, name, surname, location, fee, currency, profile_image_url)
-    `
-    )
+    .select(CREATED_BOOKING_COLUMNS)
     .single();
 
   if (error) {
     console.error("Error creating booking:", error);
+    if (isBookingPromoterViolation(error)) return { success: false, error: BOOKING_EVENT_COPY.promoterGone };
     return { success: false, error: "Unable to create booking. Please try again." };
   }
 
@@ -177,7 +245,7 @@ export async function createBooking(formData: {
   revalidatePath("/dashboard/bookings");
   revalidatePath("/dashboard/artists");
 
-  return { success: true, booking };
+  return { success: true, booking: booking as CreatedBooking };
 }
 
 export async function updateBookingStatus(
@@ -218,6 +286,9 @@ export async function updateBookingStatus(
 
   if (error) {
     console.error("Error updating booking status:", error);
+    if (error.code === CONVERTED_BOOKING_CANCELLED_SQLSTATE) {
+      return { success: false, error: BOOKING_EVENT_COPY.convertedStaysCancelled };
+    }
     return {
       success: false,
       error: lifecycleErrorMessage(error) ?? "Unable to update the booking status. Please try again.",
@@ -246,6 +317,8 @@ export async function updateBookingStatus(
   revalidatePath("/dashboard/bookings");
   revalidatePath("/dashboard/artists");
   revalidatePath(`/dashboard/bookings/${bookingId}`);
+  // Cancelling a converted booking also cancels its event (migration 008 trigger).
+  if (status === "cancelled") revalidatePath("/dashboard/events", "layout");
 
   return { success: true };
 }
@@ -274,8 +347,13 @@ export async function deleteBooking(
     .maybeSingle();
 
   if (error) {
+    // A booking that has an event is kept (migration 008); cancelling it is the way out.
+    if (isBookingWithEventDeleteViolation(error)) return { success: false, error: BOOKING_EVENT_COPY.bookingHasEvent };
     console.error("Error deleting booking:", error);
-    return { success: false, error: "Unable to delete booking. Please try again." };
+    // PostgreSQL reports the RESTRICT FK as 23503 or 23001 depending on its version.
+    const hasPayments = (error.code === "23503" || error.code === "23001") &&
+      error.message?.includes('"booking_payments_booking_fkey"');
+    return { success: false, error: hasPayments ? BOOKING_HAS_PAYMENTS_MESSAGE : "Unable to delete booking. Please try again." };
   }
   if (!changedBooking) return { success: false, error: BOOKING_NOT_FOUND };
 
@@ -303,7 +381,8 @@ export async function getBooking(
     .select(
       `
       *,
-      artist:artists(id, stage_name, name, surname, location, fee, currency, profile_image_url)
+      artist:artists(id, stage_name, name, surname, location, fee, currency, profile_image_url,
+        default_commission_type, default_commission_value, default_commission_mode, default_commission_currency)
     `
     )
     .eq("id", bookingId)
@@ -323,11 +402,17 @@ export async function updateBooking(
   patch: {
     fee_amount_minor?: number | null;
     fee_currency?: string | null;
+    commission_type?: string | null;
+    commission_value?: number | null;
+    commission_mode?: string | null;
+    expected_fee_currency?: string;
+    tax_note?: string | null;
     date?: string;
     start_time?: string;
     duration_minutes?: number | null;
     notes?: string | null;
     hold_expires_on?: string | null;
+    promoter_id?: string | null;
     venue_name?: string | null;
     venue_address?: string | null;
     event_type?: string;
@@ -363,15 +448,57 @@ export async function updateBooking(
   };
 
   // The schema is the write allowlist and carries normalized M2 values.
-  for (const [field, value] of Object.entries(validation.data)) {
+  const { expected_fee_currency: expectedFeeCurrency, ...columns } = validation.data;
+  for (const [field, value] of Object.entries(columns)) {
     if (value !== undefined) dbPatch[field] = value;
   }
+  // A fixed commission is minor units of the fee currency it was entered in. Without the fee
+  // in the same patch, the write applies only while that currency is still the saved one.
+  const commissionCurrency = validation.data.commission_type === "fixed" && validation.data.fee_currency === undefined
+    ? expectedFeeCurrency
+    : undefined;
+  if (validation.data.commission_type === "fixed" && validation.data.fee_currency === undefined && !commissionCurrency) {
+    return { success: false, error: COMMISSION_CURRENCY_CHANGED_MESSAGE };
+  }
 
-  const { data: changedBooking, error } = await supabase
+  // Decision 6, application side: with payments recorded the fee amount may change but the
+  // currency may not (also not by clearing the fee). The database trigger (BB005) is the
+  // backstop for a payment recorded between this read and the write.
+  if (validation.data.fee_currency !== undefined) {
+    const currencyQuery = supabase
+      .from("bookings")
+      .select("id")
+      .eq("id", bookingId)
+      .eq("workspace_id", workspaceId);
+    const { data: matchingCurrency, error: currentError } = await (validation.data.fee_currency === null
+      ? currencyQuery.is("fee_currency", null)
+      : currencyQuery.eq("fee_currency", validation.data.fee_currency)).maybeSingle();
+    if (currentError) {
+      console.error("Error reading the booking fee currency:", currentError);
+      return { success: false, error: "Unable to save booking. Please try again." };
+    }
+    if (!matchingCurrency) {
+      const { count, error: countError } = await supabase
+        .from("booking_payments")
+        .select("id", { count: "exact", head: true })
+        .eq("booking_id", bookingId)
+        .eq("workspace_id", workspaceId);
+      if (countError || typeof count !== "number") {
+        console.error("Error counting booking payments:", countError);
+        return { success: false, error: "Unable to save booking. Please try again." };
+      }
+      if (count > 0) return { success: false, error: FEE_CURRENCY_LOCKED_MESSAGE };
+    }
+  }
+
+  const updateQuery = supabase
     .from("bookings")
     .update(dbPatch)
     .eq("id", bookingId)
-    .eq("workspace_id", workspaceId)
+    .eq("workspace_id", workspaceId);
+  const { data: changedBooking, error } = await (commissionCurrency
+    ? updateQuery.eq("fee_currency", commissionCurrency)
+    : updateQuery)
     .select("id")
     .maybeSingle();
 
@@ -383,8 +510,24 @@ export async function updateBooking(
       : null;
     return {
       success: false,
-      error: lifecycleErrorMessage(error) ?? holdExpiry ?? "Unable to save booking. Please try again.",
+      error: lifecycleErrorMessage(error) ?? financeErrorMessage(error) ?? holdExpiry
+        ?? (isBookingPromoterViolation(error) ? BOOKING_EVENT_COPY.promoterGone : null)
+        ?? "Unable to save booking. Please try again.",
     };
+  }
+  if (!changedBooking && commissionCurrency) {
+    // Distinguish a changed fee currency from a booking that is gone or out of scope.
+    const { data: stillVisible, error: readError } = await supabase
+      .from("bookings")
+      .select("id")
+      .eq("id", bookingId)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle();
+    if (readError) {
+      console.error("Error reading the booking after a commission currency mismatch:", readError);
+      return { success: false, error: "Unable to save booking. Please try again." };
+    }
+    if (stillVisible) return { success: false, error: COMMISSION_CURRENCY_CHANGED_MESSAGE };
   }
   if (!changedBooking) return { success: false, error: BOOKING_NOT_FOUND };
 

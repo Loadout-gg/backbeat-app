@@ -1,6 +1,6 @@
 # Booking lifecycle (D0 + P1)
 
-D0.2 and P1 of the reference plan `ARCH-20261114-booking-domain` r02, implemented under the staging delegation of 2026-11-21. Staging only: production apply and promotion to `main` remain Alberto's.
+D0.2 and P1 of the reference plan `ARCH-20261114-booking-domain` r02, implemented on staging in #29 under the delegation reported on 2026-11-21. That delegation is [superseded](agents/decision-register.md#governance-correction-and-supersession); the staging rollout is historical evidence, not approval of r02, a repeat run or promotion to production.
 
 ## Contract
 
@@ -45,6 +45,8 @@ The preflight reports the marker class as `development`, `staging`, `invalid` or
 
 ## Order
 
+This is the #29 rollout procedure, not authority to apply it. Before any new execution verify the exact target and scope under the [current authority](agents/decision-register.md#governance-correction-and-supersession). A behavior-changing trigger is not covered by additive staging delegation.
+
 Schema first, then code. Current staging code runs unchanged on the migrated schema (it reads `*`, creates `in_progress`, never writes status from the UI). The new code on the old schema fails on hold/option, so do not merge before applying.
 
 1. Preflight (`preflight.sql`) in the staging SQL editor.
@@ -53,6 +55,8 @@ Schema first, then code. Current staging code runs unchanged on the migrated sch
 4. Merge the PR to `staging`, verify the deployment commit.
 
 ## Rollback
+
+Only Alberto can authorize the destructive SQL below; this procedure and its staging guard do not grant that authority.
 
 1. Redeploy the previous application version (revert the merge through a PR to `staging`).
 2. Run `rollback.sql` with the same target prefix. It copies `(id, workspace_id, status, hold_expires_on)` of every hold/option row into `public.bookings_lifecycle_rollback_backup` (RLS on, no grants, no policies), then sets those rows to `in_progress`, drops `hold_expires_on`, the trigger and the function, and restores the four-value CHECK. The additive unique key stays.
@@ -63,5 +67,5 @@ Without step 3 the backup table stays until dropped by hand: `DROP TABLE public.
 ## Tests
 
 - `pnpm test`: transition matrix (36 pairs), compare-and-set, stale versus not found, fixed error copy, status control, hold expiry and priority, static migration contracts.
-- `PG_BIN=<postgresql-17 bin> sh tests/sql/run-local.sh`: applies 001–006 to a throwaway local cluster and executes the trigger matrix, insert rule, completed-date rule, untouched pre-existing rows, workspace isolation, rollback and restore. The `auth` schema there is a stub, so it does not prove hosted Auth or PostgREST behaviour. Not part of CI.
+- `PG_BIN=<postgresql-17 bin> sh tests/sql/run-local.sh` (it also runs the finance suite, see [booking finance](booking-finance.md)): applies 001–006 to a throwaway local cluster and executes the trigger matrix, insert rule, completed-date rule, untouched pre-existing rows, workspace isolation, rollback and restore. The `auth` schema there is a stub, so it does not prove hosted Auth or PostgREST behaviour. Not part of CI.
 - `tests/integration` and `tests/e2e` need an authorized synthetic stack.
