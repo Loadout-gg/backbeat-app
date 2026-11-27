@@ -74,6 +74,8 @@ it.each([
   render(<EventBookingClient booking={{ ...base, status }} today={TODAY} />)
   expect(statusSection().queryByRole("link")).toBeNull()
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: label })) })
+  // "Cancel booking" asks first (in-app dialog); every other transition applies at once.
+  if (label === "Cancel booking") await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Yes, cancel booking" })) })
   expect(statusSection().getByRole("link", { name: link }).getAttribute("href")).toBe(`/dashboard/bookings?status=${target}`)
 })
 it("offers no filter link when the status change fails", async () => {

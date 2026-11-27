@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
@@ -153,6 +153,8 @@ export function useBookingPaymentsState(ownerId: string | null | undefined, work
   const [rowError, setRowError] = useState<string | null>(null);
   const [noticeState, setNotice] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  // The confirmation is shown only once the refreshed payments and totals are rendered.
+  const [refreshing, startRefresh] = useTransition();
 
   const inFlight = useRef<DraftLease | null>(null);
   const [savedKey, setSavedKey] = useState<string | null>(null);
@@ -187,7 +189,7 @@ export function useBookingPaymentsState(ownerId: string | null | undefined, work
     setNotice(candidate.replaces ? "Payment corrected." : "Payment added.");
   }
   const draft = committed ? null : candidate;
-  const notice = noticeState;
+  const notice = refreshing && noticeState ? "Updating payments and totals..." : noticeState;
   /** A draft came back after a reload, so the editor can show the Financial tab. */
   const restored = localDraft === undefined && stored !== null;
   // Storage is the external system. Keep it equal to the draft in this page, including a draft
@@ -212,7 +214,7 @@ export function useBookingPaymentsState(ownerId: string | null | undefined, work
   // One mutation at a time; a thrown action is reported as unconfirmed, never as success.
   // Even a successful late response may not affect a different or invalidated editor.
   const run = async (key: string, action: () => Promise<{ success: boolean; error?: string }>, done: string, onError: (message: string) => void, retrySameDraft = false) => {
-    if (!scopeIsCurrent() || inFlight.current === currentLease) return false;
+    if (!scopeIsCurrent() || inFlight.current === currentLease || refreshing) return false;
     inFlight.current = currentLease;
     setBusy(key);
     setFormError(null);
@@ -226,7 +228,7 @@ export function useBookingPaymentsState(ownerId: string | null | undefined, work
         return false;
       }
       setNotice(done);
-      router.refresh();
+      startRefresh(() => router.refresh());
       return true;
     } catch {
       if (!scopeIsCurrent()) return false;
@@ -240,18 +242,19 @@ export function useBookingPaymentsState(ownerId: string | null | undefined, work
     }
   };
   /** Runs an editor change only when no request is pending. */
-  const unlessBusy = (change: () => void) => { if (scopeIsCurrent() && inFlight.current !== currentLease) change(); };
+  const unlessBusy = (change: () => void) => { if (scopeIsCurrent() && inFlight.current !== currentLease && !refreshing) change(); };
 
   return {
     draft, setDraft, voidDraft, setVoidDraft, formError, setFormError,
-    rowError, setRowError, notice, busy, run, unlessBusy, restored, ready: currentLease !== null,
+    rowError, setRowError, notice, busy, refreshing, run, unlessBusy, restored, ready: currentLease !== null,
   };
 }
 export type BookingPaymentsState = ReturnType<typeof useBookingPaymentsState>;
 
 export function BookingPayments({ bookingId, feeMinor, feeCurrency, commission, payments, today, state, currencyChangePending = false }: BookingPaymentsProps) {
-  const { draft, setDraft, voidDraft, setVoidDraft, formError, setFormError, rowError, setRowError, notice, busy, run, unlessBusy, ready } = state;
-  const locked = busy !== null || !ready;
+  const { draft, setDraft, voidDraft, setVoidDraft, formError, setFormError, rowError, setRowError, notice, busy, refreshing, run, unlessBusy, ready } = state;
+  // While the refreshed server copy loads, nothing is edited against stale totals.
+  const locked = busy !== null || !ready || refreshing;
   const currencyMismatch = draft !== null && draft.currency !== feeCurrency;
   const draftLocked = locked || currencyMismatch;
 

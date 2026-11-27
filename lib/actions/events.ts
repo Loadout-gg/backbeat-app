@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server"
 import { getCurrentWorkspaceId } from "./workspace"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
-import { BOOKING_EVENT_COPY, CANCELLED_BOOKING_EVENT_SQLSTATE } from "@/lib/booking-event"
+import { BOOKING_EVENT_COPY, bookingEventErrorCopy } from "@/lib/booking-event"
 import { bookingFeeShape, type BookingFeeCurrency } from "@/lib/booking-fee"
 
 // Types derived from Supabase schema
@@ -255,10 +255,8 @@ export async function updateEvent(
     .select("id")
 
   // The provider message is never shown to the user.
-  if (error) {
-    if (error.code === CANCELLED_BOOKING_EVENT_SQLSTATE) return { success: false, error: BOOKING_EVENT_COPY.eventStaysCancelled }
-    return { success: false, error: EVENT_SAVE_FAILED }
-  }
+  // BB008–BB011 (migration 008 triggers) are answered with their fixed copy.
+  if (error) return { success: false, error: bookingEventErrorCopy(error) ?? EVENT_SAVE_FAILED }
   // No provider error is not proof of a write: require exactly the targeted row back.
   if (!Array.isArray(data) || data.length !== 1 || data[0].id !== id) return { success: false, error: EVENT_NOT_FOUND }
 
@@ -271,7 +269,13 @@ export async function updateEvent(
 
 const EVENT_DELETE_FAILED = "Unable to delete the event. Please try again."
 
-/** Deletes one event of the selected workspace. Bookings, artists and promoters are separate records and are not touched. */
+/**
+ * Deletes one event of the selected workspace that was not created from a booking.
+ * An event with booking_id follows its booking (cancelled with it, kept as history) and is
+ * never deleted here: the delete itself is filtered on booking_id IS NULL, so a link cannot
+ * slip in between a check and the write. Bookings, artists and promoters are not touched.
+ * A database-level guard is pending Alberto's decision (BACKLOG).
+ */
 export async function deleteEvent(id: string): Promise<{ success: true } | { success: false; error: string }> {
   if (!z.guid().safeParse(id).success) return { success: false, error: EVENT_NOT_FOUND }
 
@@ -282,9 +286,23 @@ export async function deleteEvent(id: string): Promise<{ success: true } | { suc
     .delete()
     .eq("workspace_id", workspaceId)
     .eq("id", id)
+    .is("booking_id", null)
     .select("id")
 
-  if (error) return { success: false, error: EVENT_DELETE_FAILED }
+  if (error) return { success: false, error: bookingEventErrorCopy(error) ?? EVENT_DELETE_FAILED }
+  if (Array.isArray(data) && data.length === 0) {
+    // Nothing deleted: tell a booking-linked event apart from a missing one.
+    const { data: row, error: readError } = await supabase
+      .from("events")
+      .select("id,booking_id")
+      .eq("workspace_id", workspaceId)
+      .eq("id", id)
+      .maybeSingle()
+    if (readError) return { success: false, error: EVENT_DELETE_FAILED }
+    const linked = row as { id?: string; booking_id?: string | null } | null
+    if (linked?.id === id && linked.booking_id) return { success: false, error: BOOKING_EVENT_COPY.eventFromBookingDelete }
+    return { success: false, error: EVENT_NOT_FOUND }
+  }
   // No provider error is not proof of a delete: require exactly the targeted row back.
   if (!Array.isArray(data) || data.length !== 1 || data[0].id !== id) return { success: false, error: EVENT_NOT_FOUND }
 
@@ -292,6 +310,28 @@ export async function deleteEvent(id: string): Promise<{ success: true } | { suc
   revalidatePath("/dashboard")
   revalidatePath("/dashboard/artists")
   return { success: true }
+}
+
+/**
+ * Stored status of the booking an event was created from, so the event page can show the
+ * status control read-only while that booking is cancelled. Null: no such booking in the
+ * selected workspace. A failed read throws; the page then leaves the control editable and
+ * the database decides (BB010).
+ */
+export async function getEventBookingStatus(bookingId: string): Promise<string | null> {
+  if (!z.guid().safeParse(bookingId).success) return null
+  const supabase = await createClient()
+  const workspaceId = await getCurrentWorkspaceId()
+  const { data, error } = await supabase
+    .from("bookings")
+    .select("id,status")
+    .eq("workspace_id", workspaceId)
+    .eq("id", bookingId)
+    .maybeSingle()
+  if (error) throw new Error("Unable to load the booking of this event.")
+  const row = data as { id?: string; status?: unknown } | null
+  if (!row || row.id !== bookingId || typeof row.status !== "string") return null
+  return row.status
 }
 
 export type PromoterOption = Pick<Promoter, "id" | "name" | "company_name">
