@@ -8,6 +8,8 @@ const migration = read("migrations/009_booking_travel_stays.sql")
 const ops = Object.fromEntries(["preflight", "postflight", "verify", "rollback", "restore"]
   .map(name => [name, read(`ops/supabase/booking-travel/${name}.sql`)]))
 const writes = [migration, ops.rollback, ops.restore]
+// Statements outside function bodies: what the migration itself does when it is applied.
+const topLevel = migration.replace(/\nAS \$\$[\s\S]*?\n\$\$;/g, "\n;").replace(/DO \$(\w+)\$[\s\S]*?\$\1\$;/g, ";")
 
 it("STATIC: every write file needs an explicit development or staging target, never production", () => {
   for (const sql of writes) {
@@ -26,11 +28,15 @@ it("STATIC: every write file needs an explicit development or staging target, ne
 
 it("STATIC: 009 is additive and leaves existing tables' access unchanged", () => {
   expect(migration).not.toMatch(/\bDROP\s+(TABLE|COLUMN)\b/i)
-  expect(migration).not.toMatch(/\bUPDATE\s+public\./i)
-  expect(migration).not.toMatch(/\bINSERT\s+INTO\b/i)
+  // No backfill: the migration itself writes no row (functions it defines do, when called).
+  expect(topLevel).not.toMatch(/\b(UPDATE|DELETE\s+FROM)\s+public\./i)
+  expect(topLevel).not.toMatch(/\bINSERT\s+INTO\b/i)
+  expect(migration).toContain("ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS transport_to_city text;")
+  expect(migration).toContain("CHECK (transport_to_city IS NULL OR transport_to_city IN ('promoter', 'artist', 'not_needed'))")
   expect(migration).not.toMatch(/ON public\.(bookings|artists)\b.*(POLICY|GRANT)/i)
   expect(migration).toContain("ALTER TABLE public.artists ADD COLUMN IF NOT EXISTS date_of_birth date;")
-  for (const table of ["booking_travel_legs", "booking_stays", "artist_travel_documents"]) {
+  for (const table of ["booking_travel_legs", "booking_stays", "artist_travel_documents",
+    "artist_travel_document_files", "artist_travel_document_audit", "artist_travel_document_relationships"]) {
     expect(migration).toContain(`CREATE TABLE IF NOT EXISTS public.${table} (`)
     expect(migration).toContain(`ALTER TABLE public.${table} ENABLE ROW LEVEL SECURITY;`)
   }
@@ -38,7 +44,7 @@ it("STATIC: 009 is additive and leaves existing tables' access unchanged", () =>
   // Date-line rule: one day earlier only when both zone labels are set and differ.
   expect(migration).toContain("AND arrive_date >= depart_date - 1)")
   expect(migration).toContain("REFERENCES public.artists(workspace_id, id) ON DELETE CASCADE")
-  expect(migration.match(/FOR ALL TO authenticated\n  USING \(public\.backbeat_is_active_member\(workspace_id\)\)\n  WITH CHECK \(public\.backbeat_is_active_member\(workspace_id\)\);/g)).toHaveLength(3)
+  expect(migration.match(/FOR ALL TO authenticated\n  USING \(public\.backbeat_is_active_member\(workspace_id\)\)\n  WITH CHECK \(public\.backbeat_is_active_member\(workspace_id\)\);/g)).toHaveLength(2)
   expect(migration).toContain("FROM PUBLIC, anon, authenticated;")
   // UPDATE grants are column-scoped and never include the parent or workspace key.
   for (const grant of migration.match(/GRANT UPDATE \(([^)]*)\)/g) ?? []) {
@@ -81,6 +87,12 @@ it("STATIC: date_of_birth and travel documents are read only by the dedicated mo
     artist_travel_documents: ["lib/actions/artist-travel-documents.ts"],
     booking_travel_legs: ["lib/actions/booking-travel.ts"],
     booking_stays: ["lib/actions/booking-travel.ts"],
+    artist_travel_document_files: ["lib/actions/artist-travel-documents.ts"],
+    artist_travel_document_audit: ["lib/actions/artist-travel-documents.ts"],
+    artist_travel_document_relationships: ["lib/actions/artist-travel-documents.ts"],
+    transport_to_city: ["lib/actions/booking-travel.ts"],
+    // Lifecycle functions: member entry points from the actions module, trusted ones from the scan service.
+    backbeat_travel_document_: ["lib/actions/artist-travel-documents.ts", "lib/travel-documents/scan-service.ts"],
   }
   for (const path of [...files("lib"), ...files("app"), ...files("components")]) {
     // Comments may name the column (to forbid it); only code counts.

@@ -6,7 +6,9 @@
 --
 -- Every write happens inside a block that is always rolled back: no row is changed and nothing
 -- is left behind. Only synthetic marker values are written ('BB-VERIFY-...').
--- OUTPUT: the final SELECT. First row: "BOOKING_TRAVEL_VERIFY ALL PASS: pass=13 fail=0 skip=0".
+-- The travel-document checks cover the database boundary only (cards, recoverable delete,
+-- audit read, refused client paths). Scans, signed links and Storage are NOT exercised here.
+-- OUTPUT: the final SELECT. First row: "BOOKING_TRAVEL_VERIFY ALL PASS: pass=23 fail=0 skip=0".
 -- "FAILED" or "INCOMPLETE" there means do not merge.
 DO $verify$
 DECLARE
@@ -52,8 +54,10 @@ BEGIN
       INSERT INTO public.booking_stays (workspace_id, booking_id, name, check_in_on, check_out_on)
         VALUES (target.workspace_id, target.id, 'BB-VERIFY-HOTEL', target.date, target.date + 1)
         RETURNING id INTO stay;
-      INSERT INTO public.artist_travel_documents (workspace_id, artist_id, doc_type, number)
-        VALUES (target.workspace_id, target.artist_id, 'passport', 'BB-VERIFY-0000') RETURNING id INTO doc;
+      INSERT INTO public.artist_travel_documents (workspace_id, artist_id, doc_type, number,
+          nationality, issued_on)
+        VALUES (target.workspace_id, target.artist_id, 'passport', 'BB-VERIFY-0000',
+          'BB-VERIFY-NATION', target.date - 400) RETURNING id INTO doc;
       outcome := 'ok';
     EXCEPTION WHEN OTHERS THEN outcome := SQLSTATE;
     END;
@@ -125,6 +129,17 @@ BEGIN
       GET DIAGNOSTICS affected = ROW_COUNT;
       results := results || (CASE WHEN affected = 0 THEN 'PASS' ELSE 'FAIL' END
         || '|rls: outsider cannot change a travel document|rows changed=' || affected);
+      SELECT count(*) INTO affected FROM public.artist_travel_document_audit
+        WHERE workspace_id = target.workspace_id;
+      results := results || (CASE WHEN affected = 0 THEN 'PASS' ELSE 'FAIL' END
+        || '|audit: outsider sees no audit row of the workspace|visible rows=' || affected);
+      BEGIN
+        PERFORM public.backbeat_travel_document_archive(target.workspace_id, doc);
+        outcome := 'archived';
+      EXCEPTION WHEN OTHERS THEN outcome := SQLSTATE;
+      END;
+      results := results || (CASE WHEN outcome = 'BB014' THEN 'PASS' ELSE 'FAIL' END
+        || '|rls: outsider cannot archive a travel document|' || outcome || ' (expected BB014)');
       DELETE FROM public.booking_stays WHERE id = stay;
       GET DIAGNOSTICS affected = ROW_COUNT;
       results := results || (CASE WHEN affected = 0 THEN 'PASS' ELSE 'FAIL' END
@@ -140,8 +155,10 @@ BEGIN
       RESET ROLE;
     END IF;
 
-    -- Cascades, as the member: deleting the booking removes its legs and stays; deleting the
-    -- artist removes the travel documents. Rolled back with everything else.
+    -- As the member: deleting the booking removes its legs and stays. A travel document is
+    -- never destroyed by an ordinary path: no DELETE, recoverable archive, audit readable and
+    -- not writable, trusted server entry points not callable, artist delete refused while a
+    -- card exists. Rolled back with everything else.
     PERFORM set_config('request.jwt.claim.sub', member::text, true);
     PERFORM set_config('request.jwt.claims',
       json_build_object('sub', member, 'role', 'authenticated')::text, true);
@@ -151,10 +168,75 @@ BEGIN
          + (SELECT count(*) FROM public.booking_stays WHERE id = stay) INTO affected;
     results := results || (CASE WHEN affected = 0 THEN 'PASS' ELSE 'FAIL' END
       || '|cascade: booking delete removes its legs and stays|remaining rows=' || affected);
-    DELETE FROM public.artists WHERE id = target.artist_id;
-    SELECT count(*) INTO affected FROM public.artist_travel_documents WHERE id = doc;
-    results := results || (CASE WHEN affected = 0 THEN 'PASS' ELSE 'FAIL' END
-      || '|cascade: artist delete removes its travel documents|remaining rows=' || affected);
+
+    BEGIN
+      DELETE FROM public.artist_travel_documents WHERE id = doc;
+      outcome := 'deleted';
+    EXCEPTION WHEN OTHERS THEN outcome := SQLSTATE;
+    END;
+    results := results || (CASE WHEN outcome = '42501' THEN 'PASS' ELSE 'FAIL' END
+      || '|document: member has no direct delete|' || outcome || ' (expected 42501)');
+
+    BEGIN
+      DELETE FROM public.artists WHERE id = target.artist_id;
+      outcome := 'deleted';
+    EXCEPTION WHEN OTHERS THEN outcome := SQLSTATE;
+    END;
+    -- BB018 from the card guard; 23503 when an older restriction of the artist's bookings
+    -- (payments) refuses first. Either way the artist and the card are still there.
+    results := results || (CASE WHEN outcome IN ('BB018', '23503') THEN 'PASS' ELSE 'FAIL' END
+      || '|document: artist delete cannot destroy a travel document|' || outcome || ' (expected BB018 or 23503)');
+
+    BEGIN
+      outcome := public.backbeat_travel_document_archive(target.workspace_id, doc);
+    EXCEPTION WHEN OTHERS THEN outcome := SQLSTATE;
+    END;
+    results := results || (CASE WHEN outcome = 'archived' THEN 'PASS' ELSE 'FAIL' END
+      || '|document: member archives (recoverable delete)|' || outcome || ' (expected archived)');
+
+    SELECT count(*) INTO affected FROM public.artist_travel_documents
+      WHERE id = doc AND state = 'archived' AND number = 'BB-VERIFY-0000'
+        AND restore_until = ((archived_at AT TIME ZONE 'UTC') + INTERVAL '12 months') AT TIME ZONE 'UTC';
+    results := results || (CASE WHEN affected = 1 THEN 'PASS' ELSE 'FAIL' END
+      || '|document: archived card kept with a 12-calendar-month cutoff|matching rows=' || affected);
+
+    BEGIN
+      UPDATE public.artist_travel_documents SET number = 'BB-VERIFY-EDIT' WHERE id = doc;
+      GET DIAGNOSTICS affected = ROW_COUNT;
+      outcome := 'rows=' || affected;
+    EXCEPTION WHEN OTHERS THEN outcome := SQLSTATE;
+    END;
+    results := results || (CASE WHEN outcome = 'rows=0' THEN 'PASS' ELSE 'FAIL' END
+      || '|document: archived card is not editable in place|' || outcome || ' (expected rows=0)');
+
+    SELECT count(*) INTO affected FROM public.artist_travel_document_audit
+      WHERE document_id = doc AND actor_id = member AND action IN ('card_created', 'archived');
+    results := results || (CASE WHEN affected = 2 THEN 'PASS' ELSE 'FAIL' END
+      || '|audit: member reads the automatic create and archive events|rows=' || affected);
+
+    BEGIN
+      INSERT INTO public.artist_travel_document_audit (workspace_id, artist_id, document_id, actor_id, action)
+        VALUES (target.workspace_id, target.artist_id, doc, member, 'download_issued');
+      outcome := 'inserted';
+    EXCEPTION WHEN OTHERS THEN outcome := SQLSTATE;
+    END;
+    results := results || (CASE WHEN outcome = '42501' THEN 'PASS' ELSE 'FAIL' END
+      || '|audit: member cannot insert an audit row|' || outcome || ' (expected 42501)');
+
+    BEGIN
+      PERFORM public.backbeat_travel_document_reserve_upload(member, target.workspace_id, doc);
+      outcome := 'executed';
+    EXCEPTION WHEN OTHERS THEN outcome := SQLSTATE;
+    END;
+    results := results || (CASE WHEN outcome = '42501' THEN 'PASS' ELSE 'FAIL' END
+      || '|server path: member session cannot call a trusted function|' || outcome || ' (expected 42501)');
+
+    BEGIN
+      outcome := public.backbeat_travel_document_restore(target.workspace_id, doc);
+    EXCEPTION WHEN OTHERS THEN outcome := SQLSTATE;
+    END;
+    results := results || (CASE WHEN outcome = 'restored' THEN 'PASS' ELSE 'FAIL' END
+      || '|document: member restores inside the window|' || outcome || ' (expected restored)');
     RESET ROLE;
     RAISE EXCEPTION 'BB_VERIFY_ROLLBACK';
   EXCEPTION WHEN OTHERS THEN

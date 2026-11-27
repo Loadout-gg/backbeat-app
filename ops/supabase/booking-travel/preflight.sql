@@ -1,7 +1,9 @@
--- Read-only preflight for migration 009 (booking travel, stays, artist travel documents).
+-- Read-only preflight for migration 009 (booking travel, stays, artist travel documents with scan
+-- versions, audit and relationship signal, bookings.transport_to_city).
 -- One SELECT, catalog reads and row counts only: no row content is returned.
 -- Expect: marker class = staging (on staging), every "requires" row = ok, every "009" row = absent
--- before the first apply. The first row (ord 0) is the summary.
+-- before the first apply. The first row (ord 0) is the summary. The "storage" rows are
+-- informational: the bucket is provisioned separately (storage-provision.sql), never by 009.
 WITH checks(ord, section, item, detail, ok) AS (
   SELECT 1, 'env', 'server', current_setting('server_version') || ' | tz=' || current_setting('TimeZone'), true
   UNION ALL
@@ -40,12 +42,51 @@ WITH checks(ord, section, item, detail, ok) AS (
   UNION ALL
   SELECT 10, '009', t.name, CASE WHEN to_regclass(t.name) IS NULL THEN 'absent' ELSE 'present' END, true
   FROM (VALUES ('public.booking_travel_legs'), ('public.booking_stays'), ('public.artist_travel_documents'),
+               ('public.artist_travel_document_files'), ('public.artist_travel_document_audit'),
+               ('public.artist_travel_document_relationships'),
                ('public.booking_travel_legs_rollback_backup'), ('public.booking_stays_rollback_backup'),
-               ('public.artist_travel_documents_rollback_backup'), ('public.artists_date_of_birth_rollback_backup')) AS t(name)
+               ('public.artist_travel_documents_rollback_backup'),
+               ('public.artist_travel_document_files_rollback_backup'),
+               ('public.artist_travel_document_audit_rollback_backup'),
+               ('public.artist_travel_document_relationships_rollback_backup'),
+               ('public.artists_date_of_birth_rollback_backup'),
+               ('public.bookings_transport_to_city_rollback_backup')) AS t(name)
   UNION ALL
-  SELECT 11, '009', 'artists.date_of_birth',
+  SELECT 11, '009', c.tbl || '.' || c.col,
          CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
-           AND table_name = 'artists' AND column_name = 'date_of_birth') THEN 'present' ELSE 'absent' END, true
+           AND table_name = c.tbl AND column_name = c.col) THEN 'present' ELSE 'absent' END, true
+  FROM (VALUES ('artists', 'date_of_birth'), ('bookings', 'transport_to_city')) AS c(tbl, col)
+  UNION ALL
+  SELECT 12, '009', 'backbeat_travel_document_* functions',
+         (SELECT count(*)::text FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+          WHERE n.nspname = 'public' AND p.proname LIKE 'backbeat\_travel\_document\_%'), true
+  UNION ALL
+  SELECT 13, 'requires', 'SQLSTATE BB012-BB021 unused by existing functions',
+         (SELECT count(*)::text FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+          WHERE n.nspname = 'public' AND p.proname NOT LIKE 'backbeat\_travel\_document\_%'
+            AND p.prosrc ~ 'BB0(1[2-9]|2[01])'),
+         NOT EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+          WHERE n.nspname = 'public' AND p.proname NOT LIKE 'backbeat\_travel\_document\_%'
+            AND p.prosrc ~ 'BB0(1[2-9]|2[01])')
+  UNION ALL
+  SELECT 14, 'requires', 'events.artist_id and bookings.artist_id (download context)',
+         (SELECT count(*)::text FROM information_schema.columns WHERE table_schema = 'public'
+            AND table_name IN ('events', 'bookings') AND column_name = 'artist_id'),
+         (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public'
+            AND table_name IN ('events', 'bookings') AND column_name = 'artist_id') = 2
+  UNION ALL
+  SELECT 15, 'requires', 'role service_role',
+         (SELECT count(*)::text FROM pg_roles WHERE rolname = 'service_role'),
+         EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role')
+  UNION ALL
+  SELECT 30, 'storage', 'storage.objects catalog (informational)',
+         CASE WHEN to_regclass('storage.objects') IS NULL THEN 'absent' ELSE 'present' END, true
+  UNION ALL
+  SELECT 31, 'storage', 'bucket artist-travel-documents (informational; not created by 009)',
+         CASE WHEN to_regclass('storage.buckets') IS NULL THEN 'storage schema absent'
+              ELSE (xpath('/row/state/text()', query_to_xml(
+                'SELECT CASE WHEN count(*) = 0 THEN ''absent'' WHEN bool_and(public IS FALSE) THEN ''present, private'' ELSE ''present, PUBLIC'' END AS state FROM storage.buckets WHERE id = ''artist-travel-documents''',
+                false, true, '')))[1]::text END, true
   UNION ALL
   SELECT 20, 'data', 'bookings / artists rows',
          (SELECT count(*)::text FROM public.bookings) || ' / ' || (SELECT count(*)::text FROM public.artists), true

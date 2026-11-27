@@ -7,13 +7,15 @@ import { Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
-  createTravelLeg, deleteTravelLeg, updateTravelLeg, type TravelLeg,
+  createTravelLeg, deleteTravelLeg, updateBookingTransportToCity, updateTravelLeg, type TravelLeg,
 } from "@/lib/actions/booking-travel"
 import type { ArtistTravelProfile } from "@/lib/actions/artist-travel-documents"
 import {
-  TRAVEL_DIRECTIONS, TRAVEL_DIRECTION_LABELS, TRAVEL_DOCUMENT_TYPE_LABELS, firstIssue, travelLegSchema,
-  type TravelDirection,
+  TRANSPORT_TO_CITY_LABELS, TRANSPORT_TO_CITY_VALUES, TRAVEL_DIRECTIONS, TRAVEL_DIRECTION_LABELS,
+  TRAVEL_DOCUMENT_TYPE_LABELS, firstIssue, travelLegSchema,
+  type TransportToCity, type TravelDirection,
 } from "@/lib/booking-travel-validation"
+import { ScanDownloadButton } from "@/components/dashboard/travel-document-scan-controls"
 import {
   DeleteControl, FormActions, TextAreaField, TextField, UnavailableNotice, selectClass, shortTime,
   useGuardedAction,
@@ -45,14 +47,19 @@ interface BookingTravelPanelProps {
   legs: TravelLeg[] | null
   /** null: the artist travel documents could not be read. */
   travelProfile: ArtistTravelProfile | null
+  /** Saved deal term; undefined when the travel read failed (the control is then not offered). */
+  transportToCity?: TransportToCity | null
+  /** Configured calendar day, for the explicit expired state of a document. */
+  today: string
 }
 
-export function BookingTravelPanel({ bookingId, bookingDate, artistId, artistName, legs, travelProfile }: BookingTravelPanelProps) {
+export function BookingTravelPanel({ bookingId, bookingDate, artistId, artistName, legs, travelProfile, transportToCity, today }: BookingTravelPanelProps) {
   const [adding, setAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
 
   return (
     <div className="space-y-8">
+      {transportToCity !== undefined && <TransportToCityControl bookingId={bookingId} saved={transportToCity} />}
       <section aria-labelledby="travel-legs-heading" className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 id="travel-legs-heading" className="text-base font-medium text-foreground">Travel legs</h2>
@@ -93,7 +100,8 @@ export function BookingTravelPanel({ bookingId, bookingDate, artistId, artistNam
       </section>
 
       <ArtistTravelDocumentsSummary
-        artistId={artistId} artistName={artistName} bookingDate={bookingDate} profile={travelProfile}
+        bookingId={bookingId} artistId={artistId} artistName={artistName} bookingDate={bookingDate}
+        today={today} profile={travelProfile}
       />
     </div>
   )
@@ -219,10 +227,56 @@ function LegForm({ bookingId, leg, onDone }: { bookingId: string; leg?: TravelLe
   )
 }
 
-function ArtistTravelDocumentsSummary({ artistId, artistName, bookingDate, profile }: {
+/**
+ * Deal term (D6): who organizes and pays travel to the venue city. One choice for the booking,
+ * whatever the mode of each leg. Saves on change, on its own.
+ */
+function TransportToCityControl({ bookingId, saved }: { bookingId: string; saved: TransportToCity | null }) {
+  const router = useRouter()
+  const id = useId()
+  const [value, setValue] = useState<string>(saved ?? "")
+  const [notice, setNotice] = useState("")
+  const save = useGuardedAction()
+
+  const change = async (next: string) => {
+    const previous = value
+    setValue(next)
+    setNotice("")
+    const ok = await save.run(() => updateBookingTransportToCity(bookingId, next || null), "Unable to save transport to the city. Please try again.")
+    if (ok) {
+      setNotice("Saved.")
+      router.refresh()
+    } else {
+      setValue(previous)
+    }
+  }
+
+  return (
+    <section aria-labelledby={`${id}-heading`} className="space-y-2">
+      <h2 id={`${id}-heading`} className="text-base font-medium text-foreground">Transport to the city</h2>
+      <div className="flex min-w-0 flex-wrap items-center gap-3">
+        <label htmlFor={`${id}-select`} className="sr-only">Who organizes and pays travel to the venue city</label>
+        <select id={`${id}-select`} value={value} disabled={save.pending} className={`${selectClass} max-w-xs`}
+          onChange={event => { void change(event.target.value) }}>
+          <option value="">Not set</option>
+          {TRANSPORT_TO_CITY_VALUES.map(option => <option key={option} value={option}>{TRANSPORT_TO_CITY_LABELS[option]}</option>)}
+        </select>
+        <p role="status" aria-live="polite" className="text-sm text-foreground">{notice}</p>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Who organizes and pays travel to the venue city, whatever the means of transport. The legs below record the actual journeys.
+      </p>
+      {save.error && <p role="alert" className="text-sm text-destructive">{save.error}</p>}
+    </section>
+  )
+}
+
+function ArtistTravelDocumentsSummary({ bookingId, artistId, artistName, bookingDate, today, profile }: {
+  bookingId: string
   artistId: string
   artistName: string
   bookingDate: string
+  today: string
   profile: ArtistTravelProfile | null
 }) {
   return (
@@ -235,7 +289,10 @@ function ArtistTravelDocumentsSummary({ artistId, artistName, bookingDate, profi
           Edit on the artist profile
         </Link>
       </div>
-      <p className="text-sm text-muted-foreground">Read-only. Sensitive personal data: share only with the people who book the travel.</p>
+      <p className="text-sm text-muted-foreground">
+        Read-only. Sensitive personal data: share only with the people who book the travel. Nothing here is
+        sent with the booking; download a scan and attach it yourself when it is asked for.
+      </p>
       {profile === null ? (
         <UnavailableNotice>Travel documents could not be loaded. Reload the page to try again.</UnavailableNotice>
       ) : (
@@ -247,21 +304,34 @@ function ArtistTravelDocumentsSummary({ artistId, artistName, bookingDate, profi
           {profile.documents.length === 0 ? (
             <p className="text-muted-foreground">No travel documents recorded.</p>
           ) : (
-            <ul className="space-y-2">
-              {profile.documents.map(document => (
-                <li key={document.id} className="flex min-w-0 flex-wrap items-center gap-2 break-words">
-                  <span className="font-medium text-foreground">{TRAVEL_DOCUMENT_TYPE_LABELS[document.doc_type]}</span>
-                  <span className="text-foreground">{document.number}</span>
-                  {document.issuing_country && <span className="text-muted-foreground">{document.issuing_country}</span>}
-                  {document.holder_name && <span className="text-muted-foreground">{document.holder_name}</span>}
-                  <span className="text-muted-foreground">
-                    {document.expires_on ? `Expires ${document.expires_on}` : "No expiry date"}
-                  </span>
-                  {document.expires_on && document.expires_on < bookingDate && (
-                    <Badge variant="destructive">Expires before this booking</Badge>
-                  )}
-                </li>
-              ))}
+            <ul className="space-y-3">
+              {profile.documents.map(document => {
+                const label = TRAVEL_DOCUMENT_TYPE_LABELS[document.doc_type]
+                const scan = document.scan
+                return (
+                  <li key={document.id} className="flex min-w-0 flex-wrap items-center gap-2 break-words">
+                    <span className="font-medium text-foreground">{label}</span>
+                    <span className="text-foreground">{document.number}</span>
+                    {document.holder_name && <span className="text-foreground">{document.holder_name}</span>}
+                    {document.nationality && <span className="text-muted-foreground">{document.nationality}</span>}
+                    {document.issuing_country && <span className="text-muted-foreground">Issued by {document.issuing_country}</span>}
+                    {document.issued_on && <span className="text-muted-foreground">Issued {document.issued_on}</span>}
+                    <span className="text-muted-foreground">
+                      {document.expires_on ? `Expires ${document.expires_on}` : "No expiry date"}
+                    </span>
+                    {document.expires_on && document.expires_on < today ? (
+                      <Badge variant="destructive">Expired</Badge>
+                    ) : document.expires_on && document.expires_on < bookingDate && (
+                      <Badge variant="destructive">Expires before this booking</Badge>
+                    )}
+                    {profile.scansEnabled && scan && scan.state !== "missing" && (
+                      <ScanDownloadButton fileId={scan.fileId} bookingId={bookingId} label={`Download scan: ${label}`} />
+                    )}
+                    {scan?.state === "missing" && <span className="text-destructive">Scan file missing</span>}
+                    {!scan && <span className="text-muted-foreground">No scan</span>}
+                  </li>
+                )
+              })}
             </ul>
           )}
         </div>

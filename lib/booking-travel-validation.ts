@@ -114,15 +114,32 @@ export const bookingStaySchema = z.object({
 export type BookingStayInput = z.input<typeof bookingStaySchema>
 export type BookingStayValues = z.output<typeof bookingStaySchema>
 
+// Data card (owner decision D4): nationality and issue date are optional and separate from the
+// issuing country, the expiry date and the name exactly as printed on the document.
 export const travelDocumentSchema = z.object({
   doc_type: z.enum(TRAVEL_DOCUMENT_TYPES, "Choose a document type"),
   number: requiredText(64, "Document number", "Enter the document number"),
   issuing_country: optionalText(100, "Issuing country"),
+  nationality: optionalText(100, "Nationality"),
+  issued_on: optionalDate("Enter a valid issue date"),
   expires_on: optionalDate("Enter a valid expiry date"),
   holder_name: optionalText(200, "Name on document"),
 }).strict()
 export type TravelDocumentInput = z.input<typeof travelDocumentSchema>
 export type TravelDocumentValues = z.output<typeof travelDocumentSchema>
+
+// Deal term "transport to the city" (owner decision D6, owner parameter 2026-11-27): who
+// organizes and pays travel to the venue city. One booking field, independent of the mode of
+// any travel leg. Landed deal = artist; promoter pays flights = promoter; all-in = artist.
+export const TRANSPORT_TO_CITY_VALUES = ["promoter", "artist", "not_needed"] as const
+export type TransportToCity = (typeof TRANSPORT_TO_CITY_VALUES)[number]
+export const TRANSPORT_TO_CITY_LABELS: Record<TransportToCity, string> = {
+  promoter: "Promoter organizes and pays",
+  artist: "Artist organizes and pays",
+  not_needed: "Not needed",
+}
+export const transportToCitySchema = z.union([z.literal(""), z.enum(TRANSPORT_TO_CITY_VALUES)], "Choose who handles transport to the city")
+  .nullable().transform(value => value ? value : null)
 
 export const EARLIEST_DATE_OF_BIRTH = "1900-01-01"
 /** `today` is the configured calendar day; a birth date in the future is rejected. */

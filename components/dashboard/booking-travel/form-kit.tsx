@@ -103,10 +103,17 @@ export function FormActions({ pending, error, saveLabel, onCancel }: {
   )
 }
 
-/** Inline delete confirmation, the same pattern as the booking delete control. */
-export function DeleteControl({ label, onConfirm }: {
+/**
+ * Inline confirmation for a change that takes something out of view (delete, end relationship),
+ * the same pattern as the booking delete control. Never used for a read or a download.
+ */
+export function DeleteControl({ label, onConfirm, trigger = "Delete", question = "Delete?", confirm = "Yes, delete", working = "Deleting..." }: {
   label: string
   onConfirm: () => Promise<boolean>
+  trigger?: string
+  question?: string
+  confirm?: string
+  working?: string
 }) {
   const [confirming, setConfirming] = useState(false)
   const [pending, setPending] = useState(false)
@@ -114,13 +121,13 @@ export function DeleteControl({ label, onConfirm }: {
   if (!confirming) {
     return (
       <Button type="button" size="sm" variant="outline" onClick={() => setConfirming(true)} aria-label={label}>
-        Delete
+        {trigger}
       </Button>
     )
   }
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="text-sm text-muted-foreground">Delete?</span>
+      <span className="text-sm text-muted-foreground">{question}</span>
       <Button type="button" size="sm" variant="destructive" disabled={pending} onClick={async () => {
         if (inFlight.current) return
         inFlight.current = true
@@ -132,7 +139,7 @@ export function DeleteControl({ label, onConfirm }: {
           setPending(false)
         }
       }}>
-        {pending ? "Deleting..." : "Yes, delete"}
+        {pending ? working : confirm}
       </Button>
       <Button type="button" size="sm" variant="outline" disabled={pending} onClick={() => setConfirming(false)}>Cancel</Button>
     </div>

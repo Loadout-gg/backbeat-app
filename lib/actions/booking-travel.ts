@@ -5,8 +5,8 @@ import { readCompleteCollection } from "@/lib/read-complete-collection"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentWorkspaceId } from "./workspace"
 import {
-  bookingStaySchema, firstIssue, travelLegSchema, travelRecordIdSchema,
-  type BookingStayInput, type TravelDirection, type TravelLegInput,
+  bookingStaySchema, firstIssue, transportToCitySchema, travelLegSchema, travelRecordIdSchema,
+  type BookingStayInput, type TransportToCity, type TravelDirection, type TravelLegInput,
 } from "@/lib/booking-travel-validation"
 
 // Travel legs and stays of one booking (migration 009). Explicit projections only: these rows
@@ -48,6 +48,8 @@ export interface BookingStay {
 export interface BookingTravel {
   legs: TravelLeg[]
   stays: BookingStay[]
+  /** Who organizes and pays travel to the venue city (D6); null = not set. */
+  transportToCity: TransportToCity | null
 }
 
 export type TravelActionResult = { success: true } | { success: false; error: string }
@@ -63,6 +65,7 @@ const LEG_SAVE_FAILED = "Unable to save the travel leg. Please try again."
 const LEG_DELETE_FAILED = "Unable to delete the travel leg. Please try again."
 const STAY_SAVE_FAILED = "Unable to save the accommodation. Please try again."
 const STAY_DELETE_FAILED = "Unable to delete the accommodation. Please try again."
+const TRANSPORT_SAVE_FAILED = "Unable to save transport to the city. Please try again."
 // A CHECK the client schema did not catch (for example a stale client): fixed copy, no details.
 const REJECTED_BY_DATABASE = "These details were not accepted. Check dates and lengths and try again."
 
@@ -97,7 +100,7 @@ export async function getBookingTravel(bookingId: string): Promise<BookingTravel
   if (!scope) throw new Error("Not authenticated")
   const { supabase, workspaceId } = scope
   try {
-    const [legs, stays] = await Promise.all([
+    const [legs, stays, transportToCity] = await Promise.all([
       readCompleteCollection<TravelLeg>(async (from, to) => {
         const { data, error, count } = await supabase.from("booking_travel_legs")
           .select(LEG_COLUMNS, { count: "exact" })
@@ -119,8 +122,18 @@ export async function getBookingTravel(bookingId: string): Promise<BookingTravel
           .range(from, to)
         return { data: data as BookingStay[] | null, error, count }
       }, "Stays"),
+      // The deal term lives on the booking row; it is read here so booking list and editor
+      // projections stay as they are.
+      (async () => {
+        const { data, error } = await supabase.from("bookings")
+          .select("id,transport_to_city")
+          .eq("id", bookingId).eq("workspace_id", workspaceId)
+          .maybeSingle()
+        if (error || !data) throw new Error("booking read failed")
+        return (data as { transport_to_city: TransportToCity | null }).transport_to_city
+      })(),
     ])
-    return { legs, stays }
+    return { legs, stays, transportToCity }
   } catch {
     console.error("Error loading booking travel")
     throw new Error(LOAD_FAILED)
@@ -240,6 +253,26 @@ export async function deleteBookingStay(bookingId: string, stayId: string): Prom
     return { success: false, error: STAY_DELETE_FAILED }
   }
   if (!data) return { success: false, error: STAY_NOT_FOUND }
+  revalidateBooking(bookingId)
+  return { success: true }
+}
+
+/** Sets or clears (null or "") who organizes and pays transport to the city. Writes only that column. */
+export async function updateBookingTransportToCity(bookingId: string, value: string | null): Promise<TravelActionResult> {
+  if (!travelRecordIdSchema.safeParse(bookingId).success) return { success: false, error: BOOKING_NOT_FOUND }
+  const parsed = transportToCitySchema.safeParse(value)
+  if (!parsed.success) return { success: false, error: firstIssue(parsed.error) }
+  const scope = await scopedClient()
+  if (!scope) return { success: false, error: "Not authenticated" }
+  const { data, error } = await scope.supabase.from("bookings")
+    .update({ transport_to_city: parsed.data })
+    .eq("id", bookingId).eq("workspace_id", scope.workspaceId)
+    .select("id").maybeSingle()
+  if (error) {
+    logFailure("Error updating transport to the city:", error)
+    return { success: false, error: error.code === "23514" ? REJECTED_BY_DATABASE : TRANSPORT_SAVE_FAILED }
+  }
+  if (!data) return { success: false, error: BOOKING_NOT_FOUND }
   revalidateBooking(bookingId)
   return { success: true }
 }

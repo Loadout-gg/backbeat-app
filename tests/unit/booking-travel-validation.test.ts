@@ -1,6 +1,7 @@
 import { expect, it } from "vitest"
 import {
-  bookingStaySchema, dateOfBirthSchema, travelDocumentSchema, travelLegSchema,
+  TRANSPORT_TO_CITY_LABELS, TRANSPORT_TO_CITY_VALUES, bookingStaySchema, dateOfBirthSchema, firstIssue,
+  transportToCitySchema, travelDocumentSchema, travelLegSchema,
 } from "@/lib/booking-travel-validation"
 
 const leg = (patch: Record<string, unknown> = {}) => travelLegSchema.safeParse({ direction: "inbound", ...patch })
@@ -62,7 +63,7 @@ it("validates stays: name required, check-out not before check-in, same day allo
 })
 it("validates travel documents", () => {
   expect(travelDocumentSchema.parse({ doc_type: "passport", number: " YA1 ", expires_on: "" })).toEqual({
-    doc_type: "passport", number: "YA1", issuing_country: null, expires_on: null, holder_name: null,
+    doc_type: "passport", number: "YA1", issuing_country: null, nationality: null, issued_on: null, expires_on: null, holder_name: null,
   })
   expect(issue(travelDocumentSchema.safeParse({ doc_type: "visa", number: "1" }))).toBe("Choose a document type")
   expect(issue(travelDocumentSchema.safeParse({ doc_type: "id_card", number: " " }))).toBe("Enter the document number")
@@ -78,4 +79,33 @@ it("validates the date of birth against 1900 and the configured today", () => {
   expect(issue(schema.safeParse("2026-11-24"))).toBe("Date of birth cannot be in the future")
   expect(issue(schema.safeParse("1899-12-31"))).toBe("Enter a date of birth from 1900 onwards")
   expect(issue(schema.safeParse("1990-13-01"))).toBe("Enter a valid date of birth")
+})
+
+// Owner decision on PR #36: D4 (card fields) and D6 (transport to the city).
+it("DATA-01 nationality and issue date are optional, trimmed, date-only and independent of issuing country and expiry", () => {
+  const parsed = travelDocumentSchema.parse({ doc_type: "passport", number: "YA1", nationality: "  Italian ", issued_on: "2024-02-29", issuing_country: "France", expires_on: "2034-02-28" })
+  expect(parsed).toEqual({ doc_type: "passport", number: "YA1", nationality: "Italian", issued_on: "2024-02-29", issuing_country: "France", expires_on: "2034-02-28", holder_name: null })
+  expect(travelDocumentSchema.parse({ doc_type: "id_card", number: "1" })).toMatchObject({ nationality: null, issued_on: null })
+  expect(travelDocumentSchema.parse({ doc_type: "id_card", number: "1", nationality: "", issued_on: "" })).toMatchObject({ nationality: null, issued_on: null })
+  for (const issued_on of ["2023-02-29", "29/02/2024", "2024-02-29T10:00:00Z", "tomorrow"]) {
+    expect(firstIssue(travelDocumentSchema.safeParse({ doc_type: "passport", number: "1", issued_on }).error!)).toBe("Enter a valid issue date")
+  }
+  expect(firstIssue(travelDocumentSchema.safeParse({ doc_type: "passport", number: "1", nationality: "x".repeat(101) }).error!)).toBe("Nationality must be at most 100 characters")
+  // An issue date after the expiry date is the document's business, not a validation rule here.
+  expect(travelDocumentSchema.safeParse({ doc_type: "passport", number: "1", issued_on: "2030-01-01", expires_on: "2029-01-01" }).success).toBe(true)
+})
+
+it("CORE-06 the card schema is strict: a reason, a scan path or a lifecycle field is not an accepted input", () => {
+  for (const extra of [{ reason: "hotel" }, { state: "active" }, { current_file_id: "x" }, { object_key: "k" }, { restore_until: "2099-01-01" }, { workspace_id: "w" }]) {
+    expect(travelDocumentSchema.safeParse({ doc_type: "passport", number: "1", ...extra }).success).toBe(false)
+  }
+})
+
+it("BOOK-02 transport to the city: three values or empty", () => {
+  expect(TRANSPORT_TO_CITY_VALUES).toEqual(["promoter", "artist", "not_needed"])
+  for (const value of TRANSPORT_TO_CITY_VALUES) expect(transportToCitySchema.parse(value)).toBe(value)
+  expect(transportToCitySchema.parse("")).toBeNull()
+  expect(transportToCitySchema.parse(null)).toBeNull()
+  for (const value of ["flight", "Promoter", "landed", "all_in", 1, undefined, {}]) expect(transportToCitySchema.safeParse(value).success).toBe(false)
+  expect(Object.keys(TRANSPORT_TO_CITY_LABELS)).toEqual([...TRANSPORT_TO_CITY_VALUES])
 })

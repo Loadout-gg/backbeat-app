@@ -5,11 +5,14 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 const m = vi.hoisted(() => ({
   refresh: vi.fn(), createTravelLeg: vi.fn(), updateTravelLeg: vi.fn(), deleteTravelLeg: vi.fn(),
   createBookingStay: vi.fn(), updateBookingStay: vi.fn(), deleteBookingStay: vi.fn(), updateBooking: vi.fn(),
+  updateTransport: vi.fn(),
 }))
+vi.mock("@/lib/actions/artist-travel-documents", () => ({ reserveTravelDocumentScan: vi.fn(), finalizeTravelDocumentScan: vi.fn() }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: m.refresh, push: vi.fn(), back: vi.fn() }) }))
 vi.mock("@/lib/actions/booking-travel", () => ({
   createTravelLeg: m.createTravelLeg, updateTravelLeg: m.updateTravelLeg, deleteTravelLeg: m.deleteTravelLeg,
   createBookingStay: m.createBookingStay, updateBookingStay: m.updateBookingStay, deleteBookingStay: m.deleteBookingStay,
+  updateBookingTransportToCity: m.updateTransport,
 }))
 vi.mock("@/lib/actions/bookings", () => ({ updateBooking: m.updateBooking, deleteBooking: vi.fn(), updateBookingStatus: vi.fn() }))
 import { BookingTravelPanel } from "@/components/dashboard/booking-travel/booking-travel-panel"
@@ -17,6 +20,7 @@ import { BookingStaysPanel } from "@/components/dashboard/booking-travel/booking
 import { EventBookingClient } from "@/app/dashboard/bookings/[id]/event-booking-client"
 import type { TravelLeg, BookingStay } from "@/lib/actions/booking-travel"
 import type { BookingWithArtist } from "@/lib/actions/bookings"
+import type { ArtistTravelProfile } from "@/lib/actions/artist-travel-documents"
 afterEach(cleanup)
 
 const leg: TravelLeg = {
@@ -25,16 +29,22 @@ const leg: TravelLeg = {
   arrive_place: "London LHR", arrive_date: "2030-05-01", arrive_time: "10:15:00", arrive_zone: "GMT",
   travellers: "Artist, tour manager", driver_name: "Dan Driver", driver_phone: "+44 7000", notes: null,
 }
-const profile = {
+const SCAN = "11111111-1111-4111-8111-111111111111"
+const profile: ArtistTravelProfile = {
   artistId: "artist-a", dateOfBirth: "1990-02-03",
   documents: [
-    { id: "doc-1", artist_id: "artist-a", doc_type: "passport" as const, number: "YA0000001", issuing_country: "Italy", expires_on: "2030-04-30", holder_name: "Luna Moon" },
-    { id: "doc-2", artist_id: "artist-a", doc_type: "id_card" as const, number: "CA00001", issuing_country: null, expires_on: null, holder_name: null },
+    { id: "doc-1", artist_id: "artist-a", doc_type: "passport", number: "YA0000001", issuing_country: "Italy", nationality: "Italian", issued_on: "2020-05-01",
+      expires_on: "2030-04-30", holder_name: "Luna Moon", scan: { fileId: SCAN, state: "ready", mediaType: "application/pdf", byteSize: 4096 } },
+    { id: "doc-2", artist_id: "artist-a", doc_type: "id_card", number: "CA00001", issuing_country: null, nationality: null, issued_on: null,
+      expires_on: "2029-01-01", holder_name: null, scan: null },
   ],
+  archived: [{ id: "old", doc_type: "other", holder_name: "ARCHIVED NAME", expires_on: null, archived_at: "2029-01-01T00:00:00+00:00",
+    restore_until: "2030-01-01T00:00:00+00:00", cause: "deleted", restorable: true, hasScan: true }],
+  relationshipEndedAt: null, activity: [], scansEnabled: true,
 }
 const travelPanel = (props: Partial<React.ComponentProps<typeof BookingTravelPanel>> = {}) => (
   <BookingTravelPanel bookingId="booking-a" bookingDate="2030-05-01" artistId="artist-a" artistName="DJ Moon"
-    legs={[leg]} travelProfile={profile} {...props} />
+    legs={[leg]} travelProfile={profile} transportToCity={null} today="2029-06-01" {...props} />
 )
 const deferred = <T,>() => {
   let resolve!: (value: T) => void
@@ -200,4 +210,83 @@ it("an earlier save does not close an editor opened on another leg meanwhile (Co
   await act(async () => first.resolve({ success: true }))
   const still = screen.getByRole("form", { name: "Edit travel leg" })
   expect((within(still).getByLabelText("Notes") as HTMLTextAreaElement).value).toBe("Unsaved B")
+})
+
+it("BOOK-01 / DATA-01 the booking shows the active cards read-only, with explicit expiry states, and nothing archived", () => {
+  render(travelPanel())
+  const documents = screen.getByRole("region", { name: "Travel documents: DJ Moon" })
+  expect(documents.textContent).toContain("Italian")
+  expect(documents.textContent).toContain("Issued by Italy")
+  expect(documents.textContent).toContain("Issued 2020-05-01")
+  expect(within(documents).getByText("Expires before this booking")).toBeTruthy()
+  expect(within(documents).getByText("Expired")).toBeTruthy()             // id card: 2029-01-01 < today
+  expect(documents.textContent).not.toContain("ARCHIVED NAME")
+  expect(within(documents).queryByRole("button", { name: /Delete|Restore|Upload|Replace|Edit/ })).toBeNull()
+  expect(documents.textContent).toContain("Nothing here is sent with the booking")
+})
+
+it("URL-01 / CORE-06 one tap on the booking downloads the scan with the booking as context; no dialog, no reason", async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ url: "https://project.supabase.co/sign?token=T" }) })
+  const assign = vi.fn()
+  vi.stubGlobal("fetch", fetchMock)
+  Object.defineProperty(window, "location", { configurable: true, value: { assign } })
+  try {
+    render(travelPanel())
+    const documents = screen.getByRole("region", { name: "Travel documents: DJ Moon" })
+    expect(within(documents).getAllByRole("button", { name: /Download scan/ })).toHaveLength(1)
+    fireEvent.click(within(documents).getByRole("button", { name: "Download scan: Passport" }))
+    await waitFor(() => expect(assign).toHaveBeenCalledExactlyOnceWith("https://project.supabase.co/sign?token=T"))
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(`/api/travel-documents/files/${SCAN}/download`, expect.objectContaining({ method: "POST", body: JSON.stringify({ bookingId: "booking-a" }) }))
+    expect(screen.queryByRole("dialog")).toBeNull()
+  } finally { vi.unstubAllGlobals() }
+})
+
+it("BOOK-01 rendering or saving the booking never requests a scan", async () => {
+  const fetchMock = vi.fn()
+  vi.stubGlobal("fetch", fetchMock)
+  m.updateTransport.mockResolvedValue({ success: true })
+  try {
+    render(travelPanel())
+    fireEvent.change(screen.getByLabelText("Who organizes and pays travel to the venue city"), { target: { value: "artist" } })
+    await waitFor(() => expect(m.updateTransport).toHaveBeenCalled())
+    expect(fetchMock).not.toHaveBeenCalled()
+  } finally { vi.unstubAllGlobals() }
+})
+
+it("flag off on the booking: document data stays, no download control", () => {
+  render(travelPanel({ travelProfile: { ...profile, scansEnabled: false } }))
+  const documents = screen.getByRole("region", { name: "Travel documents: DJ Moon" })
+  expect(documents.textContent).toContain("YA0000001")
+  expect(within(documents).queryByRole("button", { name: /Download scan/ })).toBeNull()
+})
+
+it("BOOK-02 transport to the city: one booking choice, saved on change, independent of the legs", async () => {
+  m.updateTransport.mockResolvedValueOnce({ success: true })
+  render(travelPanel({ transportToCity: "promoter" }))
+  const select = screen.getByLabelText("Who organizes and pays travel to the venue city") as HTMLSelectElement
+  expect(select.value).toBe("promoter")
+  expect(Array.from(select.options).map(option => option.textContent)).toEqual(["Not set", "Promoter organizes and pays", "Artist organizes and pays", "Not needed"])
+  fireEvent.change(select, { target: { value: "not_needed" } })
+  await waitFor(() => expect(m.updateTransport).toHaveBeenCalledExactlyOnceWith("booking-a", "not_needed"))
+  expect(await screen.findByText("Saved.")).toBeTruthy()
+  expect(m.updateTravelLeg).not.toHaveBeenCalled()
+  expect(m.updateBooking).not.toHaveBeenCalled()
+  // The leg keeps its own mode whatever the deal term says.
+  expect(screen.getByRole("article", { name: "Travel leg: Inbound · flight · Moon Air" })).toBeTruthy()
+})
+
+it("BOOK-02 a failed save puts the previous choice back and says so; clearing sends null", async () => {
+  m.updateTransport.mockResolvedValueOnce({ success: false, error: "Unable to save transport to the city. Please try again." }).mockResolvedValueOnce({ success: true })
+  render(travelPanel({ transportToCity: "artist" }))
+  const select = screen.getByLabelText("Who organizes and pays travel to the venue city") as HTMLSelectElement
+  fireEvent.change(select, { target: { value: "promoter" } })
+  expect(await screen.findByText("Unable to save transport to the city. Please try again.")).toBeTruthy()
+  expect(select.value).toBe("artist")
+  fireEvent.change(select, { target: { value: "" } })
+  await waitFor(() => expect(m.updateTransport).toHaveBeenLastCalledWith("booking-a", null))
+})
+
+it("BOOK-02 when the travel read failed the deal term is not offered as if it were empty", () => {
+  render(travelPanel({ legs: null, transportToCity: undefined }))
+  expect(screen.queryByLabelText("Who organizes and pays travel to the venue city")).toBeNull()
 })

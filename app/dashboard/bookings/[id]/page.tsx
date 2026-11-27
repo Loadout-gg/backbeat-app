@@ -116,6 +116,8 @@ export default async function EventBookingPage({ params }: EventBookingPageProps
           artistName={artistName}
           legs={travel?.legs ?? null}
           travelProfile={travelProfile}
+          transportToCity={travel ? travel.transportToCity : undefined}
+          today={configuredCalendarDay()}
         />
       }
       accommodationPanel={<BookingStaysPanel bookingId={booking.id} stays={travel?.stays ?? null} />}
