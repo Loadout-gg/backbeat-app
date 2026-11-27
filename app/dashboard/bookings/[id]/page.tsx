@@ -2,8 +2,11 @@ import { notFound, unstable_rethrow } from "next/navigation";
 import { getBooking, getBookings } from "@/lib/actions/bookings";
 import { getBookingEventLink, type BookingEventLink } from "@/lib/actions/booking-events";
 import { listPromoters, type PromoterOption } from "@/lib/actions/events";
+import { getBookingPayments } from "@/lib/actions/booking-payments";
 import { holdRank } from "@/lib/booking-display";
+import type { BookingPayment } from "@/lib/booking-finance";
 import { configuredCalendarDay } from "@/lib/calendar-day";
+import { createClient } from "@/lib/supabase/server";
 import { EventBookingClient } from "./event-booking-client";
 
 interface EventBookingPageProps {
@@ -55,12 +58,33 @@ export default async function EventBookingPage({ params }: EventBookingPageProps
     unstable_rethrow(error);
   }
 
+  // A failed payments read is reported in the Financial tab, never shown as "no payments".
+  let payments: BookingPayment[] | null = null;
+  try {
+    payments = await getBookingPayments(booking.id);
+  } catch (error) {
+    unstable_rethrow(error);
+  }
+
+  // Only the verified request user can own a browser payment draft. A failed lookup
+  // leaves recovery off; it never supplies ownership from the browser or booking row.
+  let draftOwnerId: string | null = null;
+  try {
+    const supabase = await createClient();
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (!error && user) draftOwnerId = user.id;
+  } catch (error) {
+    unstable_rethrow(error);
+  }
+
   return (
     <EventBookingClient
       booking={booking}
+      draftOwnerId={draftOwnerId}
       sameDayBookingCounts={sameDayBookingCounts}
       holdPosition={holdPosition}
       today={configuredCalendarDay()}
+      payments={payments}
       promoters={promoters}
       linkedEvent={linkedEvent}
     />

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { BOOKING_FEE_CURRENCIES, parseBookingFee, formatBookingFeeInput, type BookingFeeError } from "@/lib/booking-fee";
+import { BOOKING_FEE_CURRENCIES, parseBookingFee, formatBookingFeeInput, type BookingFeeCurrency, type BookingFeeError } from "@/lib/booking-fee";
 import { createBookingSchema } from "@/lib/booking-validation";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -26,15 +26,26 @@ import type { PromoterOption } from "@/lib/actions/events";
 import type { BookingEventLink as LinkedEvent } from "@/lib/actions/booking-events";
 import { BookingEventLink } from "./booking-event-link";
 import { BOOKING_EVENT_COPY } from "@/lib/booking-event";
+import {
+  BOOKING_HAS_PAYMENTS_MESSAGE, COMMISSION_CURRENCY_CHANGED_MESSAGE, COMMISSION_MODES, COMMISSION_MODE_LABELS, COMMISSION_WITHIN_FEE_MESSAGE, DEFAULT_COMMISSION_MODE,
+  MAX_TAX_NOTE_LENGTH, artistDefaultCommission, bookingCommission, defaultCommissionPrefill, formatArtistDefaultCommission,
+  formatBasisPoints, parseCommissionPercent, parseMoneyAmount,
+  type BookingPayment, type CommissionMode, type CommissionType,
+} from "@/lib/booking-finance";
+import { BookingPayments, useBookingPaymentsState } from "./booking-payments";
 
 interface EventBookingClientProps {
   booking: BookingWithArtist;
+  /** Verified request user for browser payment drafts. Missing identity disables draft recovery. */
+  draftOwnerId?: string | null;
   /** Counts of other non-cancelled bookings by date; null when the scoped read failed. */
   sameDayBookingCounts?: Readonly<Partial<Record<string, number>>> | null;
   /** Server-calculated priority for the persisted hold, without peer booking records. */
   holdPosition?: Readonly<{ rank: number; total: number }> | null;
   /** Server "today" (configured calendar zone). Without it, completion is not offered. */
   today?: string;
+  /** Payments of this booking; null when that read failed (shown as an error, not as "none"). */
+  payments?: readonly BookingPayment[] | null;
   /** Promoter directory options; null when that read failed. Omitted: no promoter selector. */
   promoters?: readonly PromoterOption[] | null;
   /** Event created from this booking; null = none, "unavailable" = read failed. Omitted: no event section. */
@@ -45,8 +56,8 @@ interface EventBookingClientProps {
 type EditBaseline = {
   date: string; startTime: string; durationMinutes: number; notes: string;
   venueName: string; venueAddress: string; contactNameMain: string; contactPhoneMain: string; contactEmailMain: string;
-  feeAmountMinor: number | null; feeCurrency: string | null;
   promoterId: string;
+  taxNote: string;
 };
 
 function editBaseline(booking: BookingWithArtist): EditBaseline {
@@ -60,9 +71,8 @@ function editBaseline(booking: BookingWithArtist): EditBaseline {
     contactNameMain: booking.contact_name_main ?? "",
     contactPhoneMain: booking.contact_phone_main ?? "",
     contactEmailMain: booking.contact_email_main ?? "",
-    feeAmountMinor: booking.fee_amount_minor,
-    feeCurrency: booking.fee_currency,
     promoterId: booking.promoter_id ?? "",
+    taxNote: booking.tax_note ?? "",
   };
 }
 
@@ -91,7 +101,7 @@ const TABS = [
   "Artist contacts",
 ] as const;
 
-export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition, today, promoters, linkedEvent }: EventBookingClientProps) {
+export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts, holdPosition, today, payments = [], promoters, linkedEvent }: EventBookingClientProps) {
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
   const saveInFlight = useRef(false);
@@ -136,6 +146,89 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
   const [feeAmount, setFeeAmount] = useState(() => formatBookingFeeInput(booking.fee_amount_minor, booking.fee_currency));
   const [feeCurrency, setFeeCurrency] = useState<string>(booking.fee_currency ?? "");
   const [feeDirty, setFeeDirty] = useState(false);
+  const [feeBaseline, setFeeBaseline] = useState(() => ({ fee_amount_minor: booking.fee_amount_minor, fee_currency: booking.fee_currency }));
+  const [feeSync, setFeeSync] = useState({ savedCurrency: booking.fee_currency, rebasePending: false, commissionHydrationPending: false });
+  // Financial tab drafts: commission and tax note are saved with "Update booking", like the fee.
+  const savedCommission = bookingCommission(booking);
+  const [commissionType, setCommissionType] = useState<CommissionType | "">(savedCommission?.type ?? "");
+  const [commissionValue, setCommissionValue] = useState(() => !savedCommission ? ""
+    : savedCommission.type === "percent" ? formatBasisPoints(savedCommission.value)
+    : formatBookingFeeInput(savedCommission.value, booking.fee_currency ?? "EUR"));
+  const [commissionMode, setCommissionMode] = useState<CommissionMode>(savedCommission?.mode ?? DEFAULT_COMMISSION_MODE);
+  const [commissionDirty, setCommissionDirty] = useState(false);
+  const [commissionError, setCommissionError] = useState<string | null>(null);
+  if (feeSync.savedCurrency !== booking.fee_currency) {
+    setFeeSync({ savedCurrency: booking.fee_currency, rebasePending: true, commissionHydrationPending: true });
+  } else if (feeSync.rebasePending && !feeDirty && !(commissionDirty && commissionType === "fixed")) {
+    // Keep the rebase pending while edits are dirty. Rebase the clean pair together;
+    // neither the fee nor an untouched fixed commission is relabelled in a new currency.
+    setFeeSync({ ...feeSync, rebasePending: false, commissionHydrationPending: false });
+    setFeeAmount(formatBookingFeeInput(booking.fee_amount_minor, booking.fee_currency));
+    setFeeCurrency(booking.fee_currency ?? "");
+    setFeeBaseline({ fee_amount_minor: booking.fee_amount_minor, fee_currency: booking.fee_currency });
+    if (feeSync.commissionHydrationPending && !commissionDirty && (commissionType === "fixed" || savedCommission?.type === "fixed")) {
+      setCommissionType(savedCommission?.type ?? "");
+      setCommissionValue(!savedCommission ? "" : savedCommission.type === "percent" ? formatBasisPoints(savedCommission.value)
+        : formatBookingFeeInput(savedCommission.value, booking.fee_currency));
+      setCommissionMode(savedCommission?.mode ?? DEFAULT_COMMISSION_MODE);
+    }
+  }
+  // A fixed artist default is in its own currency and a booking is created without a fee, so it
+  // is prefilled here: when a booking that currently has no saved fee and no saved commission
+  // gets a fee in that currency. While a fee is saved the default is not offered, so removing
+  // the commission of a priced booking sticks. Nothing durable records "the default was already
+  // offered": a booking whose fee was cleared and saved is again a booking without a fee, and
+  // the prefill (always visible, with its notice, and editable before saving) is offered again.
+  const artistDefault = artistDefaultCommission(booking.artist);
+  const fixedDefaultPending = !savedCommission && booking.fee_currency === null && artistDefault?.type === "fixed";
+  const [commissionPrefilled, setCommissionPrefilled] = useState(false);
+  const applyFixedDefault = (nextCurrency: string) => {
+    if (!fixedDefaultPending || !artistDefault) return false;
+    const prefill = defaultCommissionPrefill(artistDefault, nextCurrency || null);
+    if (prefill.status === "applied" && artistDefault.currency && (commissionPrefilled || (!commissionDirty && commissionType === ""))) {
+      setCommissionType("fixed");
+      setCommissionValue(formatBookingFeeInput(prefill.commission.value, artistDefault.currency));
+      setCommissionMode(prefill.commission.mode);
+      setCommissionDirty(true);
+      setCommissionPrefilled(true);
+      setCommissionError(null);
+      return true;
+    }
+    if (prefill.status !== "applied" && commissionPrefilled) {
+      // The untouched prefill does not follow the fee into another currency.
+      setCommissionType("");
+      setCommissionValue("");
+      setCommissionMode(DEFAULT_COMMISSION_MODE);
+      setCommissionDirty(false);
+      setCommissionPrefilled(false);
+      setCommissionError(null);
+      return true;
+    }
+    return false;
+  };
+  // Neutral notice about the artist's fixed default: prefilled, or not prefilled because the
+  // booking fee is in another currency (no conversion). Nothing is shown once a commission is saved.
+  const feeCurrencyDraft = BOOKING_FEE_CURRENCIES.find((code) => code === feeCurrency);
+  const commissionDefaultNotice = !artistDefault || artistDefault.type !== "fixed" || !artistDefault.currency || savedCommission
+    ? null
+    : commissionPrefilled
+      ? `Prefilled from the artist's default commission (${formatArtistDefaultCommission(artistDefault)}). Saved with Update booking.`
+      : commissionType === "" && feeCurrencyDraft && feeCurrencyDraft !== artistDefault.currency
+        ? `The artist's default commission (${formatArtistDefaultCommission(artistDefault)}) is not prefilled: it is in ${artistDefault.currency} and this booking's fee is in ${feeCurrencyDraft}.`
+        : null;
+  const savedTaxNote = booking.tax_note ?? "";
+  const [taxNote, setTaxNote] = useState(savedTaxNote);
+  const hasPayments = !!payments && payments.length > 0;
+  const deleteBlocked = hasPayments || hasLinkedEvent;
+  // Owned here, not by the panel: the Financial tab content unmounts on a tab change.
+  const paymentsState = useBookingPaymentsState(draftOwnerId, booking.workspace_id, booking.id, payments);
+  // A payment draft restored after a reload is shown once, so it can be retried with its original
+  // key (state adjusted during render, not in an effect: https://react.dev/learn/you-might-not-need-an-effect).
+  const [restoredDraftShown, setRestoredDraftShown] = useState(false);
+  if (paymentsState.restored && !restoredDraftShown) {
+    setRestoredDraftShown(true);
+    setActiveTab("Financial");
+  }
 
   const [startTime, setStartTime] = useState(
     booking.start_time ? booking.start_time.slice(0, 5) : "10:30"
@@ -270,6 +363,41 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
       setActiveTab("Financial");
       return;
     }
+    // Commission: sent only when edited. A fixed amount is read in the fee currency of this draft.
+    setCommissionError(null);
+    let commissionPatch: { commission_type: CommissionType | null; commission_value: number | null; commission_mode: CommissionMode | null; expected_fee_currency?: BookingFeeCurrency } | null = null;
+    if (commissionDirty || uncertain.has("commission_type")) {
+      const failCommission = (message: string) => { setCommissionError(message); setActiveTab("Financial"); };
+      if (commissionType === "") {
+        commissionPatch = { commission_type: null, commission_value: null, commission_mode: null };
+      } else if (commissionType === "percent") {
+        const percent = parseCommissionPercent(commissionValue);
+        if (!percent.success) return failCommission(percent.error);
+        commissionPatch = { commission_type: "percent", commission_value: percent.data, commission_mode: commissionMode };
+      } else {
+        if (!feeDirty && feeCurrency !== (booking.fee_currency ?? "")) {
+          // The saved fee currency changed under an unchanged fee draft: adopt it and let the
+          // member re-check the amount, instead of reinterpreting it in the new currency.
+          setFeeSync({ ...feeSync, rebasePending: false, commissionHydrationPending: false });
+          setFeeAmount(formatBookingFeeInput(booking.fee_amount_minor, booking.fee_currency));
+          setFeeCurrency(booking.fee_currency ?? "");
+          setFeeBaseline({ fee_amount_minor: booking.fee_amount_minor, fee_currency: booking.fee_currency });
+          return failCommission(COMMISSION_CURRENCY_CHANGED_MESSAGE);
+        }
+        const currency = BOOKING_FEE_CURRENCIES.find((code) => code === feeCurrency);
+        if (!currency) return failCommission("Choose a booking fee currency before entering a fixed commission");
+        const amount = parseMoneyAmount(commissionValue, currency, "commission amount");
+        if (!amount.success) return failCommission(amount.error);
+        const draftFee = fee.success ? fee.data.fee_amount_minor : null;
+        if (commissionMode === "included" && draftFee !== null && amount.data > draftFee) return failCommission(COMMISSION_WITHIN_FEE_MESSAGE);
+        commissionPatch = { commission_type: "fixed", commission_value: amount.data, commission_mode: commissionMode, expected_fee_currency: currency };
+      }
+    }
+    if (taxNote.trim().length > MAX_TAX_NOTE_LENGTH) {
+      setSaveError(`Tax note must be at most ${MAX_TAX_NOTE_LENGTH} characters`);
+      setActiveTab("Financial");
+      return;
+    }
     saveInFlight.current = true;
     const submittedRevision = draftRevision.current;
     setIsSaving(true);
@@ -279,19 +407,20 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
     const saved = baseline.current ?? editBaseline(booking);
     const send = (field: string, changed: boolean) => changed || uncertain.has(field);
     const feePatch = feeDirty && fee.success && send("fee_amount_minor",
-      fee.data.fee_amount_minor !== saved.feeAmountMinor || fee.data.fee_currency !== saved.feeCurrency)
+      fee.data.fee_amount_minor !== feeBaseline.fee_amount_minor || fee.data.fee_currency !== feeBaseline.fee_currency)
       ? fee.data : null;
     const submitted: EditBaseline = {
       date: bookingDate, startTime, durationMinutes, notes,
       venueName, venueAddress, contactNameMain, contactPhoneMain, contactEmailMain,
-      feeAmountMinor: feePatch ? feePatch.fee_amount_minor : saved.feeAmountMinor,
-      feeCurrency: feePatch ? feePatch.fee_currency : saved.feeCurrency,
       promoterId,
+      taxNote,
     };
 
     const patch = {
       ...(send("date", bookingDate !== saved.date) ? { date: bookingDate } : {}),
       ...(feePatch ?? {}),
+      ...(commissionPatch ?? {}),
+      ...(send("tax_note", !sameText(taxNote, saved.taxNote)) ? { tax_note: taxNote } : {}),
       ...(holdExpiryChanged ? { hold_expires_on: holdExpiresOn || null } : {}),
       ...(send("promoter_id", promoterId !== saved.promoterId) ? { promoter_id: promoterId || null } : {}),
       ...(send("start_time", startTime !== saved.startTime) ? { start_time: startTime } : {}),
@@ -310,11 +439,23 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
         setSaveError(result.error === "Booking not found"
           ? UNAVAILABLE_SAVE
           : result.error || "Unable to save booking. Please try again.");
+        // Load the saved currency so the next save adopts it before re-checking the amount.
+        if (result.error === COMMISSION_CURRENCY_CHANGED_MESSAGE) router.refresh();
         return;
       }
       baseline.current = submitted;
+      if (feePatch) setFeeBaseline(feePatch);
+      if (feePatch || commissionPatch) {
+        // A fee acknowledgement supersedes the deferred rebase. A commission-only
+        // acknowledgement skips only stale commission hydration, not the fee rebase.
+        setFeeSync((current) => current.rebasePending
+          ? { ...current, rebasePending: !feePatch, commissionHydrationPending: false }
+          : current);
+      }
       uncertain.clear();
       setFeeDirty(false);
+      setCommissionDirty(false);
+      setCommissionPrefilled(false);
       setIsSaved(draftRevision.current === submittedRevision);
       router.refresh();
     } catch {
@@ -328,7 +469,7 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
   };
 
   const handleDelete = async () => {
-    if (deleteInFlight.current) return;
+    if (deleteInFlight.current || deleteBlocked) return;
     deleteInFlight.current = true;
     setIsDeleting(true);
     setDeleteError(null);
@@ -343,7 +484,8 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
         setDeleteError(BOOKING_EVENT_COPY.bookingHasEvent);
         router.refresh();
       } else {
-        setDeleteError("Unable to delete booking. Please try again.");
+        // Only the fixed "has payments" copy is shown as returned; anything else stays generic.
+        setDeleteError(result.error === BOOKING_HAS_PAYMENTS_MESSAGE ? BOOKING_HAS_PAYMENTS_MESSAGE : "Unable to delete booking. Please try again.");
       }
     } catch {
       setDeleteError(
@@ -907,7 +1049,7 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
             <div className="max-w-xl space-y-4">
               <h2 className="text-base font-medium text-foreground">Booking fee</h2>
               <p id="booking-fee-help" className="text-sm text-muted-foreground">
-                Recorded for this booking only. This does not change the artist&apos;s base rate, confirm the booking, or record a payment.
+                Recorded for this booking only. This does not change the artist&apos;s base rate or confirm the booking.
                 Clear both fields to remove the fee. Enter amounts without grouping separators; JPY uses whole numbers.
               </p>
               <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
@@ -940,8 +1082,13 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
                     id="booking-fee-currency"
                     ref={(element) => focusFeeError("currency", element)}
                     value={feeCurrency}
-                    onChange={(event) => { setFeeCurrency(event.target.value); setFeeDirty(true); setFeeError(null); }}
-                    disabled={isSaving}
+                    onChange={(event) => {
+                      setFeeCurrency(event.target.value); setFeeDirty(true); setFeeError(null);
+                      if (applyFixedDefault(event.target.value)) return;
+                      // A fixed commission is an amount in the fee currency: re-read it in the new one.
+                      if (commissionType === "fixed") setCommissionDirty(true);
+                    }}
+                    disabled={isSaving || hasPayments}
                     aria-invalid={feeError?.field === "currency"}
                     aria-describedby={feeError?.field === "currency" ? "booking-fee-help booking-fee-currency-error" : "booking-fee-help"}
                     className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 aria-invalid:border-destructive"
@@ -954,6 +1101,108 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
                   )}
                 </div>
               </div>
+              {hasPayments && (
+                <p className="text-sm text-muted-foreground">
+                  Payments are recorded for this booking: the fee amount can change, the fee currency cannot.
+                </p>
+              )}
+
+              <h2 className="pt-4 text-base font-medium text-foreground">Agency commission</h2>
+              <p id="booking-commission-help" className="text-sm text-muted-foreground">
+                Saved with Update booking. New bookings start from the artist&apos;s default commission, if one is set;
+                a fixed default applies only when the fee is in the same currency. A fixed amount is in the booking fee currency.
+              </p>
+              <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="min-w-0">
+                  <label htmlFor="booking-commission-type" className="mb-1.5 block text-xs font-medium text-foreground">
+                    Commission type
+                  </label>
+                  <select
+                    id="booking-commission-type"
+                    value={commissionType}
+                    onChange={(event) => {
+                      setCommissionType(event.target.value as CommissionType | "");
+                      setCommissionValue(""); setCommissionDirty(true); setCommissionError(null); setCommissionPrefilled(false);
+                    }}
+                    disabled={isSaving}
+                    aria-describedby="booking-commission-help"
+                    className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                  >
+                    <option value="">No commission</option>
+                    <option value="percent">Percentage of the fee</option>
+                    <option value="fixed">Fixed amount</option>
+                  </select>
+                </div>
+                {commissionType !== "" && (
+                  <div className="min-w-0">
+                    <label htmlFor="booking-commission-value" className="mb-1.5 block text-xs font-medium text-foreground">
+                      {commissionType === "percent" ? "Commission percentage (%)" : `Commission amount (${feeCurrency || "fee currency"})`}
+                    </label>
+                    <Input
+                      id="booking-commission-value"
+                      type="text"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      value={commissionValue}
+                      onChange={(event) => { setCommissionValue(event.target.value); setCommissionDirty(true); setCommissionError(null); setCommissionPrefilled(false); }}
+                      disabled={isSaving}
+                      aria-invalid={commissionError !== null}
+                      aria-describedby={commissionError ? "booking-commission-help booking-commission-error" : "booking-commission-help"}
+                      className="h-9 min-w-0 text-sm"
+                    />
+                  </div>
+                )}
+                {commissionType !== "" && (
+                  <div className="min-w-0 sm:col-span-2">
+                    <label htmlFor="booking-commission-mode" className="mb-1.5 block text-xs font-medium text-foreground">
+                      Commission mode
+                    </label>
+                    <select
+                      id="booking-commission-mode"
+                      value={commissionMode}
+                      onChange={(event) => { setCommissionMode(event.target.value as CommissionMode); setCommissionDirty(true); setCommissionError(null); setCommissionPrefilled(false); }}
+                      disabled={isSaving}
+                      className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                    >
+                      {COMMISSION_MODES.map((mode) => <option key={mode} value={mode}>{COMMISSION_MODE_LABELS[mode]}</option>)}
+                    </select>
+                  </div>
+                )}
+              </div>
+              {commissionError && (
+                <p id="booking-commission-error" role="alert" className="text-sm text-destructive">{commissionError}</p>
+              )}
+              {commissionDefaultNotice && (
+                <p id="booking-commission-default" className="text-sm text-muted-foreground">{commissionDefaultNotice}</p>
+              )}
+
+              <h2 className="pt-4 text-base font-medium text-foreground">
+                <label htmlFor="booking-tax-note">Tax note</label>
+              </h2>
+              <Textarea
+                id="booking-tax-note"
+                value={taxNote}
+                onChange={(event) => setTaxNote(event.target.value)}
+                disabled={isSaving}
+                maxLength={MAX_TAX_NOTE_LENGTH}
+                aria-describedby="booking-tax-note-help"
+                className="min-w-0 min-h-[80px] resize-y"
+              />
+              <p id="booking-tax-note-help" className="text-xs text-muted-foreground">
+                Free text, saved with Update booking. No tax is calculated from it.
+              </p>
+            </div>
+            <div className="mt-8 max-w-3xl border-t border-border pt-6">
+              <BookingPayments
+                bookingId={booking.id}
+                feeMinor={booking.fee_amount_minor}
+                feeCurrency={booking.fee_currency}
+                commission={savedCommission}
+                payments={payments}
+                today={today}
+                state={paymentsState}
+                currencyChangePending={feeCurrency !== (booking.fee_currency ?? "")}
+              />
             </div>
           </TabsContent>
           {TABS.filter((tab) => tab !== "Performance" && tab !== "Financial").map((tab) => (
@@ -967,19 +1216,22 @@ export function EventBookingClient({ booking, sameDayBookingCounts, holdPosition
         {/* Bottom actions */}
         <div className="flex flex-col gap-4 rounded-b-xl bg-card px-4 py-4 sm:px-6 lg:sticky lg:bottom-0 lg:z-10 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between border-t border-border">
           <div className="relative">
-            {deleteError && !(hasLinkedEvent && deleteError === BOOKING_EVENT_COPY.bookingHasEvent) && (
+            {deleteError && !deleteBlocked && (
               <p role="alert" className="mb-2 text-sm text-destructive">
                 {deleteError}
               </p>
             )}
-            {hasLinkedEvent ? (
+            {deleteBlocked ? (
+              // A booking with an event (008, BB011) or with any payment row (007 RESTRICT FK,
+              // owner decision incl. voided or corrected rows) is cancelled, never deleted. The
+              // database stays the authority; this only avoids a dead end.
               <div className="flex max-w-md flex-col gap-2">
                 <Button variant="outline" disabled aria-describedby={deleteBlockedId}>
                   <Trash2 aria-hidden="true" className="h-4 w-4 mr-2" />
                   Delete
                 </Button>
                 <p id={deleteBlockedId} className="text-sm text-muted-foreground">
-                  {BOOKING_EVENT_COPY.bookingHasEvent}
+                  {hasLinkedEvent ? BOOKING_EVENT_COPY.bookingHasEvent : BOOKING_HAS_PAYMENTS_MESSAGE}
                 </p>
               </div>
             ) : showDeleteConfirm ? (

@@ -33,6 +33,7 @@ import { NewBookingModal } from "@/components/dashboard/new-booking-modal"
 import type { BookingWithArtist } from "@/lib/actions/bookings"
 import type { Artist } from "@/lib/actions/artists"
 import { BOOKING_STATUSES } from "@/lib/booking-status"
+import { BOOKING_HAS_PAYMENTS_MESSAGE, type BookingPayment } from "@/lib/booking-finance"
 
 const BOOKING = "11111111-1111-4111-8111-111111111111"
 const EVENT = "44444444-4444-4444-8444-444444444444"
@@ -348,6 +349,24 @@ it("disables Delete for a booking that has an event and says to cancel it instea
   expect(document.getElementById(remove.getAttribute("aria-describedby") ?? "")?.textContent).toBe(HAS_EVENT)
   fireEvent.click(remove)
   expect(screen.queryByText("Delete this booking?")).toBeNull()
+  expect(mocks.deleteBooking).not.toHaveBeenCalled()
+})
+
+// #33 + #35 together: payment rows (007 RESTRICT FK) and a linked event (008 BB011) both block delete.
+const payment: BookingPayment = {
+  voided_at: null, void_kind: null, void_reason: null, replaces_payment_id: null,
+  id: "pay-1", booking_id: BOOKING, kind: "deposit", amount_minor: 30000, currency: "EUR", due_on: null, paid_on: null, note: null,
+}
+
+it.each([
+  ["an event and payments", { id: EVENT, title: "DJ Moon @ Club Synthetic" }, [payment], HAS_EVENT],
+  ["payments only", null, [payment], BOOKING_HAS_PAYMENTS_MESSAGE],
+] as const)("disables Delete for a booking with %s and names the reason", (_case, linkedEvent, payments, hint) => {
+  render(<EventBookingClient booking={booking} promoters={promoters} linkedEvent={linkedEvent} payments={payments} today="2026-11-23" />)
+  const remove = screen.getByRole("button", { name: "Delete" }) as HTMLButtonElement
+  expect(remove.disabled).toBe(true)
+  expect(document.getElementById(remove.getAttribute("aria-describedby") ?? "")?.textContent).toBe(hint)
+  fireEvent.click(remove)
   expect(mocks.deleteBooking).not.toHaveBeenCalled()
 })
 
