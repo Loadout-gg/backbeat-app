@@ -40,7 +40,41 @@ export const BOOKING_EVENT_COPY = {
   eventStaysCancelled: "This event was cancelled with its booking and cannot be reopened. Create a new booking to rebook.",
   /** BB011: a booking that has an event is kept; cancelling it cancels the event too. */
   bookingHasEvent: "This booking has an event, so it cannot be deleted. Cancel the booking instead; its event is cancelled with it.",
+  /** An event created from a booking is never deleted (owner rule 2026-11-27); it follows its booking. */
+  eventFromBookingDelete: "This event was created from a booking, so it cannot be deleted. Cancel the booking instead; the event is cancelled with it and kept as history.",
+  /** Shown instead of the delete section on an event created from a booking. */
+  eventFromBookingNotice: "Created from a booking: cancel the booking instead. The event is cancelled with it and kept as history.",
+  /** Event page: the status control is read-only while the linked booking is cancelled (BB010 would refuse a change). */
+  eventStatusLocked: "This event was cancelled with its booking, so its status cannot change. Create a new booking to rebook.",
+  /** Booking editor: a cancelled booking that has an event is never reopened (BB009). */
+  rebook: "Rebook with a new booking.",
 } as const
+
+/**
+ * Fixed copy for a refusal raised by a 008 trigger (BB008–BB011); null for any other error.
+ * The provider message is never returned.
+ */
+export function bookingEventErrorCopy(error: { code?: string | null } | null | undefined): string | null {
+  switch (error?.code) {
+    case EVENT_BOOKING_STATUS_SQLSTATE: return BOOKING_EVENT_COPY.notConvertible
+    case CONVERTED_BOOKING_CANCELLED_SQLSTATE: return BOOKING_EVENT_COPY.convertedStaysCancelled
+    case CANCELLED_BOOKING_EVENT_SQLSTATE: return BOOKING_EVENT_COPY.eventStaysCancelled
+    case BOOKING_WITH_EVENT_DELETE_SQLSTATE: return BOOKING_EVENT_COPY.bookingHasEvent
+    default: return null
+  }
+}
+
+/** Confirmation copy for "Cancel booking". linkedEvent: true = has one, false = none, "unknown" = read failed. */
+export function cancelBookingConfirmCopy(linkedEvent: boolean | "unknown"): string {
+  const payments = "Recorded payments are kept; void them separately if needed."
+  if (linkedEvent === true) {
+    return `This cannot be undone. The event created from this booking is cancelled with it and kept as history, and the booking cannot be reopened: to rebook, create a new booking. ${payments}`
+  }
+  if (linkedEvent === "unknown") {
+    return `The event of this booking could not be checked. If it has one, cancelling cannot be undone: the event is cancelled with it and the booking cannot be reopened. ${payments}`
+  }
+  return `The booking moves to cancelled. It has no event, so it can be reopened as in progress later. ${payments}`
+}
 
 /** "<stage name, else name> @ <venue>"; without a venue the title is the artist name alone. */
 export function bookingEventTitle(

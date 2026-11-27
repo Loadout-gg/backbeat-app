@@ -78,6 +78,8 @@ it.each([
 ] as const)("sends %s -> %s with the status the user saw and refreshes", async (from, label, to, notice) => {
   render(editor({ status: from }))
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: label })) })
+  // "Cancel booking" asks first (in-app dialog); every other transition applies at once.
+  if (label === "Cancel booking") await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Yes, cancel booking" })) })
   expect(mocks.updateBookingStatus).toHaveBeenCalledExactlyOnceWith("booking-a", to, from)
   expect(mocks.refresh).toHaveBeenCalledOnce()
   expect(statusSection().getByRole("status").textContent).toBe(notice)
