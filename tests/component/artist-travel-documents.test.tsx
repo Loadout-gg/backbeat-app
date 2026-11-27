@@ -298,3 +298,23 @@ it("AUD-01 / AUD-03 activity is readable in place: action, who (no ids), booking
   expect(list.textContent).toContain("Recorded actionTeam member")
   expect(list.textContent).toContain("A download entry means the app issued a link, not that the file was saved or forwarded.")
 })
+
+it("keeps what the member typed: fields are locked while the submitted draft is in flight and unlocked with the draft after a failure", async () => {
+  let finish!: (value: { success: boolean; error?: string }) => void
+  m.create.mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+  renderSection()
+  fireEvent.click(screen.getByRole("button", { name: "Add travel document" }))
+  const form = screen.getByRole("form", { name: "New travel document" })
+  const number = within(form).getByLabelText("Document number") as HTMLInputElement
+  fireEvent.change(number, { target: { value: "CA00001" } })
+  fireEvent.click(within(form).getByRole("button", { name: "Add travel document" }))
+  await waitFor(() => expect(m.create).toHaveBeenCalledOnce())
+  // Nothing can be edited after the click, so nothing typed later can be dropped on success.
+  expect(number.closest("fieldset")!.disabled).toBe(true)
+  expect(number.matches(":disabled")).toBe(true)
+  expect((within(form).getByLabelText("Nationality") as HTMLInputElement).matches(":disabled")).toBe(true)
+  finish({ success: false, error: "Unable to save the travel document. Please try again." })
+  expect(await within(form).findByText("Unable to save the travel document. Please try again.")).toBeTruthy()
+  expect(number.matches(":disabled")).toBe(false)
+  expect(number.value).toBe("CA00001")
+})

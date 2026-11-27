@@ -17,7 +17,7 @@ import {
 } from "@/lib/booking-travel-validation"
 import { ScanDownloadButton } from "@/components/dashboard/travel-document-scan-controls"
 import {
-  DeleteControl, FormActions, TextAreaField, TextField, UnavailableNotice, selectClass, shortTime,
+  DeleteControl, FormActions, FormFields, TextAreaField, TextField, UnavailableNotice, selectClass, shortTime,
   useGuardedAction,
 } from "./form-kit"
 
@@ -184,6 +184,7 @@ function LegForm({ bookingId, leg, onDone }: { bookingId: string; leg?: TravelLe
   return (
     <form onSubmit={submit} noValidate aria-label={leg ? "Edit travel leg" : "New travel leg"}
       className="min-w-0 space-y-4 rounded-lg border border-border bg-muted/30 p-4">
+      <FormFields pending={save.pending}>
       <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-4">
         <div className="min-w-0">
           <label htmlFor={fieldId("direction")} className="mb-1.5 block text-xs font-medium text-foreground">Direction</label>
@@ -222,6 +223,7 @@ function LegForm({ bookingId, leg, onDone }: { bookingId: string; leg?: TravelLe
         <TextField id={fieldId("driver-name")} label="Driver name" value={draft.driver_name} onChange={set("driver_name")} maxLength={200} />
         <TextField id={fieldId("driver-phone")} label="Driver phone" type="tel" value={draft.driver_phone} onChange={set("driver_phone")} maxLength={100} />
       </div>
+      </FormFields>
       <FormActions pending={save.pending} error={save.error} saveLabel={leg ? "Save travel leg" : "Add travel leg"} onCancel={onDone} />
     </form>
   )

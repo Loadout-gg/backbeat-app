@@ -83,6 +83,19 @@ export function TextAreaField({ id, label, value, onChange, maxLength, className
   )
 }
 
+/**
+ * Field group of an inline form. While the submitted draft is in flight the fields are locked,
+ * so nothing typed after the click can be dropped when the form closes on success. On a failure
+ * the lock lifts and the draft is still there for a retry.
+ */
+export function FormFields({ pending, children }: { pending: boolean; children: ReactNode }) {
+  return (
+    <fieldset disabled={pending} aria-busy={pending} className="m-0 min-w-0 space-y-4 border-0 p-0 disabled:opacity-70">
+      {children}
+    </fieldset>
+  )
+}
+
 /** Save / cancel row of an inline form; the error stays visible next to the retry button. */
 export function FormActions({ pending, error, saveLabel, onCancel }: {
   pending: boolean

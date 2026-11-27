@@ -17,7 +17,7 @@ import {
 } from "@/lib/booking-travel-validation"
 import { SCAN_MEDIA_TYPE_LABELS } from "@/lib/travel-document-scan"
 import {
-  DeleteControl, FormActions, TextField, UnavailableNotice, selectClass, useGuardedAction,
+  DeleteControl, FormActions, FormFields, TextField, UnavailableNotice, selectClass, useGuardedAction,
 } from "@/components/dashboard/booking-travel/form-kit"
 import { ScanDownloadButton, ScanUploadButton } from "@/components/dashboard/travel-document-scan-controls"
 
@@ -406,6 +406,7 @@ function DocumentForm({ artistId, document, onDone }: { artistId: string; docume
   return (
     <form onSubmit={submit} noValidate aria-label={document ? "Edit travel document" : "New travel document"}
       className="min-w-0 space-y-4 rounded-lg border bg-muted/30 p-4">
+      <FormFields pending={save.pending}>
       <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div className="min-w-0">
           <label htmlFor={`${id}-type`} className="mb-1.5 block text-xs font-medium text-foreground">Document type</label>
@@ -420,6 +421,7 @@ function DocumentForm({ artistId, document, onDone }: { artistId: string; docume
         <TextField id={`${id}-issued`} label="Issue date" type="date" value={draft.issued_on} onChange={set("issued_on")} />
         <TextField id={`${id}-expires`} label="Expiry date" type="date" value={draft.expires_on} onChange={set("expires_on")} />
       </div>
+      </FormFields>
       <FormActions pending={save.pending} error={save.error} saveLabel={document ? "Save travel document" : "Add travel document"} onCancel={onDone} />
     </form>
   )

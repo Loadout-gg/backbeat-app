@@ -9,7 +9,7 @@ import {
 } from "@/lib/actions/booking-travel"
 import { bookingStaySchema, firstIssue } from "@/lib/booking-travel-validation"
 import {
-  DeleteControl, FormActions, TextAreaField, TextField, UnavailableNotice, useGuardedAction,
+  DeleteControl, FormActions, FormFields, TextAreaField, TextField, UnavailableNotice, useGuardedAction,
 } from "./form-kit"
 
 type StayDraft = {
@@ -143,6 +143,7 @@ function StayForm({ bookingId, stay, onDone }: { bookingId: string; stay?: Booki
   return (
     <form onSubmit={submit} noValidate aria-label={stay ? "Edit accommodation" : "New accommodation"}
       className="min-w-0 space-y-4 rounded-lg border border-border bg-muted/30 p-4">
+      <FormFields pending={save.pending}>
       <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
         <TextField id={fieldId("name")} label="Accommodation name" value={draft.name} onChange={set("name")} maxLength={200} />
         <TextField id={fieldId("confirmation")} label="Confirmation reference" value={draft.confirmation_ref} onChange={set("confirmation_ref")} maxLength={100} />
@@ -151,6 +152,7 @@ function StayForm({ bookingId, stay, onDone }: { bookingId: string; stay?: Booki
         <TextAreaField id={fieldId("address")} label="Address" value={draft.address} onChange={set("address")} maxLength={1000} />
         <TextAreaField id={fieldId("notes")} label="Notes" value={draft.notes} onChange={set("notes")} maxLength={2000} />
       </div>
+      </FormFields>
       <FormActions pending={save.pending} error={save.error} saveLabel={stay ? "Save accommodation" : "Add accommodation"} onCancel={onDone} />
     </form>
   )
