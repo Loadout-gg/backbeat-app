@@ -1,7 +1,7 @@
 import { notFound, unstable_rethrow } from "next/navigation"
 import { RetryButton } from "@/components/retry-button"
 import { getArtists, type ArtistOption } from "@/lib/actions/artists"
-import { getEvent, listPromoters, type PromoterOption } from "@/lib/actions/events"
+import { getEvent, getEventBookingStatus, listPromoters, type PromoterOption } from "@/lib/actions/events"
 import { EventEditClient } from "./event-edit-client"
 
 export default async function EventPage({ params }: { params: Promise<{ id: string }> }) {
@@ -17,6 +17,18 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
   } catch (error) {
     unstable_rethrow(error)
     optionsError = true
+  }
+
+  // Status of the booking this event was created from: a cancelled booking locks the event
+  // status (BB010). A failed read leaves the control editable; the database still decides.
+  let bookingStatus: string | null | "unavailable" = null
+  if (event.booking_id) {
+    try {
+      bookingStatus = await getEventBookingStatus(event.booking_id)
+    } catch (error) {
+      unstable_rethrow(error)
+      bookingStatus = "unavailable"
+    }
   }
 
   if (optionsError) {
@@ -37,6 +49,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
   return (
     <EventEditClient
       event={event}
+      bookingStatus={bookingStatus}
       linkedPromoter={linkedPromoter === null || linkedPromoter === "missing"
         ? linkedPromoter
         : { id: linkedPromoter.id, name: linkedPromoter.name, company_name: linkedPromoter.company_name }}

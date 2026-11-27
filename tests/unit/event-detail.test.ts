@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => {
 vi.mock("@/lib/supabase/server", () => ({ createClient: mocks.createClient }))
 vi.mock("@/lib/actions/workspace", () => ({ getCurrentWorkspaceId: mocks.workspace }))
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }))
-import { deleteEvent, getEvent, updateEvent } from "@/lib/actions/events"
+import { deleteEvent, getEvent, getEventBookingStatus, updateEvent } from "@/lib/actions/events"
 
 const ID = "11111111-1111-4111-8111-111111111111"
 const ARTIST = "22222222-2222-4222-8222-222222222222"
@@ -17,7 +17,7 @@ const valid = { title: "Synthetic Night", date: "2030-03-01", status: "confirmed
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.state.result = { data: null, error: null }
-  for (const method of ["select", "update", "delete", "eq", "maybeSingle"]) mocks.query[method] = vi.fn(() => mocks.query)
+  for (const method of ["select", "update", "delete", "eq", "is", "maybeSingle"]) mocks.query[method] = vi.fn(() => mocks.query)
   ;(mocks.query as { then: unknown }).then = (resolve: (value: unknown) => unknown) => Promise.resolve(mocks.state.result).then(resolve)
   mocks.from.mockReturnValue(mocks.query)
   mocks.createClient.mockResolvedValue({ from: mocks.from })
@@ -179,4 +179,69 @@ it.each([
 ])("rejects an event fee outside the booking fee rules %j", async (input) => {
   expect((await updateEvent(ID, input as never)).success).toBe(false)
   expect(mocks.createClient).not.toHaveBeenCalled()
+})
+
+// --- Owner E2E 2026-11-27: booking-linked events and 008 refusals ----------------------
+
+/** Resolves each awaited query with the next result, in order. */
+function queueResults(...results: Array<{ data: unknown; error: { message: string; code?: string } | null }>) {
+  ;(mocks.query as { then: unknown }).then = (resolve: (value: unknown) => unknown) =>
+    Promise.resolve(results.shift() ?? { data: null, error: null }).then(resolve)
+}
+
+it.each([
+  ["BB008", "An event can be created only from a confirmed or completed booking."],
+  ["BB009", "This booking has an event and was cancelled, so it cannot be reopened. Create a new booking to rebook."],
+  ["BB010", "This event was cancelled with its booking and cannot be reopened. Create a new booking to rebook."],
+  ["BB011", "This booking has an event, so it cannot be deleted. Cancel the booking instead; its event is cancelled with it."],
+])("updateEvent answers %s with fixed copy, never the provider message", async (code, copy) => {
+  mocks.state.result = { data: null, error: { code, message: "private database detail" } }
+  const result = await updateEvent(ID, valid)
+  expect(result).toEqual({ success: false, error: copy })
+  expect(JSON.stringify(result)).not.toContain("private database detail")
+  expect(mocks.revalidatePath).not.toHaveBeenCalled()
+})
+
+it("deleteEvent deletes only an event without a booking link (filtered in the same statement)", async () => {
+  mocks.state.result = { data: [{ id: ID }], error: null }
+  expect(await deleteEvent(ID)).toEqual({ success: true })
+  expect(mocks.query.is).toHaveBeenCalledExactlyOnceWith("booking_id", null)
+})
+
+it("deleteEvent refuses an event created from a booking with fixed copy and revalidates nothing", async () => {
+  queueResults({ data: [], error: null }, { data: { id: ID, booking_id: BOOKING }, error: null })
+  expect(await deleteEvent(ID)).toEqual({
+    success: false,
+    error: "This event was created from a booking, so it cannot be deleted. Cancel the booking instead; the event is cancelled with it and kept as history.",
+  })
+  expect(mocks.query.select.mock.calls).toEqual([["id"], ["id,booking_id"]])
+  expect(mocks.revalidatePath).not.toHaveBeenCalled()
+})
+
+it.each([
+  ["a missing event", { data: null, error: null }, "Event not found."],
+  ["an unlinked event that vanished", { data: { id: ID, booking_id: null }, error: null }, "Event not found."],
+  ["a failed follow-up read", { data: null, error: { message: "private database detail" } }, "Unable to delete the event. Please try again."],
+] as const)("deleteEvent with nothing deleted and %s answers honestly", async (_label, read, copy) => {
+  queueResults({ data: [], error: null }, read)
+  expect(await deleteEvent(ID)).toEqual({ success: false, error: copy })
+})
+
+it("getEventBookingStatus reads one booking of the selected workspace, status only", async () => {
+  mocks.state.result = { data: { id: BOOKING, status: "cancelled", notes: "private" }, error: null }
+  expect(await getEventBookingStatus(BOOKING)).toBe("cancelled")
+  expect(mocks.from).toHaveBeenCalledWith("bookings")
+  expect(mocks.query.select).toHaveBeenCalledWith("id,status")
+  expect(mocks.query.eq.mock.calls).toEqual([["workspace_id", "selected-workspace"], ["id", BOOKING]])
+})
+
+it("getEventBookingStatus: null for a malformed id (no backend) or a missing/foreign row; throws a fixed message on error", async () => {
+  expect(await getEventBookingStatus("nope")).toBeNull()
+  expect(mocks.createClient).not.toHaveBeenCalled()
+  mocks.state.result = { data: null, error: null }
+  expect(await getEventBookingStatus(BOOKING)).toBeNull()
+  mocks.state.result = { data: { id: ID, status: "cancelled" }, error: null }
+  expect(await getEventBookingStatus(BOOKING)).toBeNull()
+  mocks.state.result = { data: null, error: { message: "private database detail" } }
+  await expect(getEventBookingStatus(BOOKING)).rejects.toThrow("Unable to load the booking of this event.")
 })

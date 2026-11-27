@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { updateEvent, type EventDetail, type EventUpdateInput, type PromoterOption } from "@/lib/actions/events"
 import { BOOKING_FEE_CURRENCIES, formatBookingFeeInput, parseBookingFee } from "@/lib/booking-fee"
+import { BOOKING_EVENT_COPY } from "@/lib/booking-event"
 import { DeleteEvent } from "./delete-event"
 
 type Option = { id: string; label: string }
@@ -61,7 +62,12 @@ function EventPromoterCard({ promoter }: { promoter: LinkedPromoter }) {
   )
 }
 
-export function EventEditClient({ event, linkedPromoter, artists, promoters }: { event: EventDetail; linkedPromoter: LinkedPromoter; artists: Option[]; promoters: Option[] }) {
+export function EventEditClient({ event, bookingStatus = null, linkedPromoter, artists, promoters }: {
+  event: EventDetail
+  /** Stored status of the booking this event was created from; null = none or not found; "unavailable" = read failed. */
+  bookingStatus?: string | null | "unavailable"
+  linkedPromoter: LinkedPromoter; artists: Option[]; promoters: Option[]
+}) {
   const router = useRouter()
   const [title, setTitle] = useState(event.title)
   const [date, setDate] = useState(event.date)
@@ -78,6 +84,8 @@ export function EventEditClient({ event, linkedPromoter, artists, promoters }: {
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const knownStatus = STATUSES.some(item => item.value === status)
+  // The event of a cancelled booking stays cancelled (008 BB010): the status is shown read-only.
+  const statusLocked = event.booking_id !== null && bookingStatus === "cancelled"
 
   async function handleSubmit(submitEvent: FormEvent<HTMLFormElement>) {
     submitEvent.preventDefault()
@@ -141,9 +149,6 @@ export function EventEditClient({ event, linkedPromoter, artists, promoters }: {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} noValidate className="space-y-4">
-            {error && (
-              <div role="alert" className="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
-            )}
             <div className="space-y-2">
               <Label htmlFor="event-title">Title *</Label>
               <Input id="event-title" value={title} onChange={(e) => setTitle(e.target.value)} required disabled={isSaving} />
@@ -162,13 +167,16 @@ export function EventEditClient({ event, linkedPromoter, artists, promoters }: {
             </div>
             <div className="space-y-2">
               <Label htmlFor="event-status">Status</Label>
-              <Select value={status} onValueChange={(value) => { if (value) setStatus(value) }} disabled={isSaving}>
-                <SelectTrigger id="event-status"><SelectValue placeholder="Select status" /></SelectTrigger>
+              <Select value={status} onValueChange={(value) => { if (value && !statusLocked) setStatus(value) }} disabled={isSaving || statusLocked}>
+                <SelectTrigger id="event-status" aria-describedby={statusLocked ? "event-status-locked" : undefined}><SelectValue placeholder="Select status" /></SelectTrigger>
                 <SelectContent>
                   {STATUSES.map(item => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}
                   {!knownStatus && <SelectItem value={status} disabled>{status} (not supported)</SelectItem>}
                 </SelectContent>
               </Select>
+              {statusLocked && (
+                <p id="event-status-locked" className="text-sm text-muted-foreground">{BOOKING_EVENT_COPY.eventStatusLocked}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="event-artist">Artist</Label>
@@ -218,6 +226,10 @@ export function EventEditClient({ event, linkedPromoter, artists, promoters }: {
                 Clear both fields to remove the fee. No grouping separators; JPY uses whole numbers.
               </p>
             </div>
+            {/* Next to Save, so a refusal is visible where the user clicked (owner E2E 2026-11-27). */}
+            {error && (
+              <div role="alert" className="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
+            )}
             <div className="flex flex-wrap gap-3 pt-4">
               <Button type="submit" disabled={isSaving}>{isSaving ? "Saving..." : "Save changes"}</Button>
               <Button type="button" variant="outline" asChild><Link href="/dashboard/events">Cancel</Link></Button>
@@ -225,7 +237,22 @@ export function EventEditClient({ event, linkedPromoter, artists, promoters }: {
           </form>
         </CardContent>
       </Card>
-      <DeleteEvent id={event.id} title={event.title} />
+      {event.booking_id ? (
+        // An event created from a booking follows it and is kept as history: never deleted.
+        <Card className="max-w-2xl">
+          <CardHeader>
+            <CardTitle>Delete event</CardTitle>
+            <CardDescription>{BOOKING_EVENT_COPY.eventFromBookingNotice}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href={`/dashboard/bookings/${event.booking_id}`} className="text-sm font-medium text-foreground underline underline-offset-4">
+              Open the booking to cancel it
+            </Link>
+          </CardContent>
+        </Card>
+      ) : (
+        <DeleteEvent id={event.id} title={event.title} />
+      )}
     </div>
   )
 }

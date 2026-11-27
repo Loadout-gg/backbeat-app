@@ -156,7 +156,8 @@ it.each([
   fireEvent.change(screen.getByLabelText("Booking fee currency"), { target: { value: code } })
   fireEvent.click(screen.getByRole("button", { name: "Update booking" }))
   await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
-  expect(screen.getByRole("status").textContent).toBe("Booking saved.")
+  // "Booking saved." appears once the refresh transition has rendered (F23).
+  await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Booking saved."))
   expect(updateBooking).toHaveBeenCalledWith(booking.id, expect.objectContaining({ fee_amount_minor: minor, fee_currency: code || null }))
   expect(screen.getByText("€1,200")).toBeTruthy()
   const payload = updateBooking.mock.calls[0][1]
@@ -220,7 +221,8 @@ it("keeps the save control focusable while pending and exposes a durable saved s
   expect(document.activeElement).toBe(save)
   await act(async () => resolve({ success: true }))
   await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
-  expect(screen.getByRole("status").textContent).toBe("Booking saved.")
+  // "Booking saved." appears once the refresh transition has rendered (F23).
+  await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Booking saved."))
   expect(screen.getByRole("button", { name: "Update booking" })).toBe(save)
   expect(document.activeElement).toBe(save)
   rerender(<EventBookingClient booking={{ ...booking, date: "2030-01-22", artist: { ...booking.artist } }} />)

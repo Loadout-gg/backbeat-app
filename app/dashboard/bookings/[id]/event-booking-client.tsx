@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, useTransition, type ReactNode } from "react";
 import { BOOKING_FEE_CURRENCIES, parseBookingFee, formatBookingFeeInput, type BookingFeeCurrency, type BookingFeeError } from "@/lib/booking-fee";
 import { createBookingSchema } from "@/lib/booking-validation";
 import Link from "next/link";
@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 import { updateBooking, updateBookingStatus, deleteBooking, type BookingWithArtist } from "@/lib/actions/bookings";
 import {
@@ -24,7 +25,7 @@ import { BookingPromoterSelect } from "@/components/dashboard/booking-promoter-s
 import type { PromoterOption } from "@/lib/actions/events";
 import type { BookingEventLink as LinkedEvent } from "@/lib/actions/booking-events";
 import { BookingEventLink } from "./booking-event-link";
-import { BOOKING_EVENT_COPY } from "@/lib/booking-event";
+import { BOOKING_EVENT_COPY, cancelBookingConfirmCopy } from "@/lib/booking-event";
 import {
   BOOKING_HAS_PAYMENTS_MESSAGE, COMMISSION_CURRENCY_CHANGED_MESSAGE, COMMISSION_MODES, COMMISSION_MODE_LABELS, COMMISSION_WITHIN_FEE_MESSAGE, DEFAULT_COMMISSION_MODE,
   MAX_TAX_NOTE_LENGTH, artistDefaultCommission, bookingCommission, defaultCommissionPrefill, formatArtistDefaultCommission,
@@ -136,6 +137,12 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
   const [statusError, setStatusError] = useState<string | null>(null);
   const [statusNotice, setStatusNotice] = useState("");
   const [statusChangedTo, setStatusChangedTo] = useState<BookingStatus | null>(null);
+  // "Cancel booking" asks first: for a converted booking it is final and cancels the event.
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  // A save or status change is reported only once the refreshed server copy is rendered,
+  // so the page never says "saved" next to stale totals or lists.
+  const [isRefreshing, startRefresh] = useTransition();
+  const refreshAfterWrite = () => startRefresh(() => router.refresh());
   const baseline = useRef<EditBaseline | null>(null);
   if (baseline.current === null) baseline.current = editBaseline(booking);
   // Fields sent by a save whose outcome was not confirmed: their stored value is unknown,
@@ -305,15 +312,19 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
     : sameDayCount > 0 ? sameDayWarning(sameDayCount) : null;
 
   // Status is always read from the server copy of the booking, never from a local draft.
-  const statusTargets = today ? allowedBookingTransitions(booking.status, booking.date, today) : [];
+  // A cancelled booking that has an event never reopens (008 BB009): rebooking is a new booking.
+  const cancelledWithEvent = booking.status === "cancelled" && hasLinkedEvent;
+  const statusTargets = (today ? allowedBookingTransitions(booking.status, booking.date, today) : [])
+    .filter((target) => !(cancelledWithEvent && target === "in_progress"));
   const holdExpired = today ? isHoldExpired(booking, today) : false;
   const holdPriority = holdRankLabel(holdPosition ?? null);
   const completionHint = booking.status === "confirmed" && !!today && isPastBookingDate(booking.date, today);
   const savedHoldExpiry = booking.hold_expires_on ?? "";
 
   const handleStatusChange = async (target: BookingStatus) => {
-    if (statusInFlight.current) return;
+    if (statusInFlight.current || isRefreshing) return;
     statusInFlight.current = true;
+    setConfirmCancel(false);
     setPendingStatus(target);
     setStatusError(null);
     setStatusNotice("");
@@ -327,7 +338,7 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
       setHoldExpiresOn("");
       setStatusNotice(`Status changed to ${BOOKING_STATUS_LABELS[target].toLowerCase()}.`);
       setStatusChangedTo(target);
-      router.refresh();
+      refreshAfterWrite();
     } catch {
       setStatusError("Unable to confirm the status change. Reload the booking before retrying.");
     } finally {
@@ -337,7 +348,7 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
   };
 
   const handleUpdateBooking = async () => {
-    if (saveInFlight.current) return;
+    if (saveInFlight.current || isRefreshing) return;
     setIsSaved(false);
     setSaveError(null);
     setFeeError(null);
@@ -453,7 +464,7 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
       setCommissionDirty(false);
       setCommissionPrefilled(false);
       setIsSaved(draftRevision.current === submittedRevision);
-      router.refresh();
+      refreshAfterWrite();
     } catch {
       // The write may have committed: keep these fields in every later save until one is confirmed.
       for (const field of Object.keys(patch)) uncertain.add(field);
@@ -613,22 +624,55 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() => handleStatusChange(target)}
-                  aria-disabled={pendingStatus !== null}
+                  onClick={() => {
+                    if (pendingStatus !== null || isRefreshing) return;
+                    if (target === "cancelled") setConfirmCancel(true);
+                    else void handleStatusChange(target);
+                  }}
+                  aria-disabled={pendingStatus !== null || isRefreshing}
                   className="h-auto min-h-9 whitespace-normal aria-disabled:cursor-wait aria-disabled:opacity-50"
                 >
                   {pendingStatus === target ? "Updating..." : BOOKING_TRANSITION_LABELS[target]}
                 </Button>
               ))}
             </div>
-          ) : (
+          ) : cancelledWithEvent ? null : (
             <p className="text-sm text-muted-foreground">
               {booking.status === "completed" ? "A completed booking cannot change status." : "No status change is available right now."}
             </p>
           )}
+          {cancelledWithEvent && (
+            <p className="text-sm text-muted-foreground">
+              {`This booking has an event and was cancelled, so it cannot be reopened. ${BOOKING_EVENT_COPY.rebook} `}
+              <Link href={`/dashboard/artists/${booking.artist_id}`} className="font-medium text-foreground underline underline-offset-4">
+                {`Open ${artistDisplayName} to create a new booking`}
+              </Link>
+            </p>
+          )}
+          <Dialog open={confirmCancel} onOpenChange={(open) => { if (!open) setConfirmCancel(false); }}>
+            <DialogContent showCloseButton={false} role="alertdialog">
+              <DialogHeader>
+                <DialogTitle>Cancel this booking?</DialogTitle>
+                <DialogDescription>
+                  {cancelBookingConfirmCopy(linkedEvent === "unavailable" ? "unknown" : hasLinkedEvent)}
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setConfirmCancel(false)} autoFocus>
+                  Keep booking
+                </Button>
+                <Button type="button" variant="destructive" onClick={() => handleStatusChange("cancelled")}>
+                  Yes, cancel booking
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
           {statusError && <p role="alert" className="text-sm text-destructive">{statusError}</p>}
-          {statusNotice && <p role="status" className="text-sm text-foreground">{statusNotice}</p>}
-          {statusNotice && statusChangedTo && (
+          {isRefreshing && statusNotice && (
+            <p role="status" className="text-sm text-muted-foreground">Updating the page...</p>
+          )}
+          {statusNotice && !isRefreshing && <p role="status" className="text-sm text-foreground">{statusNotice}</p>}
+          {statusNotice && statusChangedTo && !isRefreshing && (
             <p className="text-sm">
               <Link href={`/dashboard/bookings?status=${statusChangedTo}`} className="underline underline-offset-4">
                 {`View ${BOOKING_STATUS_LABELS[statusChangedTo].toLowerCase()} bookings`}
@@ -1224,15 +1268,15 @@ export function EventBookingClient({ booking, draftOwnerId, sameDayBookingCounts
           <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
             {saveError && <p role="alert" className="max-w-md text-sm text-destructive">{saveError}</p>}
             <p role="status" aria-live="polite" aria-atomic="true" className="text-sm text-foreground">
-              {isSaved ? "Booking saved." : ""}
+              {isSaved ? (isRefreshing ? "Saving..." : "Booking saved.") : ""}
             </p>
             <Button
               variant="default"
               onClick={handleUpdateBooking}
-              aria-disabled={isSaving}
+              aria-disabled={isSaving || isRefreshing}
               className="aria-disabled:cursor-wait aria-disabled:opacity-50"
             >
-              {isSaving ? "Saving..." : "Update booking"}
+              {isSaving || isRefreshing ? "Saving..." : "Update booking"}
             </Button>
           </div>
         </div>
